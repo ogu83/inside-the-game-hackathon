@@ -43,10 +43,11 @@ Nothing here starts until SPEC.md and tasks/plan.md are approved.
   - Files: app/ledger/{state.py,metrics.py}, tests/ledger/test_metrics.py
   - Result: pure calculators in metrics.py; incremental `LedgerState.apply()` with flat citable keys (`match.*`, `team.<club>.*`, `player.<id>.*`, ~390 per match) via `evidence()` / `value(key)`; sprint threshold 25 km/h, hard pass >= 0.5 difficulty, pressure window 3 s; incremental state cross-checked against the batch calculators on seed 7
 
-- [ ] T6: Candidate-moment detectors
+- [x] T6: Candidate-moment detectors (done 2026-10-15)
   - Acceptance: pressing_trap, momentum_shift, pass_streak, player_milestone, lull; seeded match yields 30-60 moments with evidence dicts
   - Verify: `python -m pytest tests/ledger -q`; count printed for seed 7
   - Files: app/ledger/moments.py, tests/ledger/test_moments.py
+  - Result: incremental `MomentDetector.feed()` + `detect_moments()`; kinds pressing_trap, momentum_shift, pass_streak (>= 11 passes), player_milestone, lull, plus `goal` (kind is a free string, interface unchanged); evidence keys are ledger keys or `moment.<subject>.<stat>`; seed 7 gives 46 moments, seeds 0-19 give 28-59 (`python -m app.ledger.moments --seed 7`). Simulator caps carries and pass targets at x=94 so shots never come from on the goal line (samples regenerated: ~2.4 goals, ~28 shots per match over 40 seeds)
 
 ## Phase C: Agents
 

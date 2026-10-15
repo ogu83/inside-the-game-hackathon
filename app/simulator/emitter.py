@@ -143,7 +143,7 @@ class _Match:
 
             carry_m = rng.uniform(0, 4 + 10 * p.pace) if phase != "set_piece" else 0.0
             speed_kmh = round(12 + 20 * p.pace * rng.uniform(0.6, 1.05), 1)
-            x = _clamp(x + carry_m / PITCH_LENGTH_M * 100 * rng.uniform(0.3, 0.9))
+            x = _clamp(x + carry_m / PITCH_LENGTH_M * 100 * rng.uniform(0.3, 0.9), 0, 94)
             y = _clamp(y + rng.uniform(-6, 6), 3, 97)
 
             pressed = rng.random() < 0.08 + 0.42 * press_level * (0.6 + 0.4 * (1 - x / 100))
@@ -173,7 +173,7 @@ class _Match:
             forward = {"build_up": (-7, 12), "transition": (0, 22), "pressing": (-5, 15), "set_piece": (0, 15)}[phase]
             if self.club(team_id).style == "direct":
                 forward = (forward[0] + 3, forward[1] + 8)
-            end_x = _clamp(x + rng.uniform(*forward), 1, 99)
+            end_x = _clamp(x + rng.uniform(*forward), 1, 94)
             end_y = _clamp(y + rng.uniform(-28, 28), 2, 98)
             receiver = self.pick(team_id, end_x, exclude=carrier)
             length = distance_m(x, y, end_x, end_y)
