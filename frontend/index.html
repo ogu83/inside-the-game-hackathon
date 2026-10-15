@@ -170,7 +170,16 @@ class PushToTalk {
   release() { if (!this.held) return false; this.held = false; return true; }
   result() { if (this.resultTaken) return false; this.resultTaken = true; return true; }
 }
-if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clockText, labelPos, askRoute, PushToTalk };
+// Barge-in gate: pre-generated speech arrives far faster than real time, so at press time the whole line is usually
+// already scheduled in the browser. interrupt() mutes playback at once; chunks that still arrive for the interrupted
+// line are dropped until the next 'speaking' message starts a new line (nextLine()).
+class PlaybackGate {
+  constructor() { this.muted = false; this.line = 0; }
+  interrupt() { this.muted = true; return true; }
+  nextLine() { this.line++; this.muted = false; return this.line; }
+  accept(chunk) { return !this.muted && !!chunk; }
+}
+if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clockText, labelPos, askRoute, PushToTalk, PlaybackGate };
 
 createApp({
   setup() {
@@ -202,8 +211,12 @@ createApp({
     const closeSources = () => { state.sources.forEach(s => s.close()); state.sources = []; if (state.fanSource) { state.fanSource.close(); state.fanSource = null; } };
     // Voice: pcm16 mono 24 kHz chunks from /api/voice, scheduled back to back on one AudioContext. Speaks only approved text.
     let audioCtx = null, playHead = 0, voiceWs = null, carry = null, scheduled = [];
-    const dropPlayback = () => { scheduled.forEach(src => { try { src.stop(); } catch (e) { /* already ended */ } }); scheduled = []; playHead = 0; };
+    const gate = new PlaybackGate();
+    const dropPlayback = () => { scheduled.forEach(src => { try { src.stop(); } catch (e) { /* already ended */ } }); scheduled = []; playHead = 0; carry = null; };
+    // Audible within a frame of the press: stop what is scheduled and mute whatever still arrives for this line.
+    const bargeIn = () => { gate.interrupt(); dropPlayback(); state.speaking = ''; };
     const playPcm = (buffer) => {
+      if (!gate.accept(buffer)) return;  // a chunk of the interrupted line
       let bytes = new Uint8Array(buffer);
       if (carry) { const joined = new Uint8Array(carry.length + bytes.length); joined.set(carry); joined.set(bytes, carry.length); bytes = joined; carry = null; }
       if (bytes.length % 2) { carry = bytes.slice(-1); bytes = bytes.slice(0, -1); }
@@ -258,13 +271,13 @@ createApp({
       ws.onmessage = (m) => {
         if (m.data instanceof ArrayBuffer) return playPcm(m.data);
         const msg = JSON.parse(m.data);
-        if (msg.type === 'speaking') { state.speaking = msg.text; playHead = 0; }
+        if (msg.type === 'speaking') { gate.nextLine(); state.speaking = msg.text; playHead = 0; }
         if (msg.type === 'spoken') {
           state.speechChecks++; if (!msg.audit.ok) state.speechMismatches++;
           if (msg.audit.question_id) { const q = state.qa.find(q => q.answer && q.answer.question_id === msg.audit.question_id); if (q) q.audit = msg.audit; }
         }
         if (msg.type === 'question') {
-          dropPlayback(); state.speaking = '';
+          bargeIn();
           if (msg.question) state.qa.unshift({ key: msg.question.question_id, transcript: msg.question.transcript, answer: null, audit: null });
           else state.voiceStatus = msg.reason;
         }
@@ -301,7 +314,7 @@ createApp({
     // and Voice Live transcribes it; with the voice off, the browser's own speech recognition supplies the transcript.
     let mic = null, micCtx = null, micNode = null, recognition = null;
     const ptt = new PushToTalk();
-    const pressTalk = (e) => { if (state.running && ptt.press(e)) startTalk(); };
+    const pressTalk = (e) => { if (state.running && ptt.press(e)) { if (state.voice) bargeIn(); startTalk(); } };  // mute first, then anything async
     const releaseTalk = () => { if (ptt.release()) stopTalk(); };
     const startTalk = async () => {
       if (!state.running || state.talking) return;

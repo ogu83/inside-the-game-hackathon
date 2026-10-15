@@ -165,7 +165,7 @@ def ask_over_voice(profile: str, actions) -> tuple[list[dict], FakeSpeaker, dict
 
         app.state.speaker_factory = factory
         app.state.workflow_factory = template_workflow
-        client.post("/api/match/start", json={"seed": 30, "speed": 1500, "delay_s": 10, "minutes": 12})
+        client.post("/api/match/start", json={"seed": 30, "speed": 1500, "delay_s": 10, "minutes": 8})
         with client.stream("GET", "/api/stream/cues") as stream:
             for line in stream.iter_lines():
                 if line.startswith("event: match_end"):
@@ -254,3 +254,25 @@ def test_repeated_press_and_release_frames_make_exactly_one_question() -> None:
     questions = [m for m in messages if m["type"] == "question" and m.get("question")]
     assert len(questions) == 1 and speaker.transcribed == [48000], "one transcription with all the audio, one question"
     assert metrics["questions_answered"] == 1 and metrics["answers_spoken"] == 1
+
+
+def test_talk_start_cancels_the_speaker_at_once() -> None:
+    """Barge-in on the server side: the press cancels the current line before any transcription happens."""
+    speaker = FakeSpeaker()
+    with TestClient(app) as client:
+        async def factory():
+            return speaker
+
+        app.state.speaker_factory = factory
+        app.state.workflow_factory = template_workflow
+        client.post("/api/match/start", json={"seed": 7, "speed": 1500, "delay_s": 120, "minutes": 4})
+        with client.websocket_connect("/api/voice?profile=-|-|casual|en") as ws:
+            before = getattr(speaker, "cancelled", 0)
+            ws.send_text(json.dumps({"type": "talk_start"}))
+            ws.send_text(json.dumps({"type": "talk_end"}))  # too short: no transcription, but the cancel already happened
+            while True:
+                m = ws.receive()
+                if m.get("text") and json.loads(m["text"]).get("type") == "question":
+                    break
+            assert speaker.cancelled == before + 1
+            assert not getattr(speaker, "transcribed", []), "nothing was transcribed, yet the line was cancelled"

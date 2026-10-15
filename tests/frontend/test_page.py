@@ -20,7 +20,7 @@ def test_page_has_the_t12_panels_and_keeps_the_voice_controls() -> None:
     for needle in ("<svg class=\"pitch\"", "cuebanner", "Agent timeline", "follow", "toggleVoice", "speech audit", "/api/stream/fan", "/api/match/moments", "/api/voice?profile=",
                    "hold to talk", "talk_start", "talk_end", "/api/qa", "getUserMedia", "webkitSpeechRecognition", "dropPlayback",
                    "ensureVoiceSocket", "reconnecting the voice", "text only (voice off)", "ws.onclose",
-                   "@pointerdown.prevent=\"pressTalk\"", "@pointercancel=\"releaseTalk\"", "class PushToTalk", "isFinal"):
+                   "@pointerdown.prevent=\"pressTalk\"", "@pointercancel=\"releaseTalk\"", "class PushToTalk", "isFinal", "class PlaybackGate", "bargeIn"):
         assert needle in HTML, needle
     assert "@mousedown" not in HTML and "@touchstart" not in HTML, "pointer events only, so a touch is not also a mouse press"
     assert "\u2014" not in HTML
@@ -63,6 +63,15 @@ def test_page_script_parses_and_pure_helpers_behave(tmp_path: Path) -> None:
     )
     out = subprocess.run(["node", "-e", ptt_probe, str(tmp_path / "helpers.js")], check=True, capture_output=True, text=True).stdout
     assert json.loads(out) == [True, False, False, True, False, False, True, True, False, True, True, True, 3], "idle->held once, held->idle once, one result per press, key repeat ignored"
+    gate_probe = (
+        "const h = require(process.argv[1]); const g = new h.PlaybackGate(); const buf = new ArrayBuffer(8);"
+        "const out = [g.accept(buf), g.interrupt(), g.accept(buf), g.accept(buf), g.nextLine(), g.accept(buf), g.accept(null), g.interrupt(), g.nextLine(), g.accept(buf)];"
+        "console.log(JSON.stringify(out))"
+    )
+    out = subprocess.run(["node", "-e", gate_probe, str(tmp_path / "helpers.js")], check=True, capture_output=True, text=True).stdout
+    assert json.loads(out) == [True, True, False, False, 1, True, False, True, 2, True], "interrupt mutes until the next line starts"
+    assert "if (state.voice) bargeIn(); startTalk();" in HTML, "the press mutes playback before anything async"
+    assert "if (!gate.accept(buffer)) return;" in HTML
     assert left_edge["x"] >= 9 and left_edge["y"] == 34, "a long name near the left edge is pushed inside the pitch"
     assert bottom_right["x"] <= 97.7 and bottom_right["y"] == 63.6, "near the goal line and the bottom edge the label moves inside and above the ball"
     assert middle == {"x": 50, "y": 34}
