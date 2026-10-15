@@ -1,0 +1,11 @@
+.env
+**/Keys.md
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.db
+.claude/settings.local.json
+docs/private/
+docs/document.md
+docs/document.pdf
