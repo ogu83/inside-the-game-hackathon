@@ -1,6 +1,6 @@
 # Phase B notes: proposals for SPEC.md (not applied)
 
-Cloud session, 2026-10-15, while building T3 to T12. Each item is a proposal for Oguz; SPEC.md was not edited.
+Cloud session, 2026-10-15, while building T3 to T12. **All four approved by Oguz on 2026-10-15 and applied to SPEC.md the same day** (status line, design rules 2 and 3, capability map, testing strategy).
 
 1. **Producer coverage rule (T8).** The planted error "dropped number" cannot be caught by a number check alone, because a text with fewer numbers is not wrong. The producer gate therefore also compares the rendering with its verified source: with coverage `all` (analyst depth and the overlay metric) every number in the source claim must survive; with coverage `any` (casual depth) at least one must survive when the source has numbers. A failure is recorded as `dropped number: 14` in the `NumberCheck`. Proposal: add this sentence to design rule 2 under gate (b). Implemented in `check_rendering` (app/agents/fact_check_rules.py).
 2. **Swapped team is a layer 2 catch.** A planted "swapped team" keeps every number right, so layer 1 passes it by design and only the wording judge can reject it. The offline harness reports it as reached air; the live harness (`pytest -m live`, `run_match --plant 4 --live`) must bring it to 0. Proposal: say in the testing strategy that the planted-error target of 0 applies to the live run, and that the offline run proves the code layer alone catches every number error.
