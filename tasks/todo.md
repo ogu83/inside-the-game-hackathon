@@ -30,7 +30,7 @@ SPEC.md approved 2026-10-15; revised 2026-10-15 after the T2 review (see SPEC.md
 
 Thin vertical slices, each tested and committed. Goal: a seeded match plays in the browser with verified cues shown on time and spoken. Later phases deepen the same files.
 
-- [ ] D1: Demo script draft
+- [x] D1: Demo script draft (done 2026-10-15: docs/demo-script.md, 7 scenes, ~1:58)
   - Acceptance: docs/demo-script.md, scene by scene, timed to under 2 minutes, every scene mapped to a Must item in tasks/plan.md; no trademarks, no copyrighted music
   - Verify: read aloud with a stopwatch
   - Files: docs/demo-script.md, tasks/plan.md (scope table if the script changes it)

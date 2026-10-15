@@ -5,7 +5,7 @@
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
 ## Current task
-T2 done 2026-10-15. Plan revised the same day after review (walking skeleton first). Next: D1 (demo script), then S1 to S5.
+T2 done 2026-10-15. Plan revised the same day after review (walking skeleton first). Phase S in progress: D1 done; next S1 (thin simulator).
 
 ## Done
 - [x] Registered for the hackathon (2026-10-14), confirmation email received
