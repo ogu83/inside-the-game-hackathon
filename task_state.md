@@ -20,8 +20,18 @@ T2 done 2026-10-15. Plan revised the same day after review (walking skeleton fir
 - [x] 2026-10-15: post-T2 review applied: SPEC.md (pitch line, pipeline design rules: broadcast delay, two-layer Fact-Checker, Analyst as director, ledger over MCP, parallel Producer; Verdict gains layer/attempt; criteria 3, 8, 10 revised/added), tasks/plan.md rewritten with Must/Should/Cut table, tasks/todo.md reordered (D1, S1-S5 skeleton), IDEA.md annotated.
 - [x] 2026-10-15: second review applied: number check at every gate (insight, Producer incl. Turkish, speech) with en/tr parser and `NumberCheck` records; voice speaks only approved text via Voice Live `pre_generated_assistant_message` (verified verbatim in en and tr), speech transcript audit; planted errors at the translation step; T16 adds tenant ID and Foundry resource name cleanup.
 
+- [x] 2026-10-15: D1 demo script (docs/demo-script.md); S1 thin simulator (Meridian League, Kestrel Bay vs Ironvale); S2 thin ledger + pass_streak detector (17-26 moments per match). 28 tests pass.
+
 ## Next step
-D1 demo script, then walking skeleton S1 (thin simulator) to S5 (thin voice) by Oct 19. Then deepen T3 to T12b. T7+ use `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
+S3 (Commentator + two-layer Fact-Checker), S4 (API + page with broadcast delay), S5 (thin voice) by Oct 19. Then deepen T3 to T12b. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
+
+## Working in a cloud session (claude.ai/code)
+Cloud sessions are useful for reviews and Azure-free implementation. They have no Azure login, no `.env`, no `azd`, and run Linux.
+- **Can do in the cloud:** code reviews of the repo against SPEC.md; S3 Fact-Checker layer 1 (number parser, gates, `NumberCheck`) and the workflow wiring with fake agents; S4 API, broadcast delay clock, page; T3-T6 simulator and ledger; T11 API; T12 frontend. Mark anything needing a model with `@pytest.mark.live` and leave it unrun.
+- **Leave for the local Windows session:** running `pytest -m live`, anything calling Foundry or Voice Live (S3 live check, S5 voice, T12b), `azd deploy` (T10), cloud evaluation (T10b), Azure resource changes.
+- **Hooks do not run there:** `.claude/settings.json` points at `C:/Users/oguz/...` and uses `pwsh`. Run `python -m pytest tests/ -q` yourself before every commit.
+- **Setup:** `python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt` (Python 3.11+; `azure-*` and `agent-framework-*` packages install fine without credentials).
+- **Branching:** cloud sessions push to their own `claude/...` branch; merge into `main` locally after review, then `git pull`. Same rules as here: work in todo.md order, update this file and todo.md after each task, no em dashes, no Co-Authored-By trailers, fictional league only.
 
 ## Blockers / open decisions
 - Azure: subscription is **Enabled** again (2026-10-15). CLI login needs `az login --tenant 09c5e5e8-d9dd-4923-bbf2-9749f2e8082c` (MFA; plain `az login` skips the tenant). Ignore the "Microsoft" tenant (hackathon B2B guest). Budget alert set 2026-10-15. Still open: find what drove the July bill (Portal > Cost analysis, Jun-Jul by service). SPEC approved 2026-10-15.
