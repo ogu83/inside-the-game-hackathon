@@ -10,10 +10,11 @@ Nothing here starts until SPEC.md and tasks/plan.md are approved.
 
 ## Phase A: Foundations
 
-- [ ] T1: Repo scaffold
+- [x] T1: Repo scaffold (done 2026-10-15)
   - Acceptance: `app/` packages exist, `requirements.txt`, `.env.example`, `tests/test_placeholder.py`; `python -m pytest tests/ -q` passes; `git init` + private GitHub repo `ogu83/inside-the-game-hackathon` (public before submission)
   - Verify: `python -m pytest tests/ -q`
   - Files: requirements.txt, .env.example, app/__init__.py, tests/test_placeholder.py
+  - Result: packages app/{simulator,ledger,agents,api}; .venv on Python 3.11; 5 tests pass; private repo created, branch `main`; docs/document.{md,pdf} (B2B Connect terms) gitignored
 
 - [ ] T2: Azure + Foundry spike (time-box 1.5 days)
   - Setup: install `azd` + `azure.ai.agents` extension (or Foundry DevPack via winget); `az login` and `azd auth login`; create Foundry resource + project; grant yourself the **Foundry User** role; link an Application Insights resource to the project; deploy one small model and one frontier model (file the frontier quota request first thing, it may take time)
