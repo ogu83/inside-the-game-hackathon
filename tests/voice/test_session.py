@@ -1,4 +1,5 @@
-"""VoiceLiveSpeaker against fake connections: two connections, event routing, typed session updates, error isolation."""
+"""VoiceLiveSpeaker against fake connections: two connections, event routing, the verified session update, error
+isolation, and no waiting forever on a silent socket."""
 
 import asyncio
 import base64
@@ -14,8 +15,9 @@ from app.voice.session import SAMPLE_RATE, SpeechError, TranscriptionError, Voic
 @pytest.fixture(autouse=True)
 def quick_waits(monkeypatch):
     monkeypatch.setattr(session, "COMMIT_WAIT_S", 0.05)
-    monkeypatch.setattr(session, "CREATED_WAIT_S", 0.1)
-    monkeypatch.setattr(session, "SESSION_UPDATE_TIMEOUT_S", 1.0)
+    monkeypatch.setattr(session, "SESSION_UPDATE_TIMEOUT_S", 0.5)
+    monkeypatch.setattr(session, "SPEAK_IDLE_TIMEOUT_S", 0.3)
+    monkeypatch.setattr(session, "TRANSCRIBE_TIMEOUT_S", 0.5)
 
 
 def ev(kind: str, **fields):
@@ -23,14 +25,13 @@ def ev(kind: str, **fields):
 
 
 class FakeConnection:
-    """Records what was sent; replies with scripted events per sent event type."""
+    """Records what was sent; replies with scripted events per sent event type. An Exception placed on `incoming`
+    is raised by recv(), which is how a test breaks the socket under the running receive pump."""
 
-    def __init__(self, created_vad: str | None = "azure_semantic_vad") -> None:
+    def __init__(self) -> None:
         self.sent: list[dict] = []
         self.incoming: asyncio.Queue = asyncio.Queue()
         self.on_send: dict[str, callable] = {}
-        if created_vad:
-            self.incoming.put_nowait(ev("session.created", session={"turn_detection": {"type": created_vad}, "voice": "x"}))
         self.on_send["session.update"] = lambda p: [ev("session.updated")]
 
     async def send(self, event) -> None:
@@ -40,7 +41,10 @@ class FakeConnection:
             self.incoming.put_nowait(reply)
 
     async def recv(self):
-        return await self.incoming.get()
+        item = await self.incoming.get()
+        if isinstance(item, Exception):
+            raise item
+        return item
 
     def sent_types(self) -> list[str]:
         return [p["type"] for p in self.sent]
@@ -58,10 +62,10 @@ def listening_replies(p):
 class Fakes:
     """Hands out the speaking connection first, then the listening one."""
 
-    def __init__(self, created_vad="azure_semantic_vad") -> None:
-        self.speaking = FakeConnection(created_vad)
+    def __init__(self) -> None:
+        self.speaking = FakeConnection()
         self.speaking.on_send["response.create"] = speaking_replies
-        self.listening = FakeConnection(created_vad)
+        self.listening = FakeConnection()
         self.listening.on_send["input_audio_buffer.commit"] = listening_replies
         self._queue = [self.speaking, self.listening]
 
@@ -77,19 +81,21 @@ async def no_audio(_: bytes) -> None:
     return None
 
 
-def test_session_updates_are_valid_and_never_change_the_vad_type() -> None:
+def test_listening_session_update_is_exactly_the_verified_payload() -> None:
+    assert listening_session_update("en") == {
+        "type": "session.update",
+        "session": {
+            "input_audio_format": "pcm16",
+            "turn_detection": {"type": "azure_semantic_vad", "create_response": False},
+            "input_audio_transcription": {"model": "azure-speech", "language": "en"},
+        },
+    }
+    assert listening_session_update("tr")["session"]["input_audio_transcription"]["language"] == "tr"
+    assert listening_session_update("tr", vad_type="azure_semantic_vad_multilingual")["session"]["turn_detection"]["type"] == "azure_semantic_vad_multilingual"
+    json.dumps(listening_session_update("en"))
     speaking = speaking_session_update("tr-TR-EmelNeural")
     assert speaking["type"] == "session.update" and "turn_detection" not in speaking["session"]
     assert speaking["session"]["voice"] == {"name": "tr-TR-EmelNeural", "type": "azure-standard"}
-    listening = listening_session_update("tr", "azure-speech", "azure_semantic_vad").as_dict()
-    session = listening["session"]
-    assert listening["type"] == "session.update" and "voice" not in session and "modalities" not in session
-    assert session["turn_detection"] == {"type": "azure_semantic_vad", "create_response": False, "interrupt_response": False, "silence_duration_ms": 400}
-    assert session["input_audio_transcription"] == {"model": "azure-speech", "language": "tr-TR"}
-    assert session["input_audio_format"] == "pcm16" and session["input_audio_sampling_rate"] == SAMPLE_RATE
-    assert listening_session_update("en", "whisper-1", "server_vad").as_dict()["session"]["turn_detection"]["type"] == "server_vad"
-    assert listening_session_update("en", "whisper-1", "azure_semantic_vad_en").as_dict()["session"]["turn_detection"]["type"] == "azure_semantic_vad_en"
-    json.dumps(listening)
 
 
 async def test_speak_streams_audio_and_sets_the_voice_once_per_language() -> None:
@@ -110,32 +116,33 @@ async def test_speak_streams_audio_and_sets_the_voice_once_per_language() -> Non
     await speaker.close()
 
 
-async def test_transcribe_uses_a_second_connection_with_the_created_vad_type() -> None:
-    fakes = Fakes(created_vad="azure_semantic_vad")
+async def test_transcribe_uses_a_second_connection_with_the_verified_update_first() -> None:
+    fakes = Fakes()
     speaker = await opened(fakes)
     pcm = b"\x00\x10" * 24000
     assert await speaker.transcribe(pcm, "en") == "how is my player doing"
     kinds = fakes.listening.sent_types()
     assert kinds[0] == "session.update" and kinds[-1] == "input_audio_buffer.commit" and "input_audio_buffer.append" in kinds
-    update = fakes.listening.sent[0]["session"]
-    assert update["turn_detection"]["type"] == "azure_semantic_vad" and update["turn_detection"]["create_response"] is False
-    assert update["input_audio_transcription"] == {"model": "azure-speech", "language": "en-US"}
+    assert fakes.listening.sent[0] == listening_session_update("en"), "the first update on the listening connection is exactly the verified payload"
     appended = b"".join(base64.b64decode(p["audio"]) for p in fakes.listening.sent if p["type"] == "input_audio_buffer.append")
     assert appended.startswith(pcm) and len(appended) == len(pcm) + int(SAMPLE_RATE * 2 * 0.6)
     assert fakes.speaking.sent == [], "listening never touches the speaking connection"
     await speaker.transcribe(pcm, "en")
-    assert fakes.listening.sent_types().count("session.update") == 1, "the listening session is configured once per language"
+    assert fakes.listening.sent_types().count("session.update") == 1, "configured once per language"
     await speaker.transcribe(pcm, "tr")
-    assert fakes.listening.sent[-1 - 1 - len(pcm) // 48000 - 1]["type"] == "session.update" or fakes.listening.sent_types().count("session.update") == 2
+    updates = [p for p in fakes.listening.sent if p["type"] == "session.update"]
+    assert len(updates) == 2 and updates[1]["session"]["input_audio_transcription"]["language"] == "tr"
+    assert updates[1]["session"]["turn_detection"]["type"] == "azure_semantic_vad", "the VAD type never changes after the first update"
     await speaker.close()
 
 
-async def test_default_vad_type_when_the_server_announces_none() -> None:
-    fakes = Fakes(created_vad=None)
-    fakes.listening.on_send["input_audio_buffer.append"] = lambda p: [ev("input_audio_buffer.committed", item_id="i2"), ev("conversation.item.input_audio_transcription.completed", item_id="i2", content_index=0, transcript="skor ne")]
+async def test_vad_commit_is_used_when_it_arrives_first(monkeypatch) -> None:
+    monkeypatch.setenv("VOICE_LISTEN_VAD_TR", "azure_semantic_vad_multilingual")
+    fakes = Fakes()
+    fakes.listening.on_send["input_audio_buffer.append"] = lambda p: [ev("input_audio_buffer.speech_stopped"), ev("input_audio_buffer.committed", item_id="i2"), ev("conversation.item.input_audio_transcription.completed", item_id="i2", content_index=0, transcript="skor ne")]
     speaker = await opened(fakes)
     assert await speaker.transcribe(b"\x00\x01" * 100, "tr") == "skor ne"
-    assert fakes.listening.sent[0]["session"]["turn_detection"]["type"] == "server_vad"
+    assert fakes.listening.sent[0]["session"]["turn_detection"]["type"] == "azure_semantic_vad_multilingual", "the env override for Turkish is honoured"
     assert "input_audio_buffer.commit" not in fakes.listening.sent_types(), "no manual commit when the VAD already committed"
     await speaker.close()
 
@@ -203,14 +210,24 @@ async def test_cancel_only_while_speaking_and_drops_remaining_audio() -> None:
 async def test_socket_loss_surfaces_as_an_error_not_a_hang() -> None:
     fakes = Fakes()
     speaker = await opened(fakes)
-    await asyncio.sleep(0.01)
-
-    async def broken_recv():
-        await asyncio.sleep(0)
-        raise ConnectionError("socket closed")
-
-    fakes.speaking.recv = broken_recv
-    await asyncio.sleep(0.01)
+    fakes.speaking.on_send["response.create"] = lambda p: [ConnectionError("socket closed")]  # recv raises under the pump
     with pytest.raises(SpeechError, match="socket closed"):
         await speaker.speak("x", "en", no_audio)
+    fakes.listening.on_send["input_audio_buffer.commit"] = lambda p: [ConnectionError("socket closed")]
+    with pytest.raises(TranscriptionError, match="socket closed"):
+        await speaker.transcribe(b"\x00\x01" * 1000, "en")
+    await speaker.close()
+
+
+async def test_silent_socket_times_out_instead_of_waiting_forever() -> None:
+    fakes = Fakes()
+    speaker = await opened(fakes)
+    fakes.speaking.on_send["response.create"] = lambda p: [ev("response.audio.delta", delta=b"\x01" * 4)]  # then nothing, ever
+    with pytest.raises(SpeechError, match="sent nothing"):
+        await speaker.speak("x", "en", no_audio)
+    fakes.listening.on_send["input_audio_buffer.commit"] = lambda p: [ev("input_audio_buffer.committed", item_id="i")]  # committed, no transcript
+    with pytest.raises(TranscriptionError, match="in time"):
+        await speaker.transcribe(b"\x00\x01" * 1000, "en")
+    fakes.speaking.on_send["response.create"] = speaking_replies
+    assert await speaker.speak("Back.", "en", no_audio) == "Back.", "a timed-out line does not poison the next one"
     await speaker.close()

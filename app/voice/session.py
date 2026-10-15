@@ -1,15 +1,16 @@
 """Voice Live speaker and listener: speaks approved text verbatim, transcribes push-to-talk questions, audits what
 was spoken (SPEC design rule 6).
 
-Two connections, because Voice Live refuses to change the turn-detection type during a session
-(`turn_detection_type_change_not_allowed`):
+Two connections, because Voice Live refuses to change the turn-detection type during a session:
 - the **speaking** connection only ever sets the voice and output format (as in S5) and sends `response.create`
   with `pre_generated_assistant_message`, so the realtime model never authors spoken words;
-- the **listening** connection is opened on the first push-to-talk question; its first `session.update` keeps the
-  turn-detection type the server created the session with, sets `create_response=False` (the model never answers
-  by itself) and the transcription model, and the input format. Audio goes to the input buffer; the VAD or a manual
-  commit creates the item and the transcription event carries the words.
-Each connection has its own receive pump, so an error on one never breaks the other.
+- the **listening** connection is opened on the first push-to-talk question. Its first `session.update` is the one
+  verified against the service on 2026-10-15: pcm16 input, `azure_semantic_vad` with `create_response=false` (the
+  model never answers by itself; azure-speech transcription requires a semantic VAD) and `azure-speech`
+  transcription in the fan's language, which keeps digits as digits. Audio goes to the input buffer, the buffer is
+  committed, and `conversation.item.input_audio_transcription.completed` carries the words.
+Each connection has its own receive pump, so an error on one never breaks the other, and neither speaking nor
+transcribing waits forever on a silent socket.
 """
 
 import asyncio
@@ -26,13 +27,12 @@ OnAudio = Callable[[bytes], Awaitable[None]]
 
 SAMPLE_RATE = 24000  # pcm16 mono, in and out
 VOICES: dict[str, str] = {"en": "en-US-AvaMultilingualNeural", "tr": "tr-TR-EmelNeural"}
-TRANSCRIBE_LANG: dict[str, str] = {"en": "en-US", "tr": "tr-TR"}
-DEFAULT_VAD_TYPE = "server_vad"
+LISTEN_VAD: dict[str, str] = {"en": "azure_semantic_vad", "tr": "azure_semantic_vad"}  # VOICE_LISTEN_VAD_TR=azure_semantic_vad_multilingual if Turkish needs it
 SILENCE_TAIL_S = 0.6
 COMMIT_WAIT_S = 1.5
-TRANSCRIBE_TIMEOUT_S = 12.0
+SPEAK_IDLE_TIMEOUT_S = 15.0   # no event while speaking: the socket is silent, give up on the line
+TRANSCRIBE_TIMEOUT_S = 20.0   # whole transcription, from the last appended chunk to the transcript
 SESSION_UPDATE_TIMEOUT_S = 6.0
-CREATED_WAIT_S = 1.5  # session.created arrives right after connect; past this we fall back to the default VAD type
 
 
 class SpeechError(RuntimeError):
@@ -64,22 +64,16 @@ def speaking_session_update(voice: str) -> dict[str, Any]:
     return {"type": "session.update", "session": {"modalities": ["text", "audio"], "voice": {"name": voice, "type": "azure-standard"}, "output_audio_format": "pcm16"}}
 
 
-def listening_session_update(lang: Lang, transcribe_model: str, vad_type: str) -> Any:
-    """A typed `session.update` for the listening connection: input format, transcription model, and the session's own
-    VAD type with `create_response=False` so the model never answers by itself (the type itself is never changed)."""
-    from azure.ai.voicelive.models import AudioInputTranscriptionOptions, AzureSemanticVad, ClientEventSessionUpdate, InputAudioFormat, RequestSession, ServerVad
-
-    vad_cls = {"server_vad": ServerVad, "azure_semantic_vad": AzureSemanticVad}.get(vad_type)
-    turn_detection = vad_cls(create_response=False, interrupt_response=False, silence_duration_ms=400) if vad_cls else {
-        "type": vad_type, "create_response": False, "interrupt_response": False, "silence_duration_ms": 400,
+def listening_session_update(lang: Lang, transcribe_model: str = "azure-speech", vad_type: str | None = None) -> dict[str, Any]:
+    """The first update on the listening connection, exactly as verified against the service (plain dict, no extras)."""
+    return {
+        "type": "session.update",
+        "session": {
+            "input_audio_format": "pcm16",
+            "turn_detection": {"type": vad_type or LISTEN_VAD[lang], "create_response": False},
+            "input_audio_transcription": {"model": transcribe_model, "language": lang},
+        },
     }
-    session = RequestSession(
-        input_audio_format=InputAudioFormat.PCM16,
-        input_audio_sampling_rate=SAMPLE_RATE,
-        input_audio_transcription=AudioInputTranscriptionOptions(model=transcribe_model, language=TRANSCRIBE_LANG[lang]),
-        turn_detection=turn_detection,
-    )
-    return ClientEventSessionUpdate(session=session)
 
 
 class _ClosedEvent:
@@ -101,7 +95,6 @@ class _Channel:
         self.name = name
         self.events: asyncio.Queue = asyncio.Queue()
         self.session_events: asyncio.Queue = asyncio.Queue()
-        self.created: dict[str, Any] | None = None  # the session as the server created it
         self.active = False
         self.last_error: dict[str, Any] | None = None
         self._pump: asyncio.Task | None = None
@@ -114,11 +107,7 @@ class _Channel:
             while True:
                 event = await self.connection.recv()
                 kind = str(getattr(event, "type", ""))
-                if kind == "session.created":
-                    session = getattr(event, "session", None)
-                    self.created = session.as_dict() if hasattr(session, "as_dict") else dict(session or {})
-                    self.session_events.put_nowait(event)
-                elif kind == "session.updated":
+                if kind == "session.updated":
                     self.session_events.put_nowait(event)
                 elif kind == "error":
                     self.last_error = dict(getattr(event, "error", {}) or {})
@@ -222,7 +211,10 @@ class VoiceLiveSpeaker:
             })
             transcript: list[str] = []
             while True:
-                event = await channel.events.get()
+                try:
+                    event = await asyncio.wait_for(channel.events.get(), timeout=SPEAK_IDLE_TIMEOUT_S)
+                except TimeoutError as exc:
+                    raise SpeechError(f"Voice Live sent nothing for {SPEAK_IDLE_TIMEOUT_S:g} s while speaking") from exc
                 kind = str(getattr(event, "type", ""))
                 if kind == "response.audio.delta":
                     if not self._cancelled:
@@ -243,32 +235,23 @@ class VoiceLiveSpeaker:
             await self._speaking.connection.send({"type": "response.cancel"})
 
     # ----- listening -----
+    def _listen_vad(self, lang: Lang) -> str:
+        return os.environ.get(f"VOICE_LISTEN_VAD_{lang.upper()}", LISTEN_VAD[lang])
+
     async def _listener(self, lang: Lang) -> _Channel:
         if self._listening is None:
             channel = await self._connect("listening")
             try:
-                await asyncio.wait_for(self._await_created(channel), timeout=CREATED_WAIT_S)
-            except TimeoutError:
-                pass  # some servers do not announce the session; fall back to the default VAD type
-            vad_type = str((channel.created or {}).get("turn_detection", {}).get("type") or DEFAULT_VAD_TYPE)
-            try:
-                await channel.update_session(listening_session_update(lang, self.transcribe_model, vad_type), TranscriptionError)
+                await channel.update_session(listening_session_update(lang, self.transcribe_model, self._listen_vad(lang)), TranscriptionError)
             except TranscriptionError:
                 await channel.close()
                 raise
             self._listening, self._listen_lang = channel, lang
         elif lang != self._listen_lang:
-            vad_type = str((self._listening.created or {}).get("turn_detection", {}).get("type") or DEFAULT_VAD_TYPE)
-            await self._listening.update_session(listening_session_update(lang, self.transcribe_model, vad_type), TranscriptionError)
+            # Only the transcription language changes; the VAD type stays what the first update set.
+            await self._listening.update_session(listening_session_update(lang, self.transcribe_model, self._listen_vad(self._listen_lang)), TranscriptionError)
             self._listen_lang = lang
         return self._listening
-
-    @staticmethod
-    async def _await_created(channel: _Channel) -> None:
-        while channel.created is None:
-            event = await channel.session_events.get()
-            if str(getattr(event, "type", "")) == "closed":
-                raise TranscriptionError("Voice Live listening connection closed before the session was created")
 
     async def transcribe(self, pcm16: bytes, lang: Lang) -> str:
         channel = await self._listener(lang)
