@@ -117,8 +117,8 @@ class FanNarrative(BaseModel):
 | --- | --- |
 | Language | Python 3.11 |
 | Agents | Microsoft Agent Framework (Python 1.0+), graph workflow with conditional reject edge; deployed as a Foundry Hosted Agent |
-| Foundry SDK | `azure-ai-projects>=2.5.0` (use `project.agents`, not the old `project.beta.agents`), `openai>=3.0.0`, `azure-identity`; Python 3.11 |
-| CLI | `az` 2.87 (installed) + `azd` with the `azure.ai.agents` extension, or the Foundry DevPack (`winget install Microsoft.FoundryDevPack`); both `az login` and `azd auth login` |
+| Foundry SDK | `agent-framework-foundry` (`FoundryChatClient`), `azure-ai-projects` (use `project.agents`, not the old `project.beta.agents`), `openai`, `azure-identity`; Python 3.11 locally, 3.13 in the hosted runtime. Versions pinned below |
+| CLI | `az` 2.87 (installed) + `azd` with the `azure.ai.agents` extension, installed via `winget install Microsoft.Azd --source winget`; `az login --tenant <tenant>` only, with `azd config set auth.useAzCliAuth true` |
 | Models | Deployed in the Foundry project (selecting in the catalog is not enough; each needs a named deployment). Commentator on a frontier model; Analyst, Fact-Checker, Producer on a small fast model. 429s handled with exponential backoff + jitter honoring `Retry-After` |
 | Observability | Foundry tracing (OpenTelemetry GenAI conventions, GA) into an Application Insights resource linked to the project |
 | Evaluation | Foundry built-in evaluators over recorded match runs: Groundedness (claims vs ledger evidence), Task Adherence, Intent Resolution. Cloud evaluations are long-running operations: submit, then poll |
@@ -130,7 +130,32 @@ class FanNarrative(BaseModel):
 | Container | Single Dockerfile, `docker compose` for local |
 | Hosting | Agent workflow: Foundry Hosted Agent. API + UI: one small Azure Container App that invokes the hosted agent |
 
-Exact package names and versions get pinned during the day-1 Foundry spike (task T2) and recorded here.
+### Pinned in the T2 spike (2026-10-15)
+
+| Package | Version | Note |
+| --- | --- | --- |
+| `agent-framework-core` | 1.21.0 | workflows: `WorkflowBuilder`, `Executor`, `@handler`, conditional `add_edge` |
+| `agent-framework-foundry` | 1.14.1 | `FoundryChatClient` (Responses API); reads `FOUNDRY_PROJECT_ENDPOINT` |
+| `agent-framework-foundry-hosting` | 1.0.0b261008 | `ResponsesHostServer` for the hosted agent (beta) |
+| `azure-ai-projects` | 2.7.0 | 2.8.0 conflicts with agent-framework-foundry 1.14.1 |
+| `azure-identity` | 1.26.0 | keyless `DefaultAzureCredential` |
+| `openai` | 3.31.0 | |
+| `azure-monitor-opentelemetry` | 1.8.11 | local runs export spans to App Insights |
+| `azure-ai-voicelive` | 1.3.0 | Voice Live client, API version 2026-07-15 |
+| `azd` | 1.35.1 | + extension `azure.ai.agents` 1.0.0-beta.19 |
+
+### T2 decisions and findings (2026-10-15)
+
+- **Region:** eastus2. One resource group with a Foundry resource (AIServices, S0, project management enabled) and one project; "Foundry User" role on the resource; Application Insights (workspace-based) linked as a project connection. Subscription budget alert: $50/month (50%, 80%, forecast 100%).
+- **Models and quota:** in eastus2 `gpt-5.4-mini` has quota only as DataZone Standard (200K TPM; deployed at 100K TPM). `gpt-5.5` and all `gpt-5.6-*` have 0 quota (Global and DataZone), so the frontier Commentator waits on a quota request. Until then `FRONTIER_MODEL_DEPLOYMENT` points at `gpt-5.4-mini`; the code reads the deployment name from env, so switching is a config change.
+- **Hosted vs in-container: Hosted Agent confirmed.** `azd deploy` (code deploy, `python_3_13` runtime, remote build from `uv.lock`) works from Windows in about 1 to 2 minutes and the agent is invoked remotely over the Responses protocol. Cold first call: about 9 s to response headers, 29 s end to end for a 4-call workflow. Lessons:
+  - Host the workflow natively: `ResponsesHostServer(workflow=factory, parse_response=...)`. Hosting a `WorkflowAgent` through `agent=` is deprecated and fails on hosted sessions.
+  - Messages between executors must be JSON-safe (dicts, str, numbers) or explicitly allow-listed: the hosted checkpoint store refuses to deserialize custom classes and fails the run. T10 passes payloads as `model_dump()` dicts and re-validates them into the Pydantic models above at each executor.
+  - Commit an up-to-date `uv.lock`; the remote build installs exactly what it pins.
+  - `azd` can reuse the `az` login: `azd config set auth.useAzCliAuth true`.
+- **Tracing:** the hosted agent exports spans to the linked App Insights automatically (`workflow.run`, `executor.process <id>`, `invoke_agent <name>`, `chat <model>` with token usage). Local runs export the same spans with `configure_azure_monitor()` + `enable_instrumentation()`, using the connection string from `project.telemetry`.
+- **Voice Live:** works in eastus2 against the Foundry resource endpoint with keyless auth and the managed `gpt-realtime` model (no deployment needed). Headless test: `response.cancel` after 1 s of audio stopped the server in about 0.4 s; a follow-up reply took about 1.6 s. `output_audio_buffer.clear` is avatar-only, so on barge-in the browser drops its own playback buffer. The SDK can also attach Voice Live directly to a Foundry agent (`agent_name`, `project_name`), which is an option for T12b; the default stays text in/out from our verified pipeline.
+- **Latency watch:** one `gpt-5.4-mini` call takes about 1.5 to 2.5 s, so a moment that needs Analyst, Commentator, Fact-Checker and Producer in sequence lands around 6 to 9 s, above the 5 s target in success criterion 3. T7 to T10 options: one Analyst call per window instead of per moment, a fast path that skips the Analyst for high-confidence detectors, streaming the Producer, and running the Producer per profile in parallel.
 
 ## Commands
 
@@ -215,10 +240,7 @@ def pass_difficulty(event: MatchEvent, pressure_nearby: int) -> float:
 
 ## Open Questions
 
-- Azure subscription re-enable vs new subscription (blocking for T2 onward on the agents track).
-- Which concrete models are available in Foundry for this subscription/region, and their cost.
-- Hosted Agent is the default (managed runtime, tracing out of the box, strongest Foundry story; costs hosting per active session on top of tokens). T2 confirms it deploys from Windows with `azd` inside the time box; otherwise the in-container fallback applies.
-- Voice Live: region availability, quota and cost for this subscription; whether it can drive the Commentator model directly or we pass text in/out. Verify in the T2 spike with a 30-second hello-world session.
+- Frontier-model quota for `gpt-5.5` (or `gpt-5.6-*`) in eastus2: request filed? (see T2 findings).
+- Actual cost per seeded match (tokens + hosted sessions + Voice Live minutes): read Cost analysis after the first full T10 run.
 - Stretch only: expose ledger queries as an MCP tool through a Foundry Toolbox (GA July 2026) so agents fetch evidence via MCP; hits the "MCP integration" judging bullet. Not in MVP.
-- Package versions above come from a notebook summary of public Microsoft sources (2026-10-15); verify against learn.microsoft.com during T2 before pinning.
 - Innovation Studio submission fields (invite expected by ~2026-10-16).

@@ -16,12 +16,14 @@ SPEC.md approved 2026-10-15.
   - Files: requirements.txt, .env.example, app/__init__.py, tests/test_placeholder.py
   - Result: packages app/{simulator,ledger,agents,api}; .venv on Python 3.11; 5 tests pass; private repo created, branch `main`; docs/document.{md,pdf} (B2B Connect terms) gitignored
 
-- [ ] T2: Azure + Foundry spike (time-box 1.5 days)
+- [x] T2: Azure + Foundry spike (done 2026-10-15, two manual follow-ups below)
   - Setup: install `azd` + `azure.ai.agents` extension (or Foundry DevPack via winget); `az login` and `azd auth login`; create Foundry resource + project; grant yourself the **Foundry User** role; link an Application Insights resource to the project; deploy one small model and one frontier model (file the frontier quota request first thing, it may take time)
   - Acceptance: a 2-agent Agent Framework graph workflow with one conditional edge runs locally against the deployments (keyless `DefaultAzureCredential`, Responses API); the same workflow deploys as a Foundry Hosted Agent and is invoked remotely; trace visible in the Foundry portal; package versions pinned in SPEC.md; hosted-vs-in-container decision confirmed in SPEC.md
   - Also: 30-second Foundry Voice Live hello world (speak a line, interrupt it, get a reply); record region/quota/cost findings in SPEC.md
   - Verify: `python spikes/two_agents.py` (local) and hosted invocation both print both agent outputs; screenshot of trace; `python spikes/voice_live_hello.py` round trip works
   - Files: spikes/two_agents.py, requirements.txt, .env.example, SPEC.md
+  - Result: eastus2 Foundry resource + project, Foundry User role, App Insights linked, $50/month budget alert; `gpt-5.4-mini` deployed (DataZone Standard). `spikes/two_agents.py` runs locally (reject edge proven with `--inject-false`); `spikes/hosted/` deploys with `azd deploy` and answers `azd ai agent invoke t2-spike 'inject-false'`; spans from both in App Insights; `spikes/voice_live_hello.py` interrupt stops in ~0.4 s, reply in ~1.6 s. Findings and pins in SPEC.md "T2 decisions and findings".
+  - Manual follow-ups (Oguz): (1) file a quota request for `gpt-5.5` in eastus2, then deploy it and set `FRONTIER_MODEL_DEPLOYMENT`; (2) open the project's Tracing tab in the Foundry portal and take the trace screenshot for the README.
 
 - [ ] T3: Simulator v1
   - Acceptance: fictional league (4 clubs, 18-player squads, fictional names); phase model; same seed -> identical event list; events validate as `MatchEvent`
