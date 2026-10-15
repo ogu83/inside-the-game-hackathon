@@ -71,14 +71,36 @@ def speaking_session_update(voice: str) -> dict[str, Any]:
     return {"type": "session.update", "session": {"modalities": ["text", "audio"], "voice": {"name": voice, "type": "azure-standard"}, "output_audio_format": "pcm16"}}
 
 
-def listening_session_update(lang: Lang, transcribe_model: str = "azure-speech", vad_type: str | None = None) -> dict[str, Any]:
-    """The first update on the listening connection, exactly as verified against the service (plain dict, no extras)."""
+TRANSCRIBE_LOCALE: dict[str, str] = {"en": "en-US", "tr": "tr-TR"}
+FOOTBALL_PHRASES: dict[str, list[str]] = {
+    "en": ["score", "goal", "goals", "shot", "shots", "pass", "passes", "possession", "pressing", "press", "why", "how is my player",
+           "player", "minute", "Kestrel Bay", "Ironvale", "Meridian League"],
+    "tr": ["skor", "gol", "şut", "pas", "top", "topa sahip", "oyuncu", "oyuncum", "neden", "nasıl", "kaç", "baskı", "dakika",
+           "Kestrel Bay", "Ironvale", "Meridian Ligi"],
+}
+
+
+def phrase_list(lang: Lang) -> list[str]:
+    """Recognition bias: football vocabulary in the fan's language plus every club and player name of the league."""
+    from app.simulator.league import CLUBS, PLAYERS
+
+    names = [c.name for c in CLUBS.values()] + [c.short for c in CLUBS.values()] + [p.name for p in PLAYERS.values()]
+    return list(dict.fromkeys(FOOTBALL_PHRASES[lang] + names))
+
+
+def listening_session_update(lang: Lang, transcribe_model: str = "azure-speech", vad_type: str | None = None, bias: bool = True) -> dict[str, Any]:
+    """The first update on the listening connection: the payload verified against the service (pcm16, a semantic VAD
+    that never creates a response, azure-speech), with the full locale and a phrase list for football words and the
+    league's names. `bias=False` is the fallback payload without the phrase list."""
+    transcription: dict[str, Any] = {"model": transcribe_model, "language": TRANSCRIBE_LOCALE[lang]}
+    if bias:
+        transcription["phrase_list"] = phrase_list(lang)
     return {
         "type": "session.update",
         "session": {
             "input_audio_format": "pcm16",
             "turn_detection": {"type": vad_type or LISTEN_VAD[lang], "create_response": False},
-            "input_audio_transcription": {"model": transcribe_model, "language": lang},
+            "input_audio_transcription": transcription,
         },
     }
 
@@ -178,6 +200,7 @@ class VoiceLiveSpeaker:
         self._voice: str | None = None
         self._listen_lang: Lang | None = None
         self._cancelled = False
+        self._bias = True  # phrase-list bias on the listening session; switched off if the service rejects the field
 
     async def _connect(self, name: str) -> _Channel:
         if self._connection_factory is not None:
@@ -245,18 +268,29 @@ class VoiceLiveSpeaker:
     def _listen_vad(self, lang: Lang) -> str:
         return os.environ.get(f"VOICE_LISTEN_VAD_{lang.upper()}", LISTEN_VAD[lang])
 
+    async def _configure_listener(self, channel: _Channel, lang: Lang, vad_type: str) -> None:
+        """Send the biased update; if the service rejects the phrase list, log the exact error and retry without it."""
+        try:
+            await channel.update_session(listening_session_update(lang, self.transcribe_model, vad_type, bias=self._bias), TranscriptionError)
+        except TranscriptionError as exc:
+            if not self._bias or "phrase" not in str(exc).casefold():
+                raise
+            log.warning("Voice Live rejected the transcription phrase list, continuing without it: %s", exc)
+            self._bias = False
+            await channel.update_session(listening_session_update(lang, self.transcribe_model, vad_type, bias=False), TranscriptionError)
+
     async def _listener(self, lang: Lang) -> _Channel:
         if self._listening is None:
             channel = await self._connect("listening")
             try:
-                await channel.update_session(listening_session_update(lang, self.transcribe_model, self._listen_vad(lang)), TranscriptionError)
+                await self._configure_listener(channel, lang, self._listen_vad(lang))
             except TranscriptionError:
                 await channel.close()
                 raise
             self._listening, self._listen_lang = channel, lang
         elif lang != self._listen_lang:
-            # Only the transcription language changes; the VAD type stays what the first update set.
-            await self._listening.update_session(listening_session_update(lang, self.transcribe_model, self._listen_vad(self._listen_lang)), TranscriptionError)
+            # Only the transcription language (and its phrase list) changes; the VAD type stays what the first update set.
+            await self._configure_listener(self._listening, lang, self._listen_vad(self._listen_lang))
             self._listen_lang = lang
         return self._listening
 

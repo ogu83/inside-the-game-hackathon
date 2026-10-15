@@ -81,21 +81,46 @@ async def no_audio(_: bytes) -> None:
     return None
 
 
-def test_listening_session_update_is_exactly_the_verified_payload() -> None:
-    assert listening_session_update("en") == {
-        "type": "session.update",
-        "session": {
-            "input_audio_format": "pcm16",
-            "turn_detection": {"type": "azure_semantic_vad", "create_response": False},
-            "input_audio_transcription": {"model": "azure-speech", "language": "en"},
-        },
-    }
-    assert listening_session_update("tr")["session"]["input_audio_transcription"]["language"] == "tr"
+def test_listening_session_update_is_the_verified_payload_plus_locale_and_phrase_list() -> None:
+    payload = listening_session_update("en")
+    transcription = payload["session"]["input_audio_transcription"]
+    assert payload["type"] == "session.update"
+    assert payload["session"]["input_audio_format"] == "pcm16"
+    assert payload["session"]["turn_detection"] == {"type": "azure_semantic_vad", "create_response": False}
+    assert transcription["model"] == "azure-speech" and transcription["language"] == "en-US"
+    phrases = transcription["phrase_list"]
+    assert {"score", "goal", "possession", "why", "Kestrel Bay", "Ironvale", "Jory Calloway", "Remy Tallis", "Luca Brightwater"} <= set(phrases)
+    assert len(phrases) == len(set(phrases)) and all(isinstance(p, str) and p for p in phrases)
+    tr = listening_session_update("tr")["session"]["input_audio_transcription"]
+    assert tr["language"] == "tr-TR" and {"skor", "gol", "şut", "pas", "oyuncum", "neden", "nasıl", "kaç", "Jory Calloway"} <= set(tr["phrase_list"])
+    plain = listening_session_update("en", bias=False)
+    assert plain == {"type": "session.update", "session": {"input_audio_format": "pcm16", "turn_detection": {"type": "azure_semantic_vad", "create_response": False},
+                                                            "input_audio_transcription": {"model": "azure-speech", "language": "en-US"}}}, "the fallback is exactly the verified payload"
     assert listening_session_update("tr", vad_type="azure_semantic_vad_multilingual")["session"]["turn_detection"]["type"] == "azure_semantic_vad_multilingual"
-    json.dumps(listening_session_update("en"))
+    json.dumps(payload)
     speaking = speaking_session_update("tr-TR-EmelNeural")
     assert speaking["type"] == "session.update" and "turn_detection" not in speaking["session"]
     assert speaking["session"]["voice"] == {"name": "tr-TR-EmelNeural", "type": "azure-standard"}
+
+
+async def test_rejected_phrase_list_falls_back_to_the_plain_payload() -> None:
+    fakes = Fakes()
+    updates = []
+
+    def session_reply(p):
+        updates.append(p)
+        if "phrase_list" in p["session"].get("input_audio_transcription", {}):
+            return [ev("error", error={"message": "Unknown parameter: 'session.input_audio_transcription.phrase_list'", "type": "invalid_request_error", "param": "session.input_audio_transcription.phrase_list"})]
+        return [ev("session.updated")]
+
+    fakes.listening.on_send["session.update"] = session_reply
+    speaker = await opened(fakes)
+    assert await speaker.transcribe(b"\x00\x10" * MIN_UTTERANCE_BYTES, "en") == "how is my player doing"
+    assert len(updates) == 2 and "phrase_list" in updates[0]["session"]["input_audio_transcription"] and "phrase_list" not in updates[1]["session"]["input_audio_transcription"]
+    assert updates[1] == listening_session_update("en", bias=False)
+    await speaker.transcribe(b"\x00\x10" * MIN_UTTERANCE_BYTES, "tr")
+    assert "phrase_list" not in updates[-1]["session"]["input_audio_transcription"], "once rejected, the phrase list stays off"
+    await speaker.close()
 
 
 async def test_speak_streams_audio_and_sets_the_voice_once_per_language() -> None:
@@ -123,7 +148,7 @@ async def test_transcribe_uses_a_second_connection_with_the_verified_update_firs
     assert await speaker.transcribe(pcm, "en") == "how is my player doing"
     kinds = fakes.listening.sent_types()
     assert kinds[0] == "session.update" and kinds[-1] == "input_audio_buffer.commit" and "input_audio_buffer.append" in kinds
-    assert fakes.listening.sent[0] == listening_session_update("en"), "the first update on the listening connection is exactly the verified payload"
+    assert fakes.listening.sent[0] == listening_session_update("en"), "the first update on the listening connection is the verified payload with locale and phrase list"
     appended = b"".join(base64.b64decode(p["audio"]) for p in fakes.listening.sent if p["type"] == "input_audio_buffer.append")
     assert appended.startswith(pcm) and len(appended) == len(pcm) + int(SAMPLE_RATE * 2 * 0.6)
     assert fakes.speaking.sent == [], "listening never touches the speaking connection"
@@ -131,7 +156,7 @@ async def test_transcribe_uses_a_second_connection_with_the_verified_update_firs
     assert fakes.listening.sent_types().count("session.update") == 1, "configured once per language"
     await speaker.transcribe(pcm, "tr")
     updates = [p for p in fakes.listening.sent if p["type"] == "session.update"]
-    assert len(updates) == 2 and updates[1]["session"]["input_audio_transcription"]["language"] == "tr"
+    assert len(updates) == 2 and updates[1]["session"]["input_audio_transcription"]["language"] == "tr-TR"
     assert updates[1]["session"]["turn_detection"]["type"] == "azure_semantic_vad", "the VAD type never changes after the first update"
     await speaker.close()
 
