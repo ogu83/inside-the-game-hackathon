@@ -37,10 +37,11 @@ Nothing here starts until SPEC.md and tasks/plan.md are approved.
 
 ## Phase B: Ledger
 
-- [ ] T5: Ledger core metrics
+- [x] T5: Ledger core metrics (done 2026-10-15)
   - Acceptance: possession %, pass accuracy, pass difficulty, shot speed, player distance/speed thresholds, all from events; each calculator unit-tested on hand-built sequences
   - Verify: `python -m pytest tests/ledger -q`
   - Files: app/ledger/{state.py,metrics.py}, tests/ledger/test_metrics.py
+  - Result: pure calculators in metrics.py; incremental `LedgerState.apply()` with flat citable keys (`match.*`, `team.<club>.*`, `player.<id>.*`, ~390 per match) via `evidence()` / `value(key)`; sprint threshold 25 km/h, hard pass >= 0.5 difficulty, pressure window 3 s; incremental state cross-checked against the batch calculators on seed 7
 
 - [ ] T6: Candidate-moment detectors
   - Acceptance: pressing_trap, momentum_shift, pass_streak, player_milestone, lull; seeded match yields 30-60 moments with evidence dicts
