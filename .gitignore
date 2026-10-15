@@ -9,3 +9,5 @@ __pycache__/
 docs/private/
 docs/document.md
 docs/document.pdf
+.azure/
+spikes/hosted/src/t2-spike/.venv/
