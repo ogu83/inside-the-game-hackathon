@@ -24,7 +24,7 @@
   <div class="voicebar" v-if="voice">
     <span v-if="voiceStatus">{{ voiceStatus }}</span>
     <span v-else-if="speaking">speaking ({{ profile.language }}): {{ speaking }}</span>
-    <span v-else>voice ready, waiting for the next verified line</span>
+    <span v-else>voice ready{{ micReady ? ', microphone warm' : '' }}, waiting for the next verified line</span>
     <span class="audit">speech audit {{ speechChecks - speechMismatches }}/{{ speechChecks }} exact</span>
   </div>
   <main>
@@ -188,7 +188,7 @@ createApp({
       teams: { home: 'Home', away: 'Away', homeId: 'kby' }, league: { clubs: [] }, playerNames: {},
       ticker: [], ball: null, trail: [], banner: null, narratives: [], metrics: null, timeline: [], drawerOpen: true, filter: 'all',
       profile: { club_id: null, player_id: null, depth: 'casual', language: 'en' }, profileKey: null,
-      askText: '', talking: false, qa: [],
+      askText: '', talking: false, qa: [], micReady: false,
       sources: [], fanSource: null, startedAt: null,
       voice: false, voiceStatus: '', speaking: '', speechChecks: 0, speechMismatches: 0,
     });
@@ -286,11 +286,40 @@ createApp({
         if (msg.type === 'unavailable') state.voiceStatus = 'voice unavailable: ' + msg.reason;
       };
     };
+    // The microphone is opened once, on the user gesture that turns the voice on, and kept warm: getUserMedia and the
+    // AudioContext take long enough that opening them on the first press lost the utterance. Frames are streamed only
+    // while the button is held. The mic is released when the voice is turned off.
+    let mic = null, micCtx = null, micNode = null, recognition = null;
+    const warmMic = async () => {
+      if (mic) return true;
+      try {
+        mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+        micCtx = new AudioContext({ sampleRate: 24000 });
+        const source = micCtx.createMediaStreamSource(mic);
+        micNode = micCtx.createScriptProcessor(4096, 1, 1);
+        micNode.onaudioprocess = (e) => {
+          if (!state.talking || !socketOpen()) return;  // warm but silent until the button is held
+          const f = e.inputBuffer.getChannelData(0); const pcm = new Int16Array(f.length);
+          for (let i = 0; i < f.length; i++) pcm[i] = Math.max(-1, Math.min(1, f[i])) * 32767;
+          voiceWs.send(pcm.buffer);
+        };
+        source.connect(micNode); micNode.connect(micCtx.destination);
+        state.micReady = true;
+        return true;
+      } catch (e) { state.voiceStatus = 'microphone unavailable: ' + e.message; state.micReady = false; return false; }
+    };
+    const releaseMic = () => {
+      if (micNode) { micNode.disconnect(); micNode = null; }
+      if (micCtx) { micCtx.close(); micCtx = null; }
+      if (mic) { mic.getTracks().forEach(t => t.stop()); mic = null; }
+      state.micReady = false;
+    };
     const toggleVoice = async () => {
       state.voice = !state.voice;
-      if (!state.voice) return closeVoice();
+      if (!state.voice) { releaseMic(); return closeVoice(); }
       audioCtx = audioCtx || new AudioContext();
       await audioCtx.resume();
+      warmMic();  // in parallel with the socket; the permission prompt appears now, not on the first press
       if (state.running) connectVoice();
     };
 
@@ -312,7 +341,6 @@ createApp({
     };
     // Push-to-talk: with the voice on, mic audio (pcm16 mono 24 kHz) streams to the socket between talk_start and talk_end
     // and Voice Live transcribes it; with the voice off, the browser's own speech recognition supplies the transcript.
-    let mic = null, micCtx = null, micNode = null, recognition = null;
     const ptt = new PushToTalk();
     const pressTalk = (e) => { if (state.running && ptt.press(e)) { if (state.voice) bargeIn(); startTalk(); } };  // mute first, then anything async
     const releaseTalk = () => { if (ptt.release()) stopTalk(); };
@@ -321,21 +349,10 @@ createApp({
       if (state.voice) {
         if (!(await ensureVoiceSocket())) { ptt.release(); return; }  // voice on but no socket: say so, never fall back to text
         if (!ptt.held) return;  // released while reconnecting
+        if (!mic && !(await warmMic())) { ptt.release(); return; }  // normally already warm since the voice was turned on
+        if (!ptt.held) return;
         state.talking = true;
         voiceWs.send(JSON.stringify({ type: 'talk_start' }));
-        try {
-          mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
-          micCtx = new AudioContext({ sampleRate: 24000 });
-          const source = micCtx.createMediaStreamSource(mic);
-          micNode = micCtx.createScriptProcessor(4096, 1, 1);
-          micNode.onaudioprocess = (e) => {
-            if (!state.talking || !voiceWs || voiceWs.readyState !== 1) return;
-            const f = e.inputBuffer.getChannelData(0); const pcm = new Int16Array(f.length);
-            for (let i = 0; i < f.length; i++) pcm[i] = Math.max(-1, Math.min(1, f[i])) * 32767;
-            voiceWs.send(pcm.buffer);
-          };
-          source.connect(micNode); micNode.connect(micCtx.destination);
-        } catch (e) { state.voiceStatus = 'microphone unavailable: ' + e.message; stopTalk(); }
         return;
       }
       state.talking = true;
@@ -353,10 +370,7 @@ createApp({
     };
     const stopTalk = () => {
       if (!state.talking) return;
-      state.talking = false;
-      if (micNode) { micNode.disconnect(); micNode = null; }
-      if (micCtx) { micCtx.close(); micCtx = null; }
-      if (mic) { mic.getTracks().forEach(t => t.stop()); mic = null; }
+      state.talking = false;  // the warm mic keeps running; frames stop here because onaudioprocess checks state.talking
       if (recognition) { recognition.stop(); recognition = null; return; }
       const ws = voiceWs, pressId = ptt.pressId;
       if (ws && ws.readyState === 1) setTimeout(() => { if (ws.readyState === 1 && pressId === ptt.pressId) ws.send(JSON.stringify({ type: 'talk_end' })); }, 150);
