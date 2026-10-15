@@ -48,7 +48,7 @@ docker compose up --build -d
 - Hook paths in `.claude/settings.json` use forward slashes.
 
 ## Azure
-- `az account show` reported "Azure subscription 1" as Disabled on 2026-10-14. Check before any Foundry/Container Apps task.
+- Subscription "Azure subscription 1" (743d9e36-...) in tenant 09c5e5e8-d9dd-4923-bbf2-9749f2e8082c. Log in with `az login --tenant 09c5e5e8-d9dd-4923-bbf2-9749f2e8082c` (MFA is enforced; plain `az login` silently skips the tenant). Never use the "Microsoft" tenant (72f988bf...) that shows up from the hackathon's B2B guest access.
 - `azd` is not installed; `az` 2.87 is. Install `azd` + `azure.ai.agents` extension (or `winget install Microsoft.FoundryDevPack`) in T2.
 - Foundry facts as of 2026-10 (Azure AI Foundry was renamed Microsoft Foundry): use the Responses API, not the Assistants API; `project.agents`, not `project.beta.agents` (azure-ai-projects >= 2.3.0); cloud evaluations are long-running operations (submit, then poll); a catalog model is not callable until it has a named deployment; RBAC role is "Foundry User".
 - Frontier models (GPT-5.5/5.6 class) need a quota request unless the subscription is Tier 5/6.

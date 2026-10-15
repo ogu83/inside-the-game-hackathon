@@ -46,7 +46,7 @@ Primary goal: place in **Best Use of Microsoft Foundry** (judges may reassign to
 | `ledger` | Deterministic match state: possession, pass quality, pressing, momentum windows, player thresholds; queryable evidence; read-only queries also served as an MCP server | `simulator` (event schema) |
 | `agents` | Analyst (director), Commentator, Fact-Checker (code layer + LLM layer), Producer on Agent Framework + Foundry models; handoff contracts | `ledger` |
 | `api` | FastAPI: start/stop match, SSE streams for cues and narratives, profile endpoint | `agents`, `ledger` |
-| `voice` | Foundry Voice Live session per fan: speaks Producer narratives, server-side VAD + barge-in, routes spoken questions to an evidence-grounded answer path (Q&A agent that queries the ledger over MCP, checked by the Fact-Checker) | `agents`, `ledger` |
+| `voice` | Foundry Voice Live session per fan: speaks Producer narratives, server-side VAD + barge-in, routes spoken questions to an evidence-grounded answer path (Q&A agent that queries the ledger over MCP, checked by the Fact-Checker); speaks only approved text, verbatim (design rule 6) | `agents`, `ledger` |
 | `ui` | Two-panel web page: broadcast panel with a 2D SVG pitch (ball and player dots from event x/y) and overlay cues, fan panel with profile switch and push-to-talk / open-mic voice companion | `api`, `voice` |
 | `deploy` | `docker compose` judge path (Must); hosted agent; Azure Container App public URL (Should) | `api`, `ui` |
 
@@ -56,9 +56,11 @@ Build order: walking skeleton first (a thin slice of `simulator` -> `ledger` -> 
 
 1. **Broadcast delay.** The simulator emits events ahead of playback; the UI and voice show the match `BROADCAST_DELAY_S` (default 10 s of match time) behind the event stream, like a real broadcast delay. Agents work on events as they arrive, so a cue is ready before its moment is displayed. `OverlayCue.show_at_seq` ties the cue to the display clock. A cue that is not ready when its moment plays is dropped, never shown late (counted in metrics).
 2. **Two-layer Fact-Checker.** Layer 1 is deterministic code: every `evidence_refs` key must exist in the moment's evidence, and every number in `claim` and `why_it_matters` must match a cited evidence value (after rounding and unit normalisation). Any failure is an immediate `rejected` with machine-readable reasons, no LLM call. Layer 2 is an LLM that judges only the qualitative wording ("dominated", "one-way") against the evidence and may return `rewritten`. Numbers are verified by code, wording by a model.
+   **The code check runs at every gate where a number can change, not only after the Commentator:** (a) the Commentator's `Insight`; (b) every Producer output, i.e. each `OverlayCue` headline/metric and each `FanNarrative` per profile and language, because per-profile rewrites and translation can change or drop numbers; (c) every text sent to the voice, including Q&A answers. The number parser handles English and Turkish formats: `68%`, `%68`, `yüzde 68`, `68.5`, `68,5`. The Producer and Q&A prompts require numbers as digits; a number written as a word fails the check. A failed Producer rendering is regenerated once, then dropped for that profile only (other profiles still get the cue). Every gate result is recorded as a `NumberCheck`.
 3. **Analyst as director.** The Analyst runs once per window (default 60 s of match time) over the batch of candidate moments, ranks them, and decides what is worth saying now and when to stay quiet so commentary does not pile up. It never computes numbers.
 4. **Ledger over MCP.** The ledger exposes read-only queries (team stats, player stats, recent moments) as an MCP server (`mcp` Python package, streamable HTTP). The voice Q&A agent calls these tools to answer open questions ("how is my player doing?"); its answer then passes the Fact-Checker like any other claim. The main moment pipeline gets evidence inline in `CandidateMoment` and does not need MCP.
 5. **One truth, many renderings.** The Producer renders each verified insight once per active profile; per-profile calls run in parallel.
+6. **The voice only speaks approved text.** Narrations and Q&A answers are sent to Voice Live as `response.create` with `pre_generated_assistant_message`, which synthesizes audio for the exact text with no model rewording (verified 2026-10-15 in en and tr, including `%68`). The realtime model is used only to listen: server VAD, transcription of the fan's question, barge-in. It never authors spoken words. Q&A is therefore text first: question transcript -> Q&A agent (ledger over MCP) -> Fact-Checker gate (c) -> verbatim speech. As an audit, the transcript of every spoken response is compared with the approved text and run through the number check; any mismatch is counted as an error (target 0). Pitch line for the demo: "even the voice is audited".
 
 ## Interfaces (contracts between modules)
 
@@ -101,6 +103,14 @@ class Verdict(BaseModel):
     reasons: list[str]
     layer: Literal["code", "llm"]  # which Fact-Checker layer decided
     attempt: int                  # 1, or 2 after the single retry
+
+class NumberCheck(BaseModel):     # one per gate pass, logged and counted in the run report
+    gate: Literal["insight", "producer", "speech"]
+    moment_id: str
+    profile_key: str | None       # producer and speech gates
+    text: str                     # the text that was checked
+    ok: bool
+    mismatches: list[str]         # e.g. "68 not in cited evidence", "number written as word: altmış sekiz"
 
 # Producer outputs
 class OverlayCue(BaseModel):
@@ -168,7 +178,7 @@ class FanNarrative(BaseModel):
   - Commit an up-to-date `uv.lock`; the remote build installs exactly what it pins.
   - `azd` can reuse the `az` login: `azd config set auth.useAzCliAuth true`.
 - **Tracing:** the hosted agent exports spans to the linked App Insights automatically (`workflow.run`, `executor.process <id>`, `invoke_agent <name>`, `chat <model>` with token usage). Local runs export the same spans with `configure_azure_monitor()` + `enable_instrumentation()`, using the connection string from `project.telemetry`.
-- **Voice Live:** works in eastus2 against the Foundry resource endpoint with keyless auth and the managed `gpt-realtime` model (no deployment needed). Headless test: `response.cancel` after 1 s of audio stopped the server in about 0.4 s; a follow-up reply took about 1.6 s. `output_audio_buffer.clear` is avatar-only, so on barge-in the browser drops its own playback buffer. The SDK can also attach Voice Live directly to a Foundry agent (`agent_name`, `project_name`), which is an option for T12b; the default stays text in/out from our verified pipeline.
+- **Voice Live:** works in eastus2 against the Foundry resource endpoint with keyless auth and the managed `gpt-realtime` model (no deployment needed). Headless test: `response.cancel` after 1 s of audio stopped the server in about 0.4 s; a follow-up reply took about 1.6 s. `output_audio_buffer.clear` is avatar-only, so on barge-in the browser drops its own playback buffer. The SDK can also attach Voice Live directly to a Foundry agent (`agent_name`, `project_name`), which is an option for T12b; the default stays text in/out from our verified pipeline. **Verbatim speech:** `response.create` with `pre_generated_assistant_message` speaks the exact text we send (tested with an English line and a Turkish line containing `%68`: transcript identical to the sent text, about 7 s of audio each). This is the basis of design rule 6.
 - **Latency watch:** one `gpt-5.4-mini` call takes about 1.5 to 2.5 s, so a moment that needs Analyst, Commentator, Fact-Checker and Producer in sequence lands around 6 to 9 s. Resolved by design rather than tuning: broadcast delay (rule 1), Analyst once per window (rule 3), code-layer rejects with no LLM call (rule 2), parallel Producer (rule 5).
 
 ## Commands
@@ -231,7 +241,8 @@ def pass_difficulty(event: MatchEvent, pressure_nearby: int) -> float:
 - **Unit (pytest):** simulator determinism (same seed, same events), event schema validity, every ledger calculator, candidate-moment detection on hand-built event sequences.
 - **Contract:** agent outputs parse into the Pydantic models above; Fact-Checker rejects an insight citing a missing or contradicted ledger key (fixture with a deliberately false claim).
 - **Fact-Checker layer 1 is plain unit tests** (no model): number extraction, rounding and unit rules, missing keys, mismatched values, claims with no numbers.
-- **Planted errors:** a test helper corrupts N Commentator insights per match (wrong number, missing key, swapped team); the run report counts how many reached a cue (target 0).
+- **Planted errors:** a test helper corrupts N Commentator insights per match (wrong number, missing key, swapped team) and N Producer renderings, including Turkish translations (changed number, dropped number, number as a word); the run report counts how many reached a cue, a narrative or the voice (target 0).
+- **Number parser:** unit tests for en and tr formats (`68%`, `%68`, `yüzde 68`, `68.5`, `68,5`), digits-only rule, and the speech-transcript comparison.
 - **Agent tests with real models are opt-in** (`pytest -m live`), excluded from the commit gate so commits do not burn tokens.
 - **End to end:** one seeded 90-minute match at high speed produces at least N verified cues, zero cues from rejected insights, and a recap in both languages.
 - Coverage target: ledger and simulator high; agents tested by contract, not by wording.
@@ -252,7 +263,7 @@ def pass_difficulty(event: MatchEvent, pressure_nearby: int) -> float:
 6. `docker compose up --build` from a clean clone runs the full demo with only `.env` filled in.
 7. Public GitHub repo, README with architecture diagram, under-2-minute YouTube demo, submitted on Innovation Studio by 2026-10-26.
 8. A Foundry cloud evaluation over 3 recorded matches reports Groundedness for verified insights, with the Fact-Checker on vs off, plus a planted-error count ("caught X of N planted errors, 0 reached air"); both numbers appear in the README and the demo (this is the Foundry-category proof point).
-9. Voice: the co-commentator speaks verified moments in English and Turkish; a spoken interruption stops playback in under 500 ms; a spoken "why?" question gets an evidence-grounded spoken answer in under ~3 s median; a question with no ledger evidence gets "I don't have data on that" instead of an invented answer.
+9. Voice: the co-commentator speaks verified moments in English and Turkish; a spoken interruption stops playback in under 500 ms; a spoken "why?" question gets an evidence-grounded spoken answer in under ~3 s median (target; measured, since Q&A is text first then verbatim speech); a question with no ledger evidence gets "I don't have data on that" instead of an invented answer; every spoken line is approved text read verbatim, and the speech transcript audit shows 0 mismatches.
 10. The voice Q&A agent answers at least one open question in the demo by calling a ledger MCP tool, visible as a tool-call span in the trace.
 
 ## Open Questions

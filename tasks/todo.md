@@ -46,7 +46,7 @@ Thin vertical slices, each tested and committed. Goal: a seeded match plays in t
   - Files: app/ledger/{state.py,metrics.py,moments.py}, tests/ledger/test_metrics.py, tests/ledger/test_moments.py
 
 - [ ] S3: Thin agents: Commentator + two-layer Fact-Checker
-  - Acceptance: Fact-Checker layer 1 (code) rejects missing keys and mismatched numbers with no LLM call, fully unit-tested; layer 2 (LLM) judges wording; workflow with one retry on real S2 moments, in-process; messages between executors are dicts re-validated into SPEC models
+  - Acceptance: Fact-Checker layer 1 (code) rejects missing keys and mismatched numbers with no LLM call, fully unit-tested; layer 1 is a reusable number check (gates: insight, producer, speech) with an en/tr number parser (`68%`, `%68`, `yüzde 68`, `68.5`, `68,5`) and a digits-only rule, each result recorded as `NumberCheck`; layer 2 (LLM) judges wording; workflow with one retry on real S2 moments, in-process; messages between executors are dicts re-validated into SPEC models
   - Verify: `python -m pytest tests/agents -q` (layer 1 + contract, no model); `python -m pytest tests/agents -q -m live` on 3 moments
   - Files: app/agents/{models.py,prompts.py,fact_check_rules.py,commentator.py,fact_checker.py,workflow.py}, tests/agents/
 
@@ -56,7 +56,7 @@ Thin vertical slices, each tested and committed. Goal: a seeded match plays in t
   - Files: app/api/{main.py,streams.py,clock.py}, frontend/index.html, tests/api/test_api.py
 
 - [ ] S5: Thin voice
-  - Acceptance: browser plays Voice Live speech for each verified line (text in, audio out) in en; no barge-in yet
+  - Acceptance: browser plays Voice Live speech for each verified line in en, sent as `pre_generated_assistant_message` (verbatim, the realtime model never authors spoken words); speech gate: transcript of each spoken response compared with the approved text and number-checked, mismatches counted; no barge-in yet
   - Verify: manual: start a match, hear verified lines
   - Files: app/voice/session.py, app/api/voice_ws.py, frontend/index.html
 
@@ -90,12 +90,12 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Files: app/agents/{prompts.py,analyst.py,commentator.py}, tests/agents/test_analyst.py, tests/agents/test_commentator.py
 
 - [ ] T8: Fact-Checker full + planted errors
-  - Acceptance: verified/rewritten/rejected with `layer` and `attempt` set; planted-error harness corrupts N insights per match (wrong number, missing key, swapped team); run report shows planted errors caught and 0 reaching a cue
+  - Acceptance: verified/rewritten/rejected with `layer` and `attempt` set; planted-error harness corrupts N insights per match (wrong number, missing key, swapped team) and N Producer renderings incl. Turkish translations (changed number, dropped number, number as a word); run report shows planted errors caught per gate and 0 reaching a cue, a narrative or the voice
   - Verify: `python -m pytest tests/agents -q`; `-m live` planted-error run on one seeded match
   - Files: app/agents/{fact_checker.py,fact_check_rules.py,planted_errors.py}, tests/agents/test_fact_checker.py
 
 - [ ] T9: Producer
-  - Acceptance: `OverlayCue` (headline <= 60 chars) + `FanNarrative` per profile in en and tr, per-profile calls in parallel; casual vs analyst depth visibly different
+  - Acceptance: `OverlayCue` (headline <= 60 chars) + `FanNarrative` per profile in en and tr, per-profile calls in parallel; casual vs analyst depth visibly different; prompt requires numbers as digits; every rendering passes the producer gate (number check), a failure is regenerated once then dropped for that profile only
   - Verify: `-m live` test over 2 profiles x 2 languages
   - Files: app/agents/producer.py, tests/agents/test_producer.py
 
@@ -120,7 +120,7 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Files: frontend/index.html, frontend/style.css
 
 - [ ] T12b: Voice: barge-in + Q&A over MCP
-  - Acceptance: ledger read-only MCP server (team stats, player stats, recent moments); voice Q&A agent answers "why?" and "how is my player doing?" by calling MCP tools, answer passes the Fact-Checker; barge-in stops playback < 500 ms; unknowns get "I don't have data on that"; en and tr; MCP tool-call span visible in trace
+  - Acceptance: ledger read-only MCP server (team stats, player stats, recent moments); voice Q&A is text first: question transcript -> Q&A agent calling MCP tools -> speech gate (number check + Fact-Checker) -> verbatim speech via `pre_generated_assistant_message`; speech transcript audit shows 0 mismatches; Q&A latency logged against the ~3 s target; barge-in stops playback < 500 ms; unknowns get "I don't have data on that"; en and tr; MCP tool-call span visible in trace
   - Verify: manual browser test with mic: golden path, interruption, unanswerable question; `python -m pytest tests/voice -q` for the MCP tools
   - Files: app/ledger/mcp_server.py, app/voice/{session.py,qa.py}, app/api/voice_ws.py, frontend/index.html, tests/voice/
 
@@ -137,6 +137,6 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
 - [ ] T16: Make repo public, submit on Innovation Studio by 2026-10-26
   - Pre-publish pass, in this order:
     1. Remove text that came from entrants-only hackathon pages: "the field is crowded" / competition framing in SPEC.md and IDEA.md; competition-scan line and Innovation Studio project ID in task_state.md
-    2. Leak scan of the working tree: keys, vault paths, client names, billing details
+    2. Leak scan of the working tree: keys, vault paths, client names, billing details. Also remove (not secret, but no reason to publish): the Azure tenant ID in CLAUDE.md and task_state.md, and the Foundry resource name/endpoint in spikes/hosted/azure.yaml (replace with `${FOUNDRY_PROJECT_ENDPOINT}` or a placeholder)
     3. Start the public repo with fresh history (squash into one commit). Commit c28e1c0 has billing details in task_state.md, so pushing the current history publicly would expose them
   - Verify: `git log` on the public repo shows the single squashed commit; the grep leak scan returns nothing
