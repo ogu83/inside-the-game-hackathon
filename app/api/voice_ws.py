@@ -105,10 +105,34 @@ async def _ask(run: MatchRun, ws: WebSocket, fan: FanProfile, transcript: str, w
     waiting.put_nowait(answer)
 
 
+async def _transcribe_then_ask(run: MatchRun, ws: WebSocket, fan: FanProfile, pcm: bytes, waiting: asyncio.Queue, speaker: Speaker, state: dict) -> None:
+    """One utterance, in its own task: a slow or failed transcription never blocks the next press."""
+    try:
+        transcript = await speaker.transcribe(pcm, fan.language)
+    except asyncio.CancelledError:
+        raise
+    except NothingHeard:  # empty or too short: fails at once, with a human reason
+        run.metrics["nothing_heard"] += 1
+        await ws.send_json({"type": "question", "question": None, "reason": NOTHING_HEARD[fan.language]})
+        return
+    except (TranscriptionError, RuntimeError) as exc:  # reported to the page; the voice keeps working
+        log.warning("transcription failed: %s", exc)
+        run.metrics["transcription_errors"] += 1
+        await ws.send_json({"type": "question", "question": None, "reason": f"could not transcribe: {exc}"})
+        return
+    if transcript.strip():
+        await _ask(run, ws, fan, transcript, waiting, speaker, state)
+    else:
+        run.metrics["nothing_heard"] += 1
+        await ws.send_json({"type": "question", "question": None, "reason": NOTHING_HEARD[fan.language]})
+
+
 async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asyncio.Queue, speaker: Speaker, state: dict) -> None:
-    """Text frames: ask / talk_start / talk_end. Binary frames between talk_start and talk_end are pcm16 mic audio."""
+    """Text frames: ask / talk_start / talk_end. Binary frames between talk_start and talk_end are pcm16 mic audio.
+    A new talk_start supersedes a transcription still in flight from the previous press."""
     pcm = bytearray()
     talking = False
+    pending: asyncio.Task | None = None
     try:
         while True:
             message = await ws.receive()
@@ -128,29 +152,20 @@ async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asynci
             elif kind == "talk_start":
                 if talking:
                     continue  # a repeated press while already listening: one press, one question
+                if pending is not None and not pending.done():
+                    pending.cancel()  # the fan moved on: the earlier utterance is dropped
+                    run.metrics["transcriptions_superseded"] += 1
                 talking, pcm = True, bytearray()
                 state["interrupted"] = True
                 await speaker.cancel()
             elif kind == "talk_end" and talking:
                 talking = False
-                try:
-                    transcript = await speaker.transcribe(bytes(pcm), fan.language)
-                except NothingHeard:  # empty or too short: fails at once, with a human reason
-                    run.metrics["nothing_heard"] += 1
-                    await ws.send_json({"type": "question", "question": None, "reason": NOTHING_HEARD[fan.language]})
-                    continue
-                except (TranscriptionError, RuntimeError) as exc:  # reported to the page; the voice keeps working
-                    log.warning("transcription failed: %s", exc)
-                    run.metrics["transcription_errors"] += 1
-                    await ws.send_json({"type": "question", "question": None, "reason": f"could not transcribe: {exc}"})
-                    continue
-                if transcript.strip():
-                    await _ask(run, ws, fan, transcript, waiting, speaker, state)
-                else:
-                    run.metrics["nothing_heard"] += 1
-                    await ws.send_json({"type": "question", "question": None, "reason": NOTHING_HEARD[fan.language]})
+                pending = asyncio.create_task(_transcribe_then_ask(run, ws, fan, bytes(pcm), waiting, speaker, state))
     except WebSocketDisconnect:
         return
+    finally:
+        if pending is not None and not pending.done():
+            pending.cancel()
 
 
 @router.websocket("/api/voice")

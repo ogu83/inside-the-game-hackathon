@@ -30,9 +30,12 @@ class FakeSpeaker:
         self.cancelled = getattr(self, "cancelled", 0) + 1
 
     async def transcribe(self, pcm16: bytes, lang: str) -> str:
+        import asyncio
+
         from app.voice.session import MIN_UTTERANCE_BYTES, NothingHeard
 
         self.transcribed = getattr(self, "transcribed", []) + [len(pcm16)]
+        await asyncio.sleep(getattr(self, "transcribe_delay", 0.0))
         if len(pcm16) < MIN_UTTERANCE_BYTES or getattr(self, "hears_nothing", False):
             raise NothingHeard("input_audio_buffer_commit_empty")
         return "how is my player doing?" if lang == "en" else "oyuncum nasıl oynuyor?"
@@ -159,9 +162,9 @@ def test_bad_profile_key_is_reported() -> None:
             assert ws.receive_json()["type"] == "unavailable"
 
 
-def ask_over_voice(profile: str, actions) -> tuple[list[dict], FakeSpeaker, dict, list[dict]]:
+def ask_over_voice(profile: str, actions, speaker: FakeSpeaker | None = None) -> tuple[list[dict], FakeSpeaker, dict, list[dict]]:
     """Finished match, voice connected for `profile`; `actions(ws)` sends the fan's frames; returns messages, speaker, metrics, audits."""
-    speaker = FakeSpeaker()
+    speaker = speaker or FakeSpeaker()
     messages: list[dict] = []
     with TestClient(app) as client:
         async def factory():
@@ -304,3 +307,27 @@ def test_talk_start_cancels_the_speaker_at_once() -> None:
                     break
             assert speaker.cancelled == before + 1
             assert getattr(speaker, "transcribed", []) in ([], [0]), "nothing was transcribed, yet the line was cancelled"
+
+
+def test_a_new_press_supersedes_a_slow_transcription() -> None:
+    def two_quick_presses(ws):
+        for _ in range(2):
+            ws.send_text(json.dumps({"type": "talk_start"}))
+            ws.send_bytes(b"\x00\x01" * 12000)
+            ws.send_bytes(b"\x00\x01" * 12000)
+            ws.send_text(json.dumps({"type": "talk_end"}))
+
+    speaker_holder = {}
+
+    def make_speaker():
+        speaker = FakeSpeaker()
+        speaker.transcribe_delay = 0.4
+        speaker_holder["s"] = speaker
+        return speaker
+
+    speaker = make_speaker()
+    messages, _, metrics, _ = ask_over_voice("iva|iva-06|casual|en", two_quick_presses, speaker=speaker)
+    questions = [m for m in messages if m["type"] == "question" and m.get("question")]
+    assert len(questions) == 1, "the first utterance was superseded before its slow transcription finished"
+    assert metrics["transcriptions_superseded"] == 1 and metrics["questions_answered"] == 1
+    assert len(speaker.transcribed) == 2, "both transcriptions started; the first was cancelled"
