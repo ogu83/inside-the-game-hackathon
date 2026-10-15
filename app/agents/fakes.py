@@ -39,6 +39,13 @@ class TemplateCommentator:
             else:
                 why = "An early statement of intent: they want the ball and are keeping it."
             return Insight(moment_id=moment.moment_id, claim=claim, why_it_matters=why, evidence_refs=refs, confidence=0.9)
+        trap_keys = ("pressing_trap_pressures", "pressing_trap_window_s", "pressing_trap_regain_distance_to_goal_m")
+        if moment.kind == "pressing_trap" and all(k in e for k in trap_keys):
+            presses, window, dist = (_n(e[k]) for k in trap_keys)
+            who = labels.get("top_player", team)
+            claim = f"{team} pressed {presses} times in {window} seconds and {who} won the ball {dist} metres from goal."
+            why = f"That is the pressing trap closing on {labels.get('opponent', 'the opposition')} in their own build-up: win it high, attack a disorganised defence."
+            return Insight(moment_id=moment.moment_id, claim=claim, why_it_matters=why, evidence_refs=list(trap_keys), confidence=0.85)
         key, value = next(iter(e.items()))
         return Insight(moment_id=moment.moment_id, claim=f"{team}: {key.replace('_', ' ')} at {_n(value)}.", why_it_matters="A notable moment.", evidence_refs=[key], confidence=0.5)
 
@@ -85,6 +92,12 @@ class TemplateProducer:
                 headline=f"{team}: {_n(e['pass_streak_passes'])}-pass move"[:60],
                 metric_label="passes", metric_value=_n(e["pass_streak_passes"]),
             )
+        elif moment.kind == "pressing_trap" and "pressing_trap_pressures" in insight.evidence_refs:
+            cue = OverlayCue(
+                moment_id=moment.moment_id, show_at_seq=moment.window[1], duration_s=8, priority="high",
+                headline=f"{team}: pressing trap, ball won high"[:60],
+                metric_label="pressures", metric_value=_n(e["pressing_trap_pressures"]),
+            )
         else:
             cue = OverlayCue(moment_id=moment.moment_id, show_at_seq=moment.window[1], duration_s=8, priority="low", headline=_shorten(insight.claim, 60))
         cited = {k: e[k] for k in insight.evidence_refs if k in e}
@@ -99,6 +112,8 @@ class TemplateProducer:
             text = f"{team} {_n(e['pass_streak_passes'])} pası {_n(e['pass_streak_duration_s'])} saniyede art arda tamamladı."
             if profile.depth == "analyst" and "pass_streak_players" in refs:
                 text += f" Bu seride {_n(e['pass_streak_players'])} oyuncu top aldı."
+        elif profile.language == "tr" and moment.kind == "pressing_trap" and {"pressing_trap_pressures", "pressing_trap_window_s"} <= refs:
+            text = f"{team} {_n(e['pressing_trap_window_s'])} saniyede {_n(e['pressing_trap_pressures'])} kez baskı yaptı ve topu rakip yarı sahada kazandı."
         else:
             text = insight.claim if profile.depth == "casual" else f"{insight.claim} {insight.why_it_matters}"
         cited = {k: e[k] for k in insight.evidence_refs if k in e}

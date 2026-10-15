@@ -84,10 +84,11 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Files: app/ledger/{state.py,metrics.py}, tests/ledger/test_metrics.py
   - Result: `pass_difficulty` (SPEC formula), `avg_pass_difficulty`, `shot_count`, `xg_total`, `max_shot_speed_kmh`, `pressure_count`, `regains_after_pressure`, `player_distance_m` (proxy from consecutive event positions), `player_stats` and `team_stats` dicts of floats for the MCP tools and the director's pacing state. 6 new tests.
 
-- [ ] T6: Detectors (scope cut 2026-10-15: two detectors)
+- [x] T6: Detectors (scope cut 2026-10-15: two detectors; done 2026-10-15 in a cloud session)
   - Acceptance: pressing_trap added to pass_streak (no momentum_shift, no player_milestone; player numbers come from T5 ledger queries and the MCP tools); possession keys omitted when `window_minutes < 3`; seeded match yields 25-45 moments with evidence dicts, sorted by closing seq and non-overlapping; `Detector` Protocol shared by both
   - Verify: `python -m pytest tests/ledger -q`; count printed for seed 7
   - Files: app/ledger/moments.py, tests/ledger/test_moments.py
+  - Result: `PressingTrapDetector` (2 high pressures inside 30 s then a regain above x = 55 in the presser's frame; evidence pressures, window, players, regain distance to goal, team pressures and regains last 10 min; `top_player_id` is the regainer), `Detector` Protocol, possession share omitted under 3 minutes, seeded matches yield 26-46 sorted non-overlapping moments; offline templates and tr narrative for traps. 126 tests.
 
 - [ ] T7: Analyst as director (per moment) + Commentator
   - Acceptance: the Analyst is called per candidate moment with pacing state computed by code (seconds since last spoken cue, cues in the last 2 minutes, rank among recent moments) and returns a `DirectorDecision` (say/skip, angle, reason), never computing numbers; skipped moments are logged for the verdict drawer; Commentator (S3) takes the angle and returns a valid `Insight` citing only existing evidence keys; pacing tests with scripted decisions

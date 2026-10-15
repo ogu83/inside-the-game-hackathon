@@ -26,6 +26,17 @@ async def test_template_commentator_passes_both_layers_on_real_moments(moments) 
     assert "Kestrel Bay" in results[0].attempts[0].claim or "Ironvale" in results[0].attempts[0].claim
 
 
+async def test_template_commentator_handles_pressing_traps(moments) -> None:
+    trap = next(m for m in moments if m.kind == "pressing_trap")
+    result = await run_moment(build_workflow(TemplateCommentator(), FactChecker(None)), trap)
+    assert result.verdict.status == "verified"
+    assert "pressed" in result.attempts[0].claim and "won the ball" in result.attempts[0].claim
+    cue, check = TemplateProducer().cue(result.attempts[0], trap, moment_labels(trap))
+    assert cue is not None and check.ok and cue.priority == "high"
+    narrative, check = TemplateProducer().narrative(result.attempts[0], trap, moment_labels(trap), FanProfile(language="tr"))
+    assert narrative is not None and check.ok and "baskı" in narrative.text
+
+
 async def test_rejected_insight_is_retried_once_with_feedback() -> None:
     writer = ScriptedCommentator([insight("Ironvale have had 6 shots."), insight("Kestrel Bay have 68% of the ball.")])
     result = await run_moment(build_workflow(writer, FactChecker(AlwaysVerifies())), MOMENT)

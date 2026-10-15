@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 from app.ledger.models import CandidateMoment
-from app.ledger.moments import PassStreakDetector
+from app.ledger.moments import Detector, PassStreakDetector, PressingTrapDetector
 from app.simulator.models import MatchEvent
 
 
@@ -11,7 +11,7 @@ class Ledger:
 
     events: list[MatchEvent] = field(default_factory=list)
     score: dict[str, int] = field(default_factory=dict)
-    detectors: list = field(default_factory=lambda: [PassStreakDetector()])
+    detectors: list[Detector] = field(default_factory=lambda: [PassStreakDetector(), PressingTrapDetector()])
 
     def ingest(self, event: MatchEvent) -> list[CandidateMoment]:
         self.events.append(event)
