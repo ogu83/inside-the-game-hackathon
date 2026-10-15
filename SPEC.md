@@ -3,6 +3,7 @@
 Status: APPROVED by Oguz on 2026-10-15 (voice-first version). Changes to interfaces, boundaries or scope still need a spec update first.
 Pivot 2026-10-15: the fan experience is now voice-first. A live spoken co-commentator, in the fan's language, that the fan can interrupt to ask "why?" and that answers only from verified ledger evidence. The verified four-agent pipeline stays as the backbone. Reason: the text-based "verified multi-agent crew" concept is crowded on the hackathon platform; live conversational voice is rare and is Oguz's strongest proven domain. Innovation Studio project: "Matchday Companion" (minimal public page until ~2026-10-25).
 Revision 2026-10-15 (post-T2 review, approved by Oguz): build a walking skeleton end to end first, then deepen; run playback behind a broadcast delay; two-layer Fact-Checker (deterministic number check in code, then LLM for wording); Analyst becomes the director (batch per window, decides when to stay quiet); ledger queries exposed over MCP for the voice Q&A path; planted-error test added to the evaluation; scope tiered Must / Should / Cut in tasks/plan.md, driven by the demo script.
+Revision 2026-10-15 (review in docs/reviews/2026-10-15-fable-review.md, all four decisions approved by Oguz): director decision per moment with pacing state (`DirectorDecision`), `BROADCAST_DELAY_S` default 20 s, precomputed mode above 1x and live mode at 1x; public Azure Container App URL becomes Must with a per-visitor run limit and an offline fallback, `docker compose` runs offline mode without Azure; interfaces gain `DirectorDecision`, `Question`, `Answer`, `SpeechAudit`, the `profile_key` definition and `top_player_*` evidence; rounding and digits-only rules documented; scope cut to 2 clubs, 2 detectors, hosted agent timeboxed, Q&A text-first.
 Source idea: [IDEA.md](IDEA.md). Rules: https://github.com/microsoft/insidethegamehackathon/blob/main/OFFICIAL%20RULES.md
 Deadline: 2026-10-27 11:59 PM PT (= 2026-10-28 09:59 Istanbul). Internal target: submitted by 2026-10-26.
 
@@ -44,23 +45,25 @@ Primary goal: place in **Best Use of Microsoft Foundry** (judges may reassign to
 | --- | --- | --- |
 | `simulator` | Fictional league, match phase model, emits events on a clock; exports a dataset file | none |
 | `ledger` | Deterministic match state: possession, pass quality, pressing, momentum windows, player thresholds; queryable evidence; read-only queries also served as an MCP server | `simulator` (event schema) |
-| `agents` | Analyst (director), Commentator, Fact-Checker (code layer + LLM layer), Producer on Agent Framework + Foundry models; handoff contracts | `ledger` |
+| `agents` | Analyst (director, one `DirectorDecision` per moment), Commentator, Fact-Checker (code layer + LLM layer), Producer on Agent Framework + Foundry models; handoff contracts; offline template agents when no model is configured | `ledger` |
 | `api` | FastAPI: start/stop match, SSE streams for cues and narratives, profile endpoint | `agents`, `ledger` |
 | `voice` | Foundry Voice Live session per fan: speaks Producer narratives, server-side VAD + barge-in, routes spoken questions to an evidence-grounded answer path (Q&A agent that queries the ledger over MCP, checked by the Fact-Checker); speaks only approved text, verbatim (design rule 6) | `agents`, `ledger` |
 | `ui` | Two-panel web page: broadcast panel with a 2D SVG pitch (ball and player dots from event x/y) and overlay cues, fan panel with profile switch and push-to-talk / open-mic voice companion | `api`, `voice` |
-| `deploy` | `docker compose` judge path (Must); hosted agent; Azure Container App public URL (Should) | `api`, `ui` |
+| `deploy` | `docker compose` offline mode without Azure (Must); public Azure Container App URL with managed identity, per-visitor run limit and offline fallback (Must); hosted agent (Should, timeboxed) | `api`, `ui` |
 
 Build order: walking skeleton first (a thin slice of `simulator` -> `ledger` -> `agents` -> `api` -> `ui` -> `voice` working end to end), then deepen each module. See tasks/plan.md. Each module is small enough to stay inside this one spec; split into `SPEC-<module>.md` only if one grows past a page.
 
 ## Pipeline design rules
 
-1. **Broadcast delay.** The simulator emits events ahead of playback; the UI and voice show the match `BROADCAST_DELAY_S` (default 10 s of match time) behind the event stream, like a real broadcast delay. Agents work on events as they arrive, so a cue is ready before its moment is displayed. `OverlayCue.show_at_seq` ties the cue to the display clock. A cue that is not ready when its moment plays is dropped, never shown late (counted in metrics).
+1. **Broadcast delay.** The simulator emits events ahead of playback; the UI and voice show the match `BROADCAST_DELAY_S` (default 20 s of match time) behind the event stream, like a real broadcast delay. Agents work on events as they arrive, so a cue is ready before its moment is displayed. `OverlayCue.show_at_seq` ties the cue to the display clock. A cue that is not ready when its moment plays is dropped, never shown late (counted in metrics as `cues_dropped_late`). Two playback modes: **live** at 1x (agents race the delayed clock; the video and the public URL) and **precomputed** above 1x (every moment is processed before playback starts, then replayed on the delayed clock; tests, evaluation runs and the 30x end-to-end criterion). The delay is in match seconds, so the wall-clock delay is `delay_s / speed`.
 2. **Two-layer Fact-Checker.** Layer 1 is deterministic code: every `evidence_refs` key must exist in the moment's evidence, and every number in `claim` and `why_it_matters` must match a cited evidence value (after rounding and unit normalisation). Any failure is an immediate `rejected` with machine-readable reasons, no LLM call. Layer 2 is an LLM that judges only the qualitative wording ("dominated", "one-way") against the evidence and may return `rewritten`. Numbers are verified by code, wording by a model.
+   **Rounding rule:** a number in text matches a cited evidence value when that value, rounded half-up to the text's number of decimals, equals it (68 matches 67.6; 52.5 matches "53" and "52.5" but not "52"). Keys ending in `_s` also match in minutes when the text says minutes. Qualified approximations ("over 50 metres" against 52.5) fail by design; prompts ask for exact ledger numbers. **Digits-only rule:** number words in English and Turkish fail the check, except "one" and "bir" (articles and pronouns) and ordinal words ("second half", "ikinci yarı"). Parser formats: `68%`, `%68`, `yüzde 68`, `68.5` and `1,250` (en), `68,5` and `1.250` (tr), ordinals `23rd` and `23.`, Turkish suffixes `14'ü`, `%68'lik`; a number glued to a letter or a `letter-` prefix is an identifier, not a number.
    **The code check runs at every gate where a number can change, not only after the Commentator:** (a) the Commentator's `Insight`; (b) every Producer output, i.e. each `OverlayCue` headline/metric and each `FanNarrative` per profile and language, because per-profile rewrites and translation can change or drop numbers; (c) every text sent to the voice, including Q&A answers. The number parser handles English and Turkish formats: `68%`, `%68`, `yüzde 68`, `68.5`, `68,5`. The Producer and Q&A prompts require numbers as digits; a number written as a word fails the check. A failed Producer rendering is regenerated once, then dropped for that profile only (other profiles still get the cue). Every gate result is recorded as a `NumberCheck`.
-3. **Analyst as director.** The Analyst runs once per window (default 60 s of match time) over the batch of candidate moments, ranks them, and decides what is worth saying now and when to stay quiet so commentary does not pile up. It never computes numbers.
+3. **Analyst as director.** The Analyst is called once per candidate moment as it closes and returns a `DirectorDecision`: say or skip, the angle to take, and a reason. It receives pacing state computed by code (seconds since the last spoken cue, cues in the last 2 minutes, the moment's kind and rank among recent moments) so it can stay quiet when commentary would pile up, without waiting for a batch window. It never computes numbers. Skipped moments are logged and shown in the verdict drawer.
 4. **Ledger over MCP.** The ledger exposes read-only queries (team stats, player stats, recent moments) as an MCP server (`mcp` Python package, streamable HTTP). The voice Q&A agent calls these tools to answer open questions ("how is my player doing?"); its answer then passes the Fact-Checker like any other claim. The main moment pipeline gets evidence inline in `CandidateMoment` and does not need MCP.
 5. **One truth, many renderings.** The Producer renders each verified insight once per active profile; per-profile calls run in parallel.
 6. **The voice only speaks approved text.** Narrations and Q&A answers are sent to Voice Live as `response.create` with `pre_generated_assistant_message`, which synthesizes audio for the exact text with no model rewording (verified 2026-10-15 in en and tr, including `%68`). The realtime model is used only to listen: server VAD, transcription of the fan's question, barge-in. It never authors spoken words. Q&A is therefore text first: question transcript -> Q&A agent (ledger over MCP) -> Fact-Checker gate (c) -> verbatim speech. As an audit, the transcript of every spoken response is compared with the approved text and run through the number check; any mismatch is counted as an error (target 0). Pitch line for the demo: "even the voice is audited".
+7. **Offline mode and the judges' budget.** With no model configured (`AGENT_MODE=template`), the same pipeline runs with deterministic template agents that fill fixed sentences from the ledger evidence; every gate still runs. This is what `docker compose` runs from a clean clone and the recording fallback if Foundry returns errors. The public Container App runs live agents under a per-visitor run limit (default `PUBLIC_LIVE_RUNS_PER_DAY=2` live matches per visitor per day, by client IP or cookie); after the limit, and on any Foundry error, the app continues in offline mode and says so in the UI. Reason: judges' clicks spend Foundry tokens against a 50 USD/month budget.
 
 ## Interfaces (contracts between modules)
 
@@ -88,7 +91,16 @@ class CandidateMoment(BaseModel):
     kind: str                     # e.g. "pressing_trap", "momentum_shift", "pass_streak"
     team_id: str                  # team the moment is about (added in S2)
     minute: int                   # match minute when the moment ended (added in S2)
-    evidence: dict[str, float]    # ledger numbers the claim may cite; includes window_minutes and minute so time references are citable
+    evidence: dict[str, float]    # ledger numbers the claim may cite; includes window_minutes and minute so time references are citable,
+                                  # and top_player_passes for the most involved player (pass_streak)
+    top_player_id: str | None     # most involved player; names are resolved in the agents layer (app/ledger/labels.py), never stored here
+
+# Analyst (director) -> pipeline, one per candidate moment
+class DirectorDecision(BaseModel):
+    moment_id: str
+    say: bool                     # False = stay quiet; the moment is logged and shown in the verdict drawer
+    angle: str | None             # e.g. "control", "pressure", "player"; guides the Commentator
+    reason: str
 
 # Commentator -> Fact-Checker -> Producer
 class Insight(BaseModel):
@@ -130,10 +142,36 @@ class FanProfile(BaseModel):
     depth: Literal["casual", "analyst"]
     language: Literal["en", "tr"]
 
+    def key(self) -> str:         # profile_key everywhere else
+        return f"{self.club_id or '-'}|{self.player_id or '-'}|{self.depth}|{self.language}"
+
 class FanNarrative(BaseModel):
     moment_id: str
     profile_key: str
     text: str
+
+# Voice Q&A (text first, then verbatim speech)
+class Question(BaseModel):
+    question_id: str
+    profile_key: str
+    transcript: str               # what the fan said, transcribed by Voice Live
+    asked_at_seq: int             # display-clock position when the question arrived
+
+class Answer(BaseModel):
+    question_id: str
+    text: str                     # "I don't have data on that" when no evidence supports an answer
+    evidence_refs: list[str]      # ledger keys returned by the MCP tools
+    tool_calls: list[str]         # MCP tool names called, for the trace
+    verdict: Verdict | None       # the Fact-Checker gate the answer passed
+
+class SpeechAudit(BaseModel):     # one per spoken response (narration or answer)
+    moment_id: str | None
+    question_id: str | None
+    profile_key: str
+    approved_text: str
+    transcript: str               # Voice Live's transcript of what was spoken
+    ok: bool                      # transcript equals approved text (case, spacing, end punctuation ignored) and passes the number check
+    mismatches: list[str]
 ```
 
 ## Tech Stack
@@ -154,7 +192,7 @@ class FanNarrative(BaseModel):
 | Frontend | Vue 3 CDN, single `frontend/index.html`, no npm; inline SVG pitch |
 | Tests | pytest, pytest-asyncio |
 | Container | Single Dockerfile, `docker compose` for local |
-| Hosting | Agent workflow: Foundry Hosted Agent (same workflow module also runs in-process for local runs and the video). Judge path: `docker compose` (Must). Public URL: one small Azure Container App (Should; the rules accept a test build) |
+| Hosting | Judge paths (both Must): `docker compose` in offline mode from a clean clone, and one small Azure Container App with a public HTTPS URL running live agents under a system-assigned managed identity that holds Foundry User on the project, kept running through judging (until 2026-11-10) with the per-visitor run limit and offline fallback of design rule 7. Agent workflow: the same module runs in-process (local, video, Container App) and as a Foundry Hosted Agent (Should, timeboxed to half a day) |
 
 ### Pinned in the T2 spike (2026-10-15)
 
@@ -186,9 +224,13 @@ class FanNarrative(BaseModel):
 ## Commands
 
 ```
-# setup
+# setup (Windows)
 py -3.11 -m venv .venv
 .venv\Scripts\activate
+pip install -r requirements.txt
+
+# setup (Linux, cloud sessions and the container)
+python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 
 # tests (also run by the test_gate hook after every git commit)
@@ -197,9 +239,12 @@ python -m pytest tests/ -q
 # simulator only, prints a match as text at 20x speed
 python -m app.simulator.run --seed 7 --speed 20
 
-# full app, local
+# every S2 moment through the Commentator -> Fact-Checker workflow (offline agents; --live uses Foundry)
+python -m app.agents.run_match --seed 7 --jsonl runs/7.jsonl [--live]
+
+# full app, local (AGENT_MODE=template without Azure, AGENT_MODE=foundry with .env)
 python -m uvicorn app.api.main:app --port 8010 --reload
-# then open http://localhost:8010
+# then open http://localhost:8010 and start a match (speed 1 = live mode, above 1 = precomputed)
 
 # container
 docker compose up --build -d
@@ -243,6 +288,7 @@ def pass_difficulty(event: MatchEvent, pressure_nearby: int) -> float:
 - **Unit (pytest):** simulator determinism (same seed, same events), event schema validity, every ledger calculator, candidate-moment detection on hand-built event sequences.
 - **Contract:** agent outputs parse into the Pydantic models above; Fact-Checker rejects an insight citing a missing or contradicted ledger key (fixture with a deliberately false claim).
 - **Fact-Checker layer 1 is plain unit tests** (no model): number extraction, rounding and unit rules, missing keys, mismatched values, claims with no numbers.
+- **Director:** `DirectorDecision` parses by contract; pacing is tested with scripted decisions on hand-built moment sequences (no two cues inside the quiet period, a high-rank moment is never skipped for pacing alone).
 - **Planted errors:** a test helper corrupts N Commentator insights per match (wrong number, missing key, swapped team) and N Producer renderings, including Turkish translations (changed number, dropped number, number as a word); the run report counts how many reached a cue, a narrative or the voice (target 0).
 - **Number parser:** unit tests for en and tr formats (`68%`, `%68`, `yüzde 68`, `68.5`, `68,5`), digits-only rule, and the speech-transcript comparison.
 - **Agent tests with real models are opt-in** (`pytest -m live`), excluded from the commit gate so commits do not burn tokens.
@@ -252,21 +298,22 @@ def pass_difficulty(event: MatchEvent, pressure_nearby: int) -> float:
 ## Boundaries
 
 - **Always:** keep the league fictional; update `task_state.md` after each task; run `python -m pytest tests/ -q` before commits; keep secrets in `.env` (gitignored); cite ledger keys for every number an agent says.
-- **Ask first:** adding a dependency outside the tech stack above; switching model or provider; any Azure resource that costs money beyond the Foundry project and one Container App; changing the interfaces above.
+- **Ask first:** adding a dependency outside the tech stack above; switching model or provider; any Azure resource that costs money beyond the Foundry project and one Container App; changing the interfaces above; raising the per-visitor live-run limit.
 - **Never:** real club/player names, crests or third-party trademarks anywhere (rules section 4.4); StatsBomb or other non-commercially licensed data as input; committing `.env` or keys; building features on the IDEA.md "Not Doing" list without a spec change.
 
 ## Success Criteria
 
-1. A seeded 90-minute match (run at 30x speed) produces at least 15 overlay cues, each traceable to a verified insight.
+1. A seeded 90-minute match (run at 30x speed in precomputed mode) produces at least 15 overlay cues, each traceable to a verified insight.
 2. Zero overlay cues or narratives originate from a `rejected` verdict (asserted in the end-to-end test).
-3. At 1x speed with a 10 s broadcast delay, at least 90% of cues are ready before their moment is displayed (none shown late); moment-to-cue latency is reported from Foundry tracing.
+3. At 1x speed in live mode with a 20 s broadcast delay, at least 90% of cues are ready before their moment is displayed (none shown late); moment-to-cue latency is reported from Foundry tracing.
 4. Switching the fan profile changes the next narrative's language, focus player/club and depth (demonstrable on video).
 5. Full-time recap generated in English and Turkish.
-6. `docker compose up --build` from a clean clone runs the full demo with only `.env` filled in.
+6. `docker compose up --build` from a clean clone runs the full demo in offline mode with no Azure and no `.env`; with `.env` filled in and an Azure login it runs the live agents.
 7. Public GitHub repo, README with architecture diagram, under-2-minute YouTube demo, submitted on Innovation Studio by 2026-10-26.
 8. A Foundry cloud evaluation over 3 recorded matches reports Groundedness for verified insights, with the Fact-Checker on vs off, plus a planted-error count ("caught X of N planted errors, 0 reached air"); both numbers appear in the README and the demo (this is the Foundry-category proof point).
 9. Voice: the co-commentator speaks verified moments in English and Turkish; a spoken interruption stops playback in under 500 ms; a spoken "why?" question gets an evidence-grounded spoken answer in under ~3 s median (target; measured, since Q&A is text first then verbatim speech); a question with no ledger evidence gets "I don't have data on that" instead of an invented answer; every spoken line is approved text read verbatim, and the speech transcript audit shows 0 mismatches.
 10. The voice Q&A agent answers at least one open question in the demo by calling a ledger MCP tool, visible as a tool-call span in the trace.
+11. A public HTTPS URL on Azure Container Apps runs the live demo for judges from submission until 2026-11-10 with no credentials (managed identity), enforces the per-visitor live-run limit, and falls back to offline mode on Foundry errors; both facts are stated in the README judge section.
 
 ## Open Questions
 
