@@ -87,6 +87,7 @@
           <span class="tag" :class="q.answer.verdict && q.answer.verdict.status !== 'rejected' ? 'ok' : 'bad'">{{ q.answer.verdict ? q.answer.verdict.status : 'no data' }}</span>
           <span>via {{ q.answer.tool_calls.join(', ') }}</span>
           <span class="tag" :class="q.audit.ok ? 'ok' : 'bad'" v-if="q.audit">spoken {{ q.audit.ok ? 'verbatim' : 'mismatch' }}</span>
+          <span class="tag" v-else-if="q.textOnly">text only (voice off)</span>
         </div>
       </div>
       <div class="speaking" v-if="voice && speaking">speaking: {{ speaking }}</div>
@@ -158,7 +159,10 @@ const labelPos = (ball, text) => {
 };
 const pad = n => String(n).padStart(2, '0');
 const clockText = t => `${pad(Math.floor(Math.max(0, t) / 60))}:${pad(Math.floor(Math.max(0, t) % 60))}`;
-if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clockText, labelPos };
+// With the voice on a question always goes over the voice socket (reconnecting first if needed) so the answer is
+// spoken and audited; text-only /api/qa is used only when the voice is off. Never a silent fallback.
+const askRoute = (voiceOn, socketOpen) => (!voiceOn ? 'text' : socketOpen ? 'socket' : 'reconnect');
+if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clockText, labelPos, askRoute };
 
 createApp({
   setup() {
@@ -207,13 +211,43 @@ createApp({
       source.start(playHead); playHead += clip.duration;
       scheduled.push(source); if (scheduled.length > 200) scheduled.shift();
     };
-    const closeVoice = () => { if (voiceWs) { voiceWs.close(); voiceWs = null; } state.speaking = ''; };
+    let reconnectTimer = null, reconnectAttempts = 0, closingOnPurpose = false;
+    const socketOpen = () => !!voiceWs && voiceWs.readyState === 1;
+    const closeVoice = () => {
+      closingOnPurpose = true; clearTimeout(reconnectTimer); reconnectAttempts = 0;
+      if (voiceWs) { voiceWs.close(); voiceWs = null; }
+      state.speaking = '';
+    };
+    // Resolves true once the voice socket is open, reconnecting if it is not; false after a 4 s wait.
+    const ensureVoiceSocket = () => new Promise((resolve) => {
+      if (socketOpen()) return resolve(true);
+      if (!state.running) { state.voiceStatus = 'start a match first'; return resolve(false); }
+      state.voiceStatus = 'reconnecting the voice...';
+      if (!voiceWs || voiceWs.readyState > 1) connectVoice();
+      const ws = voiceWs, started = Date.now();
+      const poll = setInterval(() => {
+        if (ws && ws.readyState === 1) { clearInterval(poll); resolve(true); }
+        else if (!ws || ws.readyState > 1 || Date.now() - started > 4000) { clearInterval(poll); state.voiceStatus = 'the voice socket could not connect; your question was not sent'; resolve(false); }
+      }, 50);
+    });
     const connectVoice = () => {
-      closeVoice(); state.voiceStatus = '';
+      if (voiceWs) { closingOnPurpose = true; voiceWs.close(); voiceWs = null; }
+      closingOnPurpose = false; state.voiceStatus = '';
       const key = encodeURIComponent(state.profileKey || profileKeyOf(state.profile));
       voiceWs = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/voice?profile=${key}`);
       voiceWs.binaryType = 'arraybuffer';
-      voiceWs.onmessage = (m) => {
+      const ws = voiceWs;
+      ws.onopen = () => { reconnectAttempts = 0; if (state.voiceStatus.startsWith('reconnecting') || state.voiceStatus.startsWith('voice disconnected')) state.voiceStatus = ''; };
+      ws.onclose = () => {
+        if (ws !== voiceWs || closingOnPurpose || !state.voice || !state.running) return;
+        // Unexpected close while the voice is on: come back by ourselves instead of waiting for a profile switch.
+        reconnectAttempts++;
+        if (reconnectAttempts > 6) { state.voiceStatus = 'voice disconnected; turn the voice off and on to retry'; return; }
+        const wait = Math.min(1000 * reconnectAttempts, 5000);
+        state.voiceStatus = `voice disconnected, reconnecting in ${wait / 1000} s`;
+        reconnectTimer = setTimeout(connectVoice, wait);
+      };
+      ws.onmessage = (m) => {
         if (m.data instanceof ArrayBuffer) return playPcm(m.data);
         const msg = JSON.parse(m.data);
         if (msg.type === 'speaking') { state.speaking = msg.text; playHead = 0; }
@@ -239,12 +273,18 @@ createApp({
       if (state.running) connectVoice();
     };
 
-    // Q&A: typed questions go over the voice socket when it is open (answer is spoken), else to /api/qa (text only).
+    // Q&A: with the voice on, questions go over the voice socket (reconnecting first) so answers are spoken and audited;
+    // with the voice off they go to /api/qa and are shown as text only. There is no silent fallback between the two.
     const askTyped = async () => {
       const transcript = state.askText.trim(); if (!transcript) return;
+      const route = askRoute(state.voice, socketOpen());
+      if (route !== 'text') {
+        if (route === 'reconnect' && !(await ensureVoiceSocket())) return;  // the question stays in the box
+        state.askText = '';
+        return voiceWs.send(JSON.stringify({ type: 'ask', transcript }));
+      }
       state.askText = '';
-      if (voiceWs && voiceWs.readyState === 1) return voiceWs.send(JSON.stringify({ type: 'ask', transcript }));
-      const entry = { key: 't' + Date.now(), transcript, answer: null, audit: null };
+      const entry = { key: 't' + Date.now(), transcript, answer: null, audit: null, textOnly: true };
       state.qa.unshift(entry);
       const res = await fetch('/api/qa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcript, profile_key: state.profileKey || profileKeyOf(state.profile) }) });
       entry.answer = (await res.json()).answer;
@@ -254,8 +294,9 @@ createApp({
     let mic = null, micCtx = null, micNode = null, recognition = null;
     const startTalk = async () => {
       if (!state.running || state.talking) return;
-      state.talking = true;
-      if (voiceWs && voiceWs.readyState === 1) {
+      if (state.voice) {
+        if (!(await ensureVoiceSocket())) return;  // voice on but no socket: say so, never fall back to text
+        state.talking = true;
         voiceWs.send(JSON.stringify({ type: 'talk_start' }));
         try {
           mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
@@ -272,6 +313,7 @@ createApp({
         } catch (e) { state.voiceStatus = 'microphone unavailable: ' + e.message; stopTalk(); }
         return;
       }
+      state.talking = true;
       const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!Rec) { state.voiceStatus = 'no speech recognition in this browser; type your question'; state.talking = false; return; }
       recognition = new Rec(); recognition.lang = state.profile.language === 'tr' ? 'tr-TR' : 'en-GB'; recognition.interimResults = false;
