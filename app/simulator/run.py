@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from pathlib import Path
 
 from app.simulator.emitter import simulate_match, stream
+from app.simulator.export import write_jsonl
 from app.simulator.league import LEAGUE, LEAGUE_NAME, player_by_id
 from app.simulator.model import MATCH_TEAM_ID, MatchEvent
 
@@ -61,9 +63,15 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--away", choices=sorted(LEAGUE), default=None)
     parser.add_argument("--minutes", type=int, default=None, help="stop after this match minute")
     parser.add_argument("--quiet", action="store_true", help="hide passes and pressures")
+    parser.add_argument("--export", type=Path, default=None, metavar="PATH",
+                        help="write the match as JSONL (e.g. data/match_7.jsonl) and exit")
     args = parser.parse_args(argv)
 
     events = simulate_match(args.seed, args.home, args.away)
+    if args.export:
+        n = write_jsonl(events, args.export)
+        print(f"wrote {n} events to {args.export}")
+        return
     home_id, away_id = events[0].match_id.split("-")[1:]
     print(f"{LEAGUE_NAME}: {LEAGUE[home_id].name} vs {LEAGUE[away_id].name}  ({events[0].match_id})")
     for ev in stream(events, args.speed):

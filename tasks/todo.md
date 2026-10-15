@@ -29,10 +29,11 @@ Nothing here starts until SPEC.md and tasks/plan.md are approved.
   - Files: app/simulator/{league.py,model.py,emitter.py,run.py}, tests/simulator/test_simulator.py
   - Result: Northshore League (VEL, SAL, COR, EMB), 4-4-2 starters + 7 subs; phases build_up/transition/pressing/set_piece with 8-15 min intensity windows; ~1600 events per match, ~3 goals and ~34 shots on average over 40 seeds; coords are from the acting team's view; first half ends at 45:00 exactly so the clock never runs backwards; `stream`/`astream` pace by match clock
 
-- [ ] T4: Dataset export
+- [x] T4: Dataset export (done 2026-10-15)
   - Acceptance: `--export data/match_<seed>.jsonl`; 3 sample matches committed; README section describing the schema
   - Verify: export then re-load and validate every line
   - Files: app/simulator/export.py, data/, tests/simulator/test_export.py
+  - Result: `python -m app.simulator.run --seed N --export data/match_N.jsonl`; samples for seeds 7, 8, 9 (~0.5 MB each); schema in data/README.md; a test fails if a committed sample drifts from the simulator
 
 ## Phase B: Ledger
 
