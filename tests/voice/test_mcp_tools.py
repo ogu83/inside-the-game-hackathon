@@ -1,10 +1,10 @@
 import asyncio
 import json
 
-import httpx2
+import httpx
 import pytest
 from mcp import ClientSession
-from mcp.client.streamable_http import streamable_http_client
+from mcp.client.streamable_http import streamablehttp_client
 
 from app.api.main import app
 from app.api.streams import MatchRun
@@ -64,28 +64,39 @@ def test_empty_view_reports_no_match() -> None:
     assert empty.recent_moments()["moments"] == []
 
 
+def _payload(result):
+    return result.structuredContent or json.loads(result.content[0].text)
+
+
 async def test_mcp_server_exposes_the_tools_in_process(tools: LedgerTools) -> None:
     server = build_mcp_server(tools)
     assert sorted(t.name for t in await server.list_tools()) == sorted(TOOL_NAMES)
     result = await server.call_tool("team_stats", {"team_id": "iva", "last_minutes": 10})
-    payload = result.structured_content or json.loads(result.content[0].text)
+    if isinstance(result, tuple):  # mcp 1.x: (content blocks, structured dict)
+        blocks, structured = result
+        payload = structured or json.loads(blocks[0].text)
+    else:
+        payload = result if isinstance(result, dict) else json.loads(result[0].text)
     assert payload["team"] == "Ironvale" and payload["window_minutes"] == 10.0
     assert "possession" in next(t for t in await server.list_tools() if t.name == "team_stats").description.casefold()
 
 
 async def test_mcp_over_streamable_http_against_the_app() -> None:
-    """The real transport, in process: the Q&A agent's tool calls take this path."""
+    """The real transport, in process: the Q&A agent's tool calls take this path (mcp 1.x client, as Agent Framework uses)."""
     async with app.router.lifespan_context(app):
         app.state.run = None
-        transport = httpx2.ASGITransport(app=app)
-        async with httpx2.AsyncClient(transport=transport, base_url="http://test") as http:
-            async with streamable_http_client("http://test/mcp/", http_client=http) as (read, write, *_):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    names = sorted(t.name for t in (await session.list_tools()).tools)
-                    assert names == sorted(TOOL_NAMES)
-                    result = await session.call_tool("score", {})
-                    assert "error" in (result.structured_content or json.loads(result.content[0].text))
+
+        def asgi_client(headers=None, timeout=None, auth=None) -> httpx.AsyncClient:
+            return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test", headers=headers, timeout=timeout, auth=auth)
+
+        async with streamablehttp_client("http://test/mcp/", httpx_client_factory=asgi_client) as (read, write, _):
+            async with ClientSession(read, write) as session:
+                init = await session.initialize()
+                assert init.protocolVersion
+                names = sorted(t.name for t in (await session.list_tools()).tools)
+                assert names == sorted(TOOL_NAMES)
+                result = await session.call_tool("score", {})
+                assert "error" in _payload(result)
 
 
 async def test_run_view_is_bounded_by_the_display_clock() -> None:

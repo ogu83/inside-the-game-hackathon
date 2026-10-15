@@ -16,8 +16,6 @@ from app.agents.fact_checker import FactChecker
 from app.agents.fakes import AlwaysVerifies
 from app.agents.models import FanProfile
 from app.api.limits import RunLimiter, live_runs_per_day
-from mcp.server.transport_security import TransportSecuritySettings
-
 from app.ledger.mcp_server import LedgerTools, build_mcp_server
 from app.voice.qa import QaPipeline, RuleQaAgent, new_question
 from app.api.streams import MatchRun, producer_from_env, template_producer, template_workflow, workflow_factory_from_env
@@ -79,9 +77,7 @@ async def lifespan(app: FastAPI):
         app.state.speaker_factory = speaker_factory_from_env()
     # The MCP transport is built per lifespan (a session manager runs once) and one task owns its cancel scope.
     server = build_mcp_server(LedgerTools(_AppView(app)))
-    # Read-only data, reached through the public hostname by the live Q&A agent: Host checking would refuse it.
-    security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
-    app.state.mcp_asgi = server.streamable_http_app(streamable_http_path="/", stateless_http=True, json_response=True, transport_security=security)
+    app.state.mcp_asgi = server.streamable_http_app()
     stop, started = asyncio.Event(), asyncio.Event()
 
     async def run_mcp_sessions() -> None:

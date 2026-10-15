@@ -1,4 +1,5 @@
-"""Read-only ledger queries as an MCP server (SPEC design rule 4), streamable HTTP via the `mcp` package.
+"""Read-only ledger queries as an MCP server (SPEC design rule 4), streamable HTTP via the `mcp` package (1.x,
+the range Agent Framework pins).
 
 `LedgerTools` are plain functions over a `LedgerView`, so the offline Q&A agent calls them directly and the
 MCP server wraps the same functions for the live Q&A agent. The view is bounded by the display clock: a
@@ -7,7 +8,8 @@ question is answered with what the fan has seen, never with events still in the 
 
 from typing import Any, Protocol
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from app.ledger.metrics import in_window, player_stats, team_stats
 from app.simulator.league import CLUBS, PLAYERS
@@ -81,8 +83,15 @@ class LedgerTools:
 TOOL_NAMES = ("score", "team_stats", "player_stats", "recent_moments", "squads")
 
 
-def build_mcp_server(tools: LedgerTools, name: str = "matchday-ledger") -> MCPServer:
-    server = MCPServer(name, instructions="Read-only match ledger of the fictional Meridian League, bounded by what the broadcast has shown. Every number you quote must come from these tools.")
+def build_mcp_server(tools: LedgerTools, name: str = "matchday-ledger", path: str = "/") -> FastMCP:
+    """Stateless streamable HTTP server. Host checking is off: the live Q&A agent reaches it through the public
+    hostname, and the data is read-only."""
+    server = FastMCP(
+        name,
+        instructions="Read-only match ledger of the fictional Meridian League, bounded by what the broadcast has shown. Every number you quote must come from these tools.",
+        stateless_http=True, json_response=True, streamable_http_path=path,
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+    )
     for tool_name in TOOL_NAMES:
         server.add_tool(getattr(tools, tool_name), name=tool_name)
     return server
