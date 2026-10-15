@@ -40,7 +40,7 @@ Thin vertical slices, each tested and committed. Goal: a seeded match plays in t
   - Verify: `python -m pytest tests/simulator -q`; `python -m app.simulator.run --seed 7 --speed 20` reads like football for 5 minutes
   - Files: app/simulator/{models.py,league.py,engine.py,run.py}, tests/simulator/test_simulator.py
 
-- [ ] S2: Thin ledger + first detector
+- [x] S2: Thin ledger + first detector (done 2026-10-15: 17-26 pass_streak moments per seeded match)
   - Acceptance: possession % and pass streak calculators; `pass_streak` detector emits `CandidateMoment` with an evidence dict; unit tests on hand-built sequences
   - Verify: `python -m pytest tests/ledger -q`; moment count printed for seed 7
   - Files: app/ledger/{state.py,metrics.py,moments.py}, tests/ledger/test_metrics.py, tests/ledger/test_moments.py

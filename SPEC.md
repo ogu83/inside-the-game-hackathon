@@ -86,7 +86,9 @@ class CandidateMoment(BaseModel):
     moment_id: str
     window: tuple[int, int]       # seq range the moment covers
     kind: str                     # e.g. "pressing_trap", "momentum_shift", "pass_streak"
-    evidence: dict[str, float]    # ledger numbers the claim may cite
+    team_id: str                  # team the moment is about (added in S2)
+    minute: int                   # match minute when the moment ended (added in S2)
+    evidence: dict[str, float]    # ledger numbers the claim may cite; includes window_minutes and minute so time references are citable
 
 # Commentator -> Fact-Checker -> Producer
 class Insight(BaseModel):
