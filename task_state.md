@@ -5,7 +5,7 @@
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
 ## Current task
-Phase S in progress on cloud branch `claude/gracious-goldberg-9u16ny`: D1, S1, S2, S3 done; S4 next; S5 stays local (Voice Live). Review with spec proposals in docs/reviews/2026-10-15-fable-review.md awaits Oguz's decisions.
+Phase S on cloud branch `claude/gracious-goldberg-9u16ny`: D1, S1, S2, S3, S4 done; S5 (Voice Live) stays local. Review with spec proposals in docs/reviews/2026-10-15-fable-review.md awaits Oguz's decisions. Merge the branch into `main` locally after review.
 
 ## Done
 - [x] Registered for the hackathon (2026-10-14), confirmation email received
@@ -22,9 +22,10 @@ Phase S in progress on cloud branch `claude/gracious-goldberg-9u16ny`: D1, S1, S
 
 - [x] 2026-10-15: D1 demo script (docs/demo-script.md); S1 thin simulator (Meridian League, Kestrel Bay vs Ironvale); S2 thin ledger + pass_streak detector (17-26 moments per match). 28 tests pass.
 - [x] 2026-10-15 (cloud session): review committed (docs/reviews/2026-10-15-fable-review.md): top findings are the Analyst 60 s window vs 10 s delay conflict, the judge path needing an offline mode plus public URL, and the evaluation scheduled last. S3 done: `app/agents/{models,fact_check_rules,commentator,fact_checker,fakes,prompts,workflow,run_match}.py`, `app/ledger/labels.py`, 52 tests; `tests/agents/test_live.py` (3 real moments) is `-m live`, not yet run. 80 tests pass.
+- [x] 2026-10-15 (cloud session): S4 done: `app/api/{clock,streams,main}.py`, `frontend/index.html`, `tests/api/test_api.py`; requirements.txt gains fastapi, uvicorn, sse-starlette, httpx; `python -m uvicorn app.api.main:app --port 8010` then `POST /api/match/start {"seed":7,"speed":1,"delay_s":10}`; streams verified with curl on the real server; the Vue page could not be rendered in the sandbox (CDN blocked), verify locally. 89 tests pass.
 
 ## Next step
-S4 (API + page with broadcast delay) in the cloud, then locally: `python -m pytest tests/agents -q -m live`, `python -m app.agents.run_match --seed 7 --live --jsonl runs/7.jsonl`, S5 (thin voice) by Oct 19; decide on the review proposals (sections 1, 2, 7) before T7. Then deepen T3 to T12b. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
+Locally: `python -m pytest tests/agents -q -m live`, `python -m app.agents.run_match --seed 7 --live --jsonl runs/7.jsonl`, open http://localhost:8010 and check the page at speed 1 and speed 20; S5 (thin voice) by Oct 19; decide on the review proposals (sections 1, 2, 7) before T7. Then deepen T3 to T12b. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
 
 ## Working in a cloud session (claude.ai/code)
 Cloud sessions are useful for reviews and Azure-free implementation. They have no Azure login, no `.env`, no `azd`, and run Linux.

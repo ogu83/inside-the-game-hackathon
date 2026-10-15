@@ -51,10 +51,11 @@ Thin vertical slices, each tested and committed. Goal: a seeded match plays in t
   - Files: app/agents/{models.py,prompts.py,fact_check_rules.py,commentator.py,fact_checker.py,workflow.py}, tests/agents/
   - Result: en/tr parser + gates in fact_check_rules.py (insight, producer, speech), `NumberCheck` per gate pass; `FactChecker` runs layer 1 then a `WordingJudge` (rewrites re-enter layer 1); Agent Framework workflow with dict messages re-validated per executor and one retry; offline agents in fakes.py (`TemplateCommentator`, `TemplateProducer`, `AlwaysVerifies`) for judges and recording fallback; `python -m app.agents.run_match --seed 7 [--jsonl f] [--live]` run log for T10b; pytest.ini deselects `live` by default. 52 new tests.
 
-- [ ] S4: Thin API + page with broadcast delay
+- [x] S4: Thin API + page with broadcast delay (done 2026-10-15 in a cloud session; Vue page not rendered there because the CDN is blocked, check it locally)
   - Acceptance: `POST /api/match/start`, `GET /api/stream/cues` (SSE), `GET /api/health`; playback clock runs `BROADCAST_DELAY_S` behind events; a cue not ready at its moment is dropped and counted; bare page shows an event ticker and cues; `speed` and `delay_s` are request parameters; speeds above 1x use precomputed verdicts (review section 1, pending spec approval)
   - Verify: `python -m pytest tests/api -q`; open http://localhost:8010 and watch a seeded match
   - Files: app/api/{main.py,streams.py,clock.py}, frontend/index.html, tests/api/test_api.py
+  - Result: `BroadcastClock` (delay in match seconds, speed-aware); `MatchRun` with precompute mode (default above 1x) and live mode (ingest loop runs `delay_s` ahead of the display loop, a cue not ready at its closing event is dropped and counted as `cues_dropped_late`); SSE channels `/api/stream/{cues,events,verdicts}` via sse-starlette; `AGENT_MODE=template|foundry`; `GET /api/match/state` metrics; Vue 3 CDN page with ticker, cues, delay badge and playback clock. 9 tests; 89 pass in about 5 s.
 
 - [ ] S5: Thin voice
   - Acceptance: browser plays Voice Live speech for each verified line in en, sent as `pre_generated_assistant_message` (verbatim, the realtime model never authors spoken words); speech gate: transcript of each spoken response compared with the approved text and number-checked, mismatches counted; no barge-in yet
