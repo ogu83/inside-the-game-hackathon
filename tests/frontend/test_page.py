@@ -79,6 +79,8 @@ def test_page_script_parses_and_pure_helpers_behave(tmp_path: Path) -> None:
     assert "type: 'talk_start', interrupting" in HTML and "type: 'ask', transcript, interrupting: cut" in HTML, "the cut-off line's id travels with the press"
     assert "const stillPlaying = () =>" in HTML and "audit_updated" in HTML
     assert "answered in {{ (q.answer.timing.answer_ms / 1000).toFixed(1) }} s" in HTML and "'qa_answer_p50_ms'" in HTML
+    assert "watch(pendingKey," in HTML and "if (profilePending.value) follow();" in HTML, "a dropdown change applies by itself"
+    assert "change pending: {{ pendingKey }}" in HTML
     assert left_edge["x"] >= 9 and left_edge["y"] == 34, "a long name near the left edge is pushed inside the pitch"
     assert bottom_right["x"] <= 97.7 and bottom_right["y"] == 63.6, "near the goal line and the bottom edge the label moves inside and above the ball"
     assert middle == {"x": 50, "y": 34}

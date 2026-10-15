@@ -39,6 +39,7 @@ section h2 .right { margin-left: auto; font-weight: 400; text-transform: none; l
 .profile { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
 .profile label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
 .profile button { grid-column: 1 / -1; }
+.profile .pending { grid-column: 1 / -1; color: var(--away); font-size: 12px; }
 .narrative { background: var(--panel2); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
 .narrative .meta { font-size: 11px; color: var(--muted); display: flex; gap: 8px; }
 .narrative .text { margin-top: 3px; font-size: 15px; line-height: 1.35; }

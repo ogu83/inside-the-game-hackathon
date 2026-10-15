@@ -73,7 +73,8 @@
         <label>language
           <select v-model="profile.language"><option value="en">English</option><option value="tr">Türkçe</option></select>
         </label>
-        <button @click="follow" :disabled="!running">{{ profileKey ? 'switch profile' : 'follow the match for me' }}</button>
+        <button @click="follow" :disabled="!running">{{ profileKey ? (profilePending ? 'apply profile change' : 'profile applied') : 'follow the match for me' }}</button>
+        <div class="pending" v-if="profilePending">change pending: {{ pendingKey }} (applying...)</div>
       </div>
       <div class="ask">
         <button class="talk" :class="{ held: talking }" :disabled="!running" @pointerdown.prevent="pressTalk" @pointerup.prevent="releaseTalk" @pointercancel="releaseTalk" @pointerleave="releaseTalk" @keydown.space.enter.prevent="pressTalk" @keyup.space.enter.prevent="releaseTalk" @contextmenu.prevent>{{ talking ? 'listening, release to ask' : 'hold to talk' }}</button>
@@ -208,6 +209,14 @@ createApp({
     const teamName = id => { const c = state.league.clubs.find(c => c.id === id); return c ? c.short : id; };
     const evidenceLine = e => Object.entries(e || {}).map(([k, v]) => `${k}=${v}`).join('  ');
     watch(() => state.profile.club_id, () => { state.profile.player_id = null; });
+    // A dropdown change applies by itself once the fan follows: the selects and the active profile can never disagree.
+    const pendingKey = computed(() => profileKeyOf(state.profile));
+    const profilePending = computed(() => !!state.profileKey && state.profileKey !== pendingKey.value);
+    let applyTimer = null;
+    watch(pendingKey, () => {
+      clearTimeout(applyTimer);
+      if (profilePending.value && state.running) applyTimer = setTimeout(() => { if (profilePending.value) follow(); }, 400);
+    });
 
     const closeSources = () => { state.sources.forEach(s => s.close()); state.sources = []; if (state.fanSource) { state.fanSource.close(); state.fanSource = null; } };
     // Voice: pcm16 mono 24 kHz chunks from /api/voice, scheduled back to back on one AudioContext. Speaks only approved text.
@@ -476,7 +485,7 @@ createApp({
       try { const s = await (await fetch('/api/match/state')).json(); if (s.metrics) state.metrics = s.metrics; } catch (e) { /* offline between polls */ }
     }, 2000);
     loadLeague();
-    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk };
+    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, pendingKey, profilePending, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk };
   },
 }).mount('#app');
 </script>
