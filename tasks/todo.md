@@ -1,7 +1,7 @@
 # Active Tasks: Matchday Companion (The Commentator's Brain)
 
 Order: T1 -> T2 -> D1 -> S1 -> S2 -> S3 -> S4 -> S5 (walking skeleton, by Oct 19) -> T3..T12b (deepen, by Oct 23; T10b starts as soon as T10 runs) -> T13 -> T14 -> T15 -> T16
-SPEC.md approved 2026-10-15; revised 2026-10-15 after the T2 review (see SPEC.md status line and tasks/plan.md scope table).
+SPEC.md approved 2026-10-15; revised 2026-10-15 after the T2 review and again after the review in docs/reviews/2026-10-15-fable-review.md (director per moment, 20 s delay, public URL as Must with offline fallback, scope cuts; see SPEC.md status lines and tasks/plan.md scope table).
 
 ## Pre-build blockers
 - [x] Azure subscription re-enabled 2026-10-15; $50/month budget alert set
@@ -66,8 +66,8 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
 
 ## Phase B: Deepen (Oct 19-23)
 
-- [ ] T3: Simulator v1 full
-  - Acceptance: 4 clubs; phase model with build-up, pressing, transition, set pieces; substitutions; goals with xG-like quality; deterministic per seed
+- [ ] T3: Simulator v1 (scope cut 2026-10-15: 2 clubs, no set pieces)
+  - Acceptance: the 2 existing clubs; phase model with build-up, pressing (per-club pressing trait so pressing_trap has something to find), transition; substitutions; goals with xG-like quality; deterministic per seed; fouls emit a restart pass; `half_seconds` naming and redundant phase line from the review fixed
   - Verify: `python -m pytest tests/simulator -q`; 5 minutes of text output reads plausibly
   - Files: app/simulator/*, tests/simulator/test_simulator.py
 
@@ -81,13 +81,13 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Verify: `python -m pytest tests/ledger -q`
   - Files: app/ledger/{state.py,metrics.py}, tests/ledger/test_metrics.py
 
-- [ ] T6: Detectors
-  - Acceptance: pressing_trap, momentum_shift, player_milestone added to pass_streak; seeded match yields 30-60 moments with evidence dicts
+- [ ] T6: Detectors (scope cut 2026-10-15: two detectors)
+  - Acceptance: pressing_trap added to pass_streak (no momentum_shift, no player_milestone; player numbers come from T5 ledger queries and the MCP tools); possession keys omitted when `window_minutes < 3`; seeded match yields 25-45 moments with evidence dicts, sorted by closing seq and non-overlapping; `Detector` Protocol shared by both
   - Verify: `python -m pytest tests/ledger -q`; count printed for seed 7
   - Files: app/ledger/moments.py, tests/ledger/test_moments.py
 
-- [ ] T7: Analyst as director + Commentator
-  - Acceptance: Analyst runs once per window over the moment batch, ranks, and returns which to say now and which to skip (stay quiet), never computing numbers; Commentator returns valid `Insight` citing only existing evidence keys
+- [ ] T7: Analyst as director (per moment) + Commentator
+  - Acceptance: the Analyst is called per candidate moment with pacing state computed by code (seconds since last spoken cue, cues in the last 2 minutes, rank among recent moments) and returns a `DirectorDecision` (say/skip, angle, reason), never computing numbers; skipped moments are logged for the verdict drawer; Commentator (S3) takes the angle and returns a valid `Insight` citing only existing evidence keys; pacing tests with scripted decisions
   - Verify: `python -m pytest tests/agents -q`; `-m live` on 5 fixture moments
   - Files: app/agents/{prompts.py,analyst.py,commentator.py}, tests/agents/test_analyst.py, tests/agents/test_commentator.py
 
@@ -101,8 +101,8 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Verify: `-m live` test over 2 profiles x 2 languages
   - Files: app/agents/producer.py, tests/agents/test_producer.py
 
-- [ ] T10: Workflow + tracing + recap + hosted
-  - Acceptance: one workflow module wires all four agents, runs in-process and as the Foundry Hosted Agent; spans per step in App Insights; full-time recap in en/tr; Checkpoint B criteria met
+- [ ] T10: Workflow + tracing + recap + hosted (hosted timeboxed to half a day, 2026-10-15)
+  - Acceptance: one workflow module wires all four agents and runs in-process with spans per step in App Insights; full-time recap in en/tr; Checkpoint B criteria met. Hosted Agent deployment is a Should with a half-day timebox: if it fights back, show the T2 hosted agent in the portal and move on
   - Verify: `python -m app.agents.run_match --seed 7 --speed 30` summary (cues, rejects, planted errors caught, ready-before-display %); hosted invoke works
   - Files: app/agents/{workflow.py,recap.py,run_match.py}, hosted/ (azd project), tests/agents/test_workflow.py
 
@@ -121,20 +121,20 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Verify: manual run in browser, golden path + profile switch
   - Files: frontend/index.html, frontend/style.css
 
-- [ ] T12b: Voice: barge-in + Q&A over MCP
-  - Acceptance: ledger read-only MCP server (team stats, player stats, recent moments); voice Q&A is text first: question transcript -> Q&A agent calling MCP tools -> speech gate (number check + Fact-Checker) -> verbatim speech via `pre_generated_assistant_message`; speech transcript audit shows 0 mismatches; Q&A latency logged against the ~3 s target; barge-in stops playback < 500 ms; unknowns get "I don't have data on that"; en and tr; MCP tool-call span visible in trace
+- [ ] T12b: Voice: barge-in + Q&A over MCP (text first, 2026-10-15: MCP server and text Q&A can be built in a cloud session with fake models; only the audio plumbing is local)
+  - Acceptance: ledger read-only MCP server (team stats, player stats, recent moments); `Question`/`Answer`/`SpeechAudit` models per SPEC; push-to-talk only (open mic is Cut); voice Q&A is text first: question transcript -> Q&A agent calling MCP tools -> speech gate (number check + Fact-Checker) -> verbatim speech via `pre_generated_assistant_message`; speech transcript audit shows 0 mismatches; Q&A latency logged against the ~3 s target; barge-in stops playback < 500 ms; unknowns get "I don't have data on that"; en and tr; MCP tool-call span visible in trace
   - Verify: manual browser test with mic: golden path, interruption, unanswerable question; `python -m pytest tests/voice -q` for the MCP tools
   - Files: app/ledger/mcp_server.py, app/voice/{session.py,qa.py}, app/api/voice_ws.py, frontend/index.html, tests/voice/
 
 ## Phase E: Ship (Oct 23-26)
 
-- [ ] T13: Deploy
-  - Must: `docker compose up --build` from a clean clone runs the full demo with only `.env` filled in
-  - Should: API + UI on one Azure Container App with a public HTTPS URL (needed for mic in remote browsers), invoking the hosted agent
+- [ ] T13: Deploy (both paths Must since 2026-10-15)
+  - Must: `docker compose up --build` from a clean clone runs the full demo in offline mode (`AGENT_MODE=template`, no Azure, no `.env`); with `.env` and an Azure login it runs live agents
+  - Must: API + UI on one Azure Container App with a public HTTPS URL (needed for mic in remote browsers), system-assigned managed identity with Foundry User on the project, `PUBLIC_LIVE_RUNS_PER_DAY` limit per visitor with offline fallback after the limit and on Foundry errors, scale-to-zero off and kept running until 2026-11-10; README judge section states the URL, the limit and the fallback
   - Files: Dockerfile, docker-compose.yml, docs/deploy.md
 
-- [ ] T14: README + architecture diagram + judge instructions (pitch line, eval headline, trace screenshot)
-- [ ] T15: Record the video from docs/demo-script.md on a local in-process run, hosted agent warmed up first; upload to YouTube (no trademarks, no copyrighted music)
+- [ ] T14: README + architecture diagram + judge instructions (pitch line, impact paragraph, eval headline, trace screenshot, "why an LLM Fact-Checker if code checks the numbers", pipeline stages table, pass-share possession note, generated-names note)
+- [ ] T15: Record the video from docs/demo-script.md on a local in-process run at 3x to 4x speed, hosted agent warmed up first; app audio and voiceover recorded separately and mixed; English captions on every Turkish line; upload to YouTube (no trademarks, no copyrighted music)
 
 - [ ] T16: Make repo public, submit on Innovation Studio by 2026-10-26
   - Pre-publish pass, in this order:

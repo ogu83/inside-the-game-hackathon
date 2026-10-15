@@ -5,7 +5,7 @@
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
 ## Current task
-Phase S on cloud branch `claude/gracious-goldberg-9u16ny`: D1, S1, S2, S3, S4 done; S5 (Voice Live) stays local. Review with spec proposals in docs/reviews/2026-10-15-fable-review.md awaits Oguz's decisions. Merge the branch into `main` locally after review.
+Phase S on cloud branch `claude/gracious-goldberg-9u16ny`: D1, S1, S2, S3, S4 done and verified locally by Oguz (live test and page with real Foundry cues); S5 (Voice Live) is next, locally. The four review decisions were approved and applied to SPEC.md, tasks/plan.md, tasks/todo.md and docs/demo-script.md on 2026-10-15. Merge the branch into `main` locally.
 
 ## Done
 - [x] Registered for the hackathon (2026-10-14), confirmation email received
@@ -23,9 +23,11 @@ Phase S on cloud branch `claude/gracious-goldberg-9u16ny`: D1, S1, S2, S3, S4 do
 - [x] 2026-10-15: D1 demo script (docs/demo-script.md); S1 thin simulator (Meridian League, Kestrel Bay vs Ironvale); S2 thin ledger + pass_streak detector (17-26 moments per match). 28 tests pass.
 - [x] 2026-10-15 (cloud session): review committed (docs/reviews/2026-10-15-fable-review.md): top findings are the Analyst 60 s window vs 10 s delay conflict, the judge path needing an offline mode plus public URL, and the evaluation scheduled last. S3 done: `app/agents/{models,fact_check_rules,commentator,fact_checker,fakes,prompts,workflow,run_match}.py`, `app/ledger/labels.py`, 52 tests; `tests/agents/test_live.py` (3 real moments) is `-m live`, not yet run. 80 tests pass.
 - [x] 2026-10-15 (cloud session): S4 done: `app/api/{clock,streams,main}.py`, `frontend/index.html`, `tests/api/test_api.py`; requirements.txt gains fastapi, uvicorn, sse-starlette, httpx; `python -m uvicorn app.api.main:app --port 8010` then `POST /api/match/start {"seed":7,"speed":1,"delay_s":10}`; streams verified with curl on the real server; the Vue page could not be rendered in the sandbox (CDN blocked), verify locally. 89 tests pass.
+- [x] 2026-10-15 (Oguz, local): S3/S4 verified on Windows: 89 tests, `-m live` passes against Foundry (21 s), `run_match --live` on 5 moments gave 4 verified, 1 rewritten, 0 rejected, 0 failed number checks; page renders in Chrome with a real Foundry cue in en and tr. All four review decisions approved.
+- [x] 2026-10-15 (cloud session): decisions applied: SPEC.md revision (director per moment with `DirectorDecision`, 20 s delay with live/precomputed modes, public Container App as Must with managed identity, `PUBLIC_LIVE_RUNS_PER_DAY` limit and offline fallback, docker compose offline mode, `Question`/`Answer`/`SpeechAudit`, `profile_key`, `top_player_*`, rounding and digits-only rules, Linux commands, criteria 1/3/6 revised and 11 added); plan.md scope table and phases; todo.md T3, T6, T7, T10, T12b, T13, T14, T15; demo script (3x to 4x recording, English captions, agent timeline in scene 2, immediate re-render in scene 3, impact sentence in scene 1, pre-recorded portal clips). Code: integral evidence shown as integers in prompts (fixes "14.0 passes"); pass_streak carries `top_player_id` and `top_player_passes`. 97 tests pass.
 
 ## Next step
-Locally: `python -m pytest tests/agents -q -m live`, `python -m app.agents.run_match --seed 7 --live --jsonl runs/7.jsonl`, open http://localhost:8010 and check the page at speed 1 and speed 20; S5 (thin voice) by Oct 19; decide on the review proposals (sections 1, 2, 7) before T7. Then deepen T3 to T12b. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
+Locally (T3 and later not started): `python -m pytest tests/agents -q -m live`, `python -m app.agents.run_match --seed 7 --live --jsonl runs/7.jsonl`, merge `claude/gracious-goldberg-9u16ny` into `main`; S5 (thin voice) by Oct 19; then Phase B in todo.md order (T3 with the cut scope, T10b can start from the S3 run log as soon as the live run log exists). Then deepen T3 to T12b. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
 
 ## Working in a cloud session (claude.ai/code)
 Cloud sessions are useful for reviews and Azure-free implementation. They have no Azure login, no `.env`, no `azd`, and run Linux.

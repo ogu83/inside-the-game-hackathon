@@ -111,7 +111,7 @@ Overall: the detector protocol (`on_event(event, history)`) is simple and testab
 - The Innovation Studio project id and the competition-scan framing are already on the T16 removal list; good.
 - Before going public, also remove the Gemini mention for the thumbnail from task_state.md or confirm the image licence allows commercial use (Microsoft takes a commercial licence to the submission).
 
-## Decisions requested from Oguz (all [Proposal])
+## Decisions requested from Oguz (all [Proposal]; all four approved 2026-10-15 and applied to SPEC.md, tasks/plan.md, tasks/todo.md and docs/demo-script.md the same day)
 
 1. Director per moment with pacing state, delay default 20 s, precomputed mode above 1x (section 1).
 2. Public Container App URL becomes Must; criterion 6 becomes "offline mode without Azure, live mode with `.env`" (section 2).
