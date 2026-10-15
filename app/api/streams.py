@@ -93,7 +93,7 @@ class Processed:
 class MatchRun:
     seed: int = 7
     speed: float = 1.0
-    delay_s: float = 10.0
+    delay_s: float = 20.0
     minutes: int = 90
     home: str = "kby"
     away: str = "iva"

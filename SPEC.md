@@ -243,7 +243,7 @@ python -m app.simulator.run --seed 7 --speed 20
 python -m app.agents.run_match --seed 7 --jsonl runs/7.jsonl [--live]
 
 # full app, local (AGENT_MODE=template without Azure, AGENT_MODE=foundry with .env)
-python -m uvicorn app.api.main:app --port 8010 --reload
+python -m uvicorn app.api.main:app --port 8010 --reload --env-file .env   # .env turns on Voice Live (and AGENT_MODE=foundry for live agents)
 # then open http://localhost:8010 and start a match (speed 1 = live mode, above 1 = precomputed)
 
 # container

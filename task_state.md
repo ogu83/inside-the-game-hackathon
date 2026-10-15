@@ -5,7 +5,7 @@
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
 ## Current task
-Phase S on cloud branch `claude/gracious-goldberg-9u16ny`: D1, S1, S2, S3, S4 done and verified locally by Oguz (live test and page with real Foundry cues); S5 (Voice Live) is next, locally. The four review decisions were approved and applied to SPEC.md, tasks/plan.md, tasks/todo.md and docs/demo-script.md on 2026-10-15. Merge the branch into `main` locally.
+Phase S complete on `main` (2026-10-15): D1, S1-S5. Fable branch merged; S5 voice done locally. Next: Phase B from T3 (Azure-free tasks can go to a cloud session; T7+ live checks, T10 deploy, T10b eval and T12b voice stay local).
 
 ## Done
 - [x] Registered for the hackathon (2026-10-14), confirmation email received

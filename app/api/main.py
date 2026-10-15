@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from app.api.streams import MatchRun, workflow_factory_from_env
+from app.api.voice_ws import router as voice_router
+from app.voice.session import speaker_factory_from_env
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
 
@@ -29,21 +31,24 @@ class StartRequest(BaseModel):
 async def lifespan(app: FastAPI):
     app.state.run = None
     app.state.workflow_factory = getattr(app.state, "workflow_factory", None) or workflow_factory_from_env()
+    if not hasattr(app.state, "speaker_factory"):
+        app.state.speaker_factory = speaker_factory_from_env()
     yield
     if app.state.run is not None:
         await app.state.run.stop()
 
 
 app = FastAPI(title="Matchday Companion", lifespan=lifespan)
+app.include_router(voice_router)
 
 
 def default_delay() -> float:
-    return float(os.environ.get("BROADCAST_DELAY_S", "10"))
+    return float(os.environ.get("BROADCAST_DELAY_S", "20"))
 
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"status": "ok", "agent_mode": os.environ.get("AGENT_MODE", "template"), "running": app.state.run is not None and not app.state.run.finished.is_set()}
+    return {"status": "ok", "agent_mode": os.environ.get("AGENT_MODE", "template"), "voice": app.state.speaker_factory is not None, "running": app.state.run is not None and not app.state.run.finished.is_set()}
 
 
 @app.post("/api/match/start")

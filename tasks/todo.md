@@ -57,7 +57,7 @@ Thin vertical slices, each tested and committed. Goal: a seeded match plays in t
   - Files: app/api/{main.py,streams.py,clock.py}, frontend/index.html, tests/api/test_api.py
   - Result: `BroadcastClock` (delay in match seconds, speed-aware); `MatchRun` with precompute mode (default above 1x) and live mode (ingest loop runs `delay_s` ahead of the display loop, a cue not ready at its closing event is dropped and counted as `cues_dropped_late`); SSE channels `/api/stream/{cues,events,verdicts}` via sse-starlette; `AGENT_MODE=template|foundry`; `GET /api/match/state` metrics; Vue 3 CDN page with ticker, cues, delay badge and playback clock. 9 tests; 89 pass in about 5 s.
 
-- [ ] S5: Thin voice
+- [x] S5: Thin voice (done 2026-10-15: real Voice Live round trip in en and tr through the app, speech audit exact; browser shows speaking line and audit 1/1)
   - Acceptance: browser plays Voice Live speech for each verified line in en, sent as `pre_generated_assistant_message` (verbatim, the realtime model never authors spoken words); speech gate: transcript of each spoken response compared with the approved text and number-checked, mismatches counted; no barge-in yet
   - Verify: manual: start a match, hear verified lines
   - Files: app/voice/session.py, app/api/voice_ws.py, frontend/index.html
