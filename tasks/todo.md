@@ -51,7 +51,7 @@ Thin vertical slices, each tested and committed. Goal: a seeded match plays in t
   - Files: app/agents/{models.py,prompts.py,fact_check_rules.py,commentator.py,fact_checker.py,workflow.py}, tests/agents/
 
 - [ ] S4: Thin API + page with broadcast delay
-  - Acceptance: `POST /api/match/start`, `GET /api/stream/cues` (SSE), `GET /api/health`; playback clock runs `BROADCAST_DELAY_S` behind events; a cue not ready at its moment is dropped and counted; bare page shows an event ticker and cues
+  - Acceptance: `POST /api/match/start`, `GET /api/stream/cues` (SSE), `GET /api/health`; playback clock runs `BROADCAST_DELAY_S` behind events; a cue not ready at its moment is dropped and counted; bare page shows an event ticker and cues; `speed` and `delay_s` are request parameters; speeds above 1x use precomputed verdicts (review section 1, pending spec approval)
   - Verify: `python -m pytest tests/api -q`; open http://localhost:8010 and watch a seeded match
   - Files: app/api/{main.py,streams.py,clock.py}, frontend/index.html, tests/api/test_api.py
 
@@ -104,7 +104,7 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Verify: `python -m app.agents.run_match --seed 7 --speed 30` summary (cues, rejects, planted errors caught, ready-before-display %); hosted invoke works
   - Files: app/agents/{workflow.py,recap.py,run_match.py}, hosted/ (azd project), tests/agents/test_workflow.py
 
-- [ ] T10b: Foundry evaluation (start as soon as T10 runs)
+- [ ] T10b: Foundry evaluation (start as soon as T10 runs; can start earlier from the S3 run log `python -m app.agents.run_match --jsonl`, see docs/reviews/2026-10-15-fable-review.md section 3)
   - Acceptance: 3 recorded seeded matches exported as an evaluation dataset; Foundry cloud evaluation (Groundedness, Task Adherence) with Fact-Checker on vs off; planted-error count; results table in docs/eval-results.md with one headline sentence for README and video
   - Verify: evaluation job submitted and polled to completion; scores visible in the Foundry portal
   - Files: app/eval/export_runs.py, app/eval/run_eval.py, docs/eval-results.md
