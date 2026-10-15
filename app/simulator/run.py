@@ -19,7 +19,8 @@ def describe(event: MatchEvent) -> str:
     match event.type:
         case "pass":
             verdict = "" if event.outcome == "success" else "  (misplaced)"
-            return f"{clock} {club:<12} {who} plays it {event.meta.get('pass_length_m')} m{verdict}"
+            how = "takes the free kick, " if event.meta.get("restart") else "plays it "
+            return f"{clock} {club:<12} {who} {how}{event.meta.get('pass_length_m')} m{verdict}"
         case "shot":
             return f"{clock} {club:<12} SHOT {who}, {event.meta.get('distance_m')} m out, xG {event.meta.get('xg')}"
         case "goal":
@@ -34,6 +35,8 @@ def describe(event: MatchEvent) -> str:
             return f"{clock} {club:<12} ball won ({event.meta.get('phase')})"
         case "foul":
             return f"{clock} {club:<12} foul by {who}"
+        case "substitution":
+            return f"{clock} {club:<12} SUB {who} on for {PLAYERS[str(event.meta['player_off'])].name}"
         case "kickoff":
             return f"{clock} {club:<12} kick-off"
         case "half_time" | "full_time":

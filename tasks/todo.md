@@ -66,10 +66,11 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
 
 ## Phase B: Deepen (Oct 19-23)
 
-- [ ] T3: Simulator v1 (scope cut 2026-10-15: 2 clubs, no set pieces)
+- [x] T3: Simulator v1 (scope cut 2026-10-15: 2 clubs, no set pieces; done 2026-10-15 in a cloud session)
   - Acceptance: the 2 existing clubs; phase model with build-up, pressing (per-club pressing trait so pressing_trap has something to find), transition; substitutions; goals with xG-like quality; deterministic per seed; fouls emit a restart pass; `half_seconds` naming and redundant phase line from the review fixed
   - Verify: `python -m pytest tests/simulator -q`; 5 minutes of text output reads plausibly
   - Files: app/simulator/*, tests/simulator/test_simulator.py
+  - Result: `Club.pressing` trait (Ironvale 1.3, Kestrel Bay 0.85) multiplies the press chance; 2 like-for-like substitutions per club between minutes 58 and 82 (`substitution` events with player_on/player_off); fouls set a `free_kick` restart taken by the fouled team; `half_seconds` naming, redundant phase line, `zip(strict=True)`, clamped end coordinates; `DEMO_SEED = 30` (3 moments in the first 5 minutes, one ending in a shot); run.py prints subs and free kicks. 8 new tests, 113 pass.
 
 - [ ] T4: Dataset export
   - Acceptance: `--export data/match_<seed>.jsonl`; 3 sample matches committed; README section describing the schema

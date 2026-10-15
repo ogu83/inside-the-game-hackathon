@@ -28,6 +28,7 @@ class Club:
     name: str
     short: str
     players: tuple[Player, ...]
+    pressing: float = 1.0  # multiplier on how often this club presses the ball carrier (style trait)
 
     @property
     def starters(self) -> tuple[Player, ...]:
@@ -38,13 +39,14 @@ class Club:
         return self.players[11:]
 
 
-def _club(club_id: str, name: str, short: str, names: list[str], sub_positions: list[Position]) -> Club:
+def _club(club_id: str, name: str, short: str, names: list[str], sub_positions: list[Position], pressing: float) -> Club:
     positions = list(FORMATION) + sub_positions
     numbers = [1, 2, 4, 5, 3, 6, 8, 10, 7, 9, 11, 12, 14, 17]
     players = tuple(
-        Player(f"{club_id}-{numbers[i]:02d}", names[i], numbers[i], positions[i]) for i in range(len(names))
+        Player(f"{club_id}-{number:02d}", name, number, position)
+        for name, number, position in zip(names, numbers, positions, strict=True)
     )
-    return Club(club_id, name, short, players)
+    return Club(club_id, name, short, players, pressing)
 
 
 LEAGUE_NAME = "Meridian League"
@@ -58,6 +60,7 @@ CLUBS: dict[str, Club] = {
              "Bram Teller", "Jonah Fenwick", "Luca Brightwater", "Sami Kerrow", "Dax Penhallow",
              "Finn Ashby", "Theo Varga", "Nico Larkspur"],
             ["GK", "CM", "ST"],
+            pressing=0.85,  # patient possession side
         ),
         _club(
             "iva", "Ironvale Athletic", "Ironvale",
@@ -65,6 +68,7 @@ CLUBS: dict[str, Club] = {
              "Otto Brennick", "Silas Vane", "Jory Calloway", "Malik Orrin", "Zeno Hartigan",
              "Pim Rookwood", "Abel Thorne", "Cass Delmar"],
             ["GK", "CB", "RW"],
+            pressing=1.3,  # high-pressing side
         ),
     )
 }

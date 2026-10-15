@@ -20,7 +20,7 @@ Total: about 1:58. Trim scene 2 first if long.
 
 ## Recording checklist
 
-- [ ] Seed chosen where a pass streak and a planted error land in the first 5 match minutes; recording speed 3x to 4x (`speed` on match start), delay 20 s
+- [x] Seed chosen: **seed 30** (`DEMO_SEED` in app/simulator/engine.py) gives a 22-pass Ironvale move ending in a shot in minute 1, then Ironvale at minute 3 and Kestrel Bay at minute 4; plant the false claim on one of these (T8); recording speed 3x to 4x (`speed` on match start), delay 20 s
 - [ ] Hosted agent invoked once before recording (cold start is about 29 s); offline mode is the fallback if Foundry errors during the take
 - [ ] Browser zoom so text is readable at 1080p; mic tested; system notifications off
 - [ ] Eval numbers filled in from docs/eval-results.md (scene 6); portal clips pre-recorded

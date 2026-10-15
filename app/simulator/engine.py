@@ -2,6 +2,7 @@
 
 Same seed and clubs -> identical event list. Coordinates follow MatchEvent: each event is in
 the acting team's frame, so a turnover at x maps to 100 - x for the team that wins the ball.
+v1 (T3): per-club pressing trait, substitutions, free-kick restarts after fouls.
 """
 
 import math
@@ -13,6 +14,9 @@ from app.simulator.models import EventType, MatchEvent
 
 PITCH_LENGTH_M = 105.0
 PITCH_WIDTH_M = 68.0
+SUBS_PER_TEAM = 2  # the bench has 3, one of them the reserve keeper, who only plays if the starter is sent off (not simulated)
+SUB_WINDOW_MIN = (58, 82)
+DEMO_SEED = 30  # 3 pass_streak moments inside the first 5 minutes, both clubs, one ending in a shot (docs/demo-script.md)
 
 
 def clamp(value: float, low: float, high: float) -> float:
@@ -36,6 +40,10 @@ class _State:
     y: float = 50.0
     phase: str = "build_up"
     score: dict[str, int] = field(default_factory=dict)
+    lineup: dict[str, list[Player]] = field(default_factory=dict)
+    bench: dict[str, list[Player]] = field(default_factory=dict)
+    subs_due: dict[str, list[float]] = field(default_factory=dict)  # match seconds at which each club makes a change
+    restart: str | None = None  # "free_kick" marks the next pass as a restart
 
     def other(self, team_id: str) -> str:
         return next(cid for cid in self.clubs if cid != team_id)
@@ -64,8 +72,8 @@ class _State:
                 player_id=player.id if player else None,
                 x=round(clamp(x, 0, 100), 1),
                 y=round(clamp(y, 0, 100), 1),
-                end_x=round(end[0], 1) if end else None,
-                end_y=round(end[1], 1) if end else None,
+                end_x=round(clamp(end[0], 0, 100), 1) if end else None,
+                end_y=round(clamp(end[1], 0, 100), 1) if end else None,
                 outcome=outcome,
                 meta=meta,
             )
@@ -73,12 +81,16 @@ class _State:
 
 
 def _pick_player(state: _State, team_id: str, target_x: float, exclude: Player | None = None) -> Player:
-    candidates = [p for p in state.clubs[team_id].starters if p != exclude]
+    candidates = [p for p in state.lineup[team_id] if p != exclude]
     weights = [
         (0.0 if p.position == "GK" and target_x > 15 else 1.0) * math.exp(-abs(NOMINAL_X[p.position] - target_x) / 15)
         for p in candidates
     ]
     return state.rng.choices(candidates, weights=weights)[0]
+
+
+def _keeper(state: _State, team_id: str) -> Player:
+    return next(p for p in state.lineup[team_id] if p.position == "GK")
 
 
 def _change_possession(state: _State, new_team: str, x: float, y: float, player: Player | None = None) -> None:
@@ -92,7 +104,7 @@ def _change_possession(state: _State, new_team: str, x: float, y: float, player:
 def _kickoff(state: _State, team_id: str) -> None:
     state.team = team_id
     state.x, state.y = 50.0, 50.0
-    state.holder = next(p for p in state.clubs[team_id].starters if p.position == "ST")
+    state.holder = next(p for p in state.lineup[team_id] if p.position == "ST")
     state.phase = "build_up"
     state.emit("kickoff", team_id, state.holder, 50, 50)
 
@@ -116,18 +128,38 @@ def _shot(state: _State) -> None:
         _kickoff(state, state.other(state.team))
     else:
         state.t += rng.uniform(6, 15)
-        keeper = state.clubs[state.other(state.team)].starters[0]
-        _change_possession(state, state.other(state.team), 6.0, 50.0, keeper)
-        state.phase = "build_up"
+        _change_possession(state, state.other(state.team), 6.0, 50.0, _keeper(state, state.other(state.team)))
+
+
+def _substitutions(state: _State) -> None:
+    """Like-for-like changes when a club's scheduled time has passed; the holder is never taken off mid-move."""
+    for team_id, due in state.subs_due.items():
+        while due and state.t >= due[0] and state.bench[team_id]:
+            due.pop(0)
+            incoming = next((p for p in state.bench[team_id] if p.position != "GK"), None)
+            if incoming is None:
+                return
+            same_position = [p for p in state.lineup[team_id] if p.position == incoming.position and p != state.holder]
+            outfield = [p for p in state.lineup[team_id] if p.position != "GK" and p != state.holder]
+            outgoing = state.rng.choice(same_position or outfield)
+            state.bench[team_id].remove(incoming)
+            state.lineup[team_id] = [incoming if p == outgoing else p for p in state.lineup[team_id]]
+            state.emit("substitution", team_id, incoming, 50, 0, player_off=outgoing.id, player_on=incoming.id, position=incoming.position)
 
 
 def _step(state: _State) -> None:
     rng = state.rng
     transition = state.phase == "transition"
     state.t += rng.uniform(2.0, 4.0) if transition else rng.uniform(2.5, 6.0)
+    _substitutions(state)
     opponent = state.other(state.team)
+    restart = state.restart
+    state.restart = None
 
-    pressured = rng.random() < (0.25 if state.x > 60 else 0.12) + (0.08 if transition else 0)
+    pressured = False
+    if restart is None:
+        press_chance = ((0.25 if state.x > 60 else 0.12) + (0.08 if transition else 0)) * state.clubs[opponent].pressing
+        pressured = rng.random() < press_chance
     if pressured:
         presser = _pick_player(state, opponent, 100 - state.x)
         state.emit("pressure", opponent, presser, 100 - state.x, 100 - state.y)
@@ -136,13 +168,16 @@ def _step(state: _State) -> None:
             _change_possession(state, opponent, 100 - state.x, 100 - state.y, presser)
             return
 
-    if rng.random() < 0.015:
+    if restart is None and rng.random() < 0.015:
         fouler = _pick_player(state, opponent, 100 - state.x)
         state.emit("foul", opponent, fouler, 100 - state.x, 100 - state.y)
         state.t += rng.uniform(8, 20)
+        state.restart = "free_kick"
+        state.holder = _pick_player(state, state.team, state.x)
+        return
 
     shot_chance = 0.0 if state.x < 72 else 0.035 + (state.x - 72) * 0.006 + (0.04 if transition else 0)
-    if rng.random() < shot_chance:
+    if restart is None and rng.random() < shot_chance:
         _shot(state)
         return
 
@@ -157,11 +192,15 @@ def _step(state: _State) -> None:
             break
     p_success = (0.80 if transition else 0.91) - 0.004 * max(0.0, length - 15) - (0.10 if pressured else 0)
     p_success -= 0.14 if end_x > 70 else 0
+    if restart:
+        p_success = 0.93
     success = rng.random() < p_success
+    meta: dict[str, float | str] = {"pass_length_m": round(length, 1), "phase": state.phase, "pressured": "yes" if pressured else "no"}
+    if restart:
+        meta["restart"] = restart
     state.emit(
         "pass", state.team, state.holder, state.x, state.y,
-        end=(end_x, end_y), outcome="success" if success else "fail",
-        pass_length_m=round(length, 1), phase=state.phase, pressured="yes" if pressured else "no",
+        end=(end_x, end_y), outcome="success" if success else "fail", **meta,
     )
     if success:
         state.holder, state.x, state.y = receiver, end_x, end_y
@@ -175,17 +214,27 @@ def _step(state: _State) -> None:
 
 def simulate(seed: int, home_id: str = "kby", away_id: str = "iva", minutes: int = 90) -> list[MatchEvent]:
     """Simulate a full match. `minutes` must be even (two equal halves)."""
+    rng = random.Random(seed)
+    clubs = {home_id: CLUBS[home_id], away_id: CLUBS[away_id]}
+    scale = minutes / 90
     state = _State(
-        rng=random.Random(seed),
+        rng=rng,
         match_id=f"{home_id}-{away_id}-{seed}",
-        clubs={home_id: CLUBS[home_id], away_id: CLUBS[away_id]},
+        clubs=clubs,
         score={home_id: 0, away_id: 0},
+        lineup={cid: list(c.starters) for cid, c in clubs.items()},
+        bench={cid: list(c.subs) for cid, c in clubs.items()},
+        subs_due={
+            cid: sorted(rng.uniform(SUB_WINDOW_MIN[0] * 60 * scale, SUB_WINDOW_MIN[1] * 60 * scale) for _ in range(SUBS_PER_TEAM))
+            for cid in clubs
+        },
     )
-    half = minutes * 30
+    half_seconds = minutes * 60 // 2
     for half_index, kicker in enumerate((home_id, away_id)):
-        state.t = half_index * half
+        state.t = half_index * half_seconds
+        state.restart = None
         _kickoff(state, kicker)
-        end = (half_index + 1) * half
+        end = (half_index + 1) * half_seconds
         while state.t < end - 5:
             _step(state)
         state.t = max(state.t, end)
