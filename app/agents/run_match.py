@@ -4,6 +4,7 @@
     python -m app.agents.run_match --seed 7 --jsonl runs/7.jsonl # also write one row per moment (eval export)
     python -m app.agents.run_match --seed 7 --live               # Foundry agents from .env (costs tokens)
     python -m app.agents.run_match --seed 30 --plant 6           # planted-error report (6 insights + 6 renderings)
+    python -m app.agents.run_match --seed 30 --plant 4 --limit 12 --live   # the live check, about 2 minutes
 """
 
 import argparse
@@ -36,10 +37,11 @@ def offline_workflow(writer=None):
 PLANT_PROFILES = [FanProfile(language="en", depth="casual"), FanProfile(language="tr", depth="analyst")]
 
 
-async def run_planted(seed: int, n: int, live: bool = False, plan_seed: int = 0) -> tuple[list[MomentResult], PlantedReport]:
-    """Plant n insight errors and n rendering errors (en and tr) on a seeded match and report what the gates caught."""
+async def run_planted(seed: int, n: int, live: bool = False, plan_seed: int = 0, limit: int | None = None) -> tuple[list[MomentResult], PlantedReport]:
+    """Plant n insight errors and n rendering errors (en and tr) on a seeded match (or its first `limit` moments)
+    and report what the gates caught."""
     events = simulate(seed)
-    moments = detect_all(events)
+    moments = detect_all(events)[:limit]
     plan = PlantPlan.build([m.moment_id for m in moments], n, n, plan_seed)
     if live:
         workflow = live_workflow()
@@ -181,7 +183,7 @@ def main() -> None:
     parser.add_argument("--plant", type=int, default=0, help="plant N insight and N rendering errors and report the catches")
     args = parser.parse_args()
     if args.plant:
-        results, report = asyncio.run(run_planted(args.seed, args.plant, args.live))
+        results, report = asyncio.run(run_planted(args.seed, args.plant, args.live, limit=args.limit))
         print(json.dumps(summary(results)))
         print(json.dumps(report.as_dict()))
         print(report.headline())

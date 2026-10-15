@@ -46,13 +46,24 @@ async def test_live_director_decides_with_pacing_state() -> None:
 
 
 async def test_live_wording_judge_catches_a_swapped_team_and_planted_run_reaches_zero() -> None:
+    """First 12 moments of the demo seed, 4 insight plants and 4 rendering plants: about 2 minutes of model calls."""
+    import json
+
     from app.agents.run_match import run_planted
 
-    results, report = await run_planted(30, 4, live=True)
+    results, report = await run_planted(30, 4, live=True, limit=12)
     swapped = report.insights["swapped_team"]
-    assert swapped.planted >= 1
-    assert report.reached_air == 0, report.reached_air_detail
-    assert report.caught == report.planted
+    missed_by_layer_2 = [line for line in report.reached_air_detail if "(swapped_team)" in line]
+    detail = "\n".join([
+        report.headline(),
+        json.dumps(report.as_dict(), indent=1),
+        "reached air:", *report.reached_air_detail,
+        "swapped teams layer 2 missed:", *(missed_by_layer_2 or ["none"]),
+        "verdicts:", *(f"  {r.moment_id}: {r.verdict.status if r.verdict else 'skipped'} L{r.verdict.layer if r.verdict else '-'} attempt {r.verdict.attempt if r.verdict else '-'}" for r in results),
+    ])
+    assert swapped.planted >= 1, detail
+    assert report.reached_air == 0, detail
+    assert report.caught == report.planted, detail
 
 
 async def test_live_producer_renders_two_profiles_in_two_languages() -> None:

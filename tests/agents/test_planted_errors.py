@@ -94,3 +94,9 @@ async def test_offline_harness_catches_every_number_error_by_code() -> None:
     assert report.reached_air == swapped.reached_air, "offline mode has no wording judge; the live harness must bring this to 0"
     assert sum(len(r.attempts) - 1 for r in results) >= report.insights["wrong_number"].planted
     assert "caught" in report.headline()
+
+
+async def test_offline_harness_can_be_limited_to_the_first_moments() -> None:
+    results, report = await run_planted(30, 4, live=False, limit=12)
+    assert len(results) == 12 and report.planted >= 8
+    assert report.insights["swapped_team"].planted >= 1
