@@ -35,7 +35,7 @@ Thin vertical slices, each tested and committed. Goal: a seeded match plays in t
   - Verify: read aloud with a stopwatch
   - Files: docs/demo-script.md, tasks/plan.md (scope table if the script changes it)
 
-- [ ] S1: Thin simulator
+- [x] S1: Thin simulator (done 2026-10-15: 17-31 shots, xG 1.4-2.9, ~84% pass completion across seeds)
   - Acceptance: 2 fictional clubs (11 + 3 subs each, fictional names), build-up and transition phases, seeded emitter; same seed -> identical events; every event validates as `MatchEvent`; text printer
   - Verify: `python -m pytest tests/simulator -q`; `python -m app.simulator.run --seed 7 --speed 20` reads like football for 5 minutes
   - Files: app/simulator/{models.py,league.py,engine.py,run.py}, tests/simulator/test_simulator.py
