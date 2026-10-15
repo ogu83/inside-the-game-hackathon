@@ -85,15 +85,18 @@ async def test_precomputed_match_streams_every_cue_on_the_delayed_clock(client: 
 
     received = await read_sse(client, "/api/stream/cues")
     cues = [d for e, d in received if e == "cue"]
+    skipped = [d for e, d in received if e == "skipped"]
     metrics = received[-1][1]["metrics"]
-    assert [c["cue"]["moment_id"] for c in cues] == [m.moment_id for m in expected]
+    said = [m.moment_id for m in expected if m.moment_id in {c["cue"]["moment_id"] for c in cues}]
+    assert [c["cue"]["moment_id"] for c in cues] == said and len(cues) + len(skipped) == len(expected)
     assert all(c["verdict"]["status"] == "verified" for c in cues)
     assert all(len(c["narratives"]) == 2 for c in cues)
-    assert metrics["cues_shown"] == len(expected) and metrics.get("cues_dropped_late", 0) == 0
+    assert metrics["cues_shown"] == len(cues) and metrics.get("cues_dropped_late", 0) == 0
+    assert metrics.get("moments_skipped", 0) == len(skipped)
     assert metrics["number_checks_failed"] == 0
 
     state = (await client.get("/api/match/state")).json()
-    assert state["running"] is False and state["metrics"]["cues_shown"] == len(expected)
+    assert state["running"] is False and state["metrics"]["cues_shown"] == len(cues)
 
 
 async def test_event_ticker_is_ordered_and_ends(client: httpx.AsyncClient) -> None:
@@ -121,7 +124,7 @@ async def test_live_mode_shows_cues_that_are_ready_before_display() -> None:
     await run.start()
     await asyncio.wait_for(run.finished.wait(), timeout=30)
     expected = len(detect_all(simulate(7, minutes=20)))
-    assert run.metrics["cues_shown"] == expected and run.metrics.get("cues_dropped_late", 0) == 0
+    assert run.metrics["cues_shown"] + run.metrics.get("moments_skipped", 0) == expected and run.metrics.get("cues_dropped_late", 0) == 0
     for done in run.processed.values():
         assert done.ready_wall <= run.clock.display_wall(run.events[done.moment.window[1] - 1].t)
 

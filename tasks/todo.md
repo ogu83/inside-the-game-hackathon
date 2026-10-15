@@ -90,10 +90,11 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Files: app/ledger/moments.py, tests/ledger/test_moments.py
   - Result: `PressingTrapDetector` (2 high pressures inside 30 s then a regain above x = 55 in the presser's frame; evidence pressures, window, players, regain distance to goal, team pressures and regains last 10 min; `top_player_id` is the regainer), `Detector` Protocol, possession share omitted under 3 minutes, seeded matches yield 26-46 sorted non-overlapping moments; offline templates and tr narrative for traps. 126 tests.
 
-- [ ] T7: Analyst as director (per moment) + Commentator
+- [x] T7: Analyst as director (per moment) + Commentator (done 2026-10-15 in a cloud session; live director check pending)
   - Acceptance: the Analyst is called per candidate moment with pacing state computed by code (seconds since last spoken cue, cues in the last 2 minutes, rank among recent moments) and returns a `DirectorDecision` (say/skip, angle, reason), never computing numbers; skipped moments are logged for the verdict drawer; Commentator (S3) takes the angle and returns a valid `Insight` citing only existing evidence keys; pacing tests with scripted decisions
   - Verify: `python -m pytest tests/agents -q`; `-m live` on 5 fixture moments
   - Files: app/agents/{prompts.py,analyst.py,commentator.py}, tests/agents/test_analyst.py, tests/agents/test_commentator.py
+  - Result: `DirectorDecision` and `PacingState` models; `app/agents/analyst.py` with code-owned `interest`, `angle_for`, `PacingTracker` (seconds since last cue, cues and moments in the last 2 min, rank), `RuleDirector` (offline: 3 cues per 2 min ceiling, 30 s quiet period unless exceptional) and `FoundryDirector`; the director is the workflow's start executor and a skip ends the run without a Commentator call; the angle reaches the Commentator prompt (template varies the player angle); run_match and the API count `moments_skipped` and publish `skipped` events. 8 new tests, 1 live.
 
 - [ ] T8: Fact-Checker full + planted errors
   - Acceptance: verified/rewritten/rejected with `layer` and `attempt` set; planted-error harness corrupts N insights per match (wrong number, missing key, swapped team) and N Producer renderings incl. Turkish translations (changed number, dropped number, number as a word); run report shows planted errors caught per gate and 0 reaching a cue, a narrative or the voice

@@ -70,10 +70,30 @@ class WordingVerdict(BaseModel):
     why_it_matters: str | None = None
 
 
-class MomentResult(BaseModel):
-    """What one workflow run returns for one moment."""
+class DirectorDecision(BaseModel):
+    """The Analyst's call on one candidate moment: say it now, or stay quiet."""
 
     moment_id: str
-    verdict: Verdict
-    attempts: list[Insight]
-    checks: list[NumberCheck]
+    say: bool
+    angle: str | None = None      # "control", "chance", "player", "pressure"
+    reason: str
+
+
+class PacingState(BaseModel):
+    """Computed by code and handed to the director; the model never derives these numbers itself."""
+
+    seconds_since_last_cue: float | None = None
+    cues_last_2min: int = 0
+    moments_last_2min: int = 0
+    rank_among_recent: int = 1    # 1 = most interesting moment of the last 2 minutes
+    interest: float = 0.0
+
+
+class MomentResult(BaseModel):
+    """What one workflow run returns for one moment. `verdict` is None when the director skipped it."""
+
+    moment_id: str
+    decision: DirectorDecision
+    verdict: Verdict | None = None
+    attempts: list[Insight] = Field(default_factory=list)
+    checks: list[NumberCheck] = Field(default_factory=list)

@@ -31,6 +31,9 @@ class TemplateCommentator:
             passes, players, duration = (_n(e[k]) for k in streak_keys)
             claim = f"{team} have strung together {passes} passes through {players} players in {duration} seconds."
             refs = ["pass_streak_passes", "pass_streak_players", "pass_streak_duration_s"]
+            if labels.get("angle") == "player" and labels.get("top_player") and "top_player_passes" in e:
+                claim = f"{team} have strung together {passes} passes in {duration} seconds, {_n(e['top_player_passes'])} of them from {labels['top_player']}."
+                refs = ["pass_streak_passes", "pass_streak_duration_s", "top_player_passes"]
             if e.get("pass_streak_ended_in_shot"):
                 why = "Patient possession turned into a shot, which is exactly what this build-up is for."
             elif e.get("window_minutes", 0) >= 3 and "team_possession_pct_window" in e:

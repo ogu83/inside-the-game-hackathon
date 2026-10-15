@@ -18,9 +18,11 @@ from typing import Any
 
 from agent_framework import Workflow
 
+from app.agents.analyst import PacingTracker, RuleDirector
 from app.agents.fact_checker import FactChecker
 from app.agents.fakes import AlwaysVerifies, TemplateCommentator, TemplateProducer
 from app.agents.models import FanNarrative, FanProfile, MomentResult, OverlayCue
+from app.agents.run_match import close_t
 from app.agents.workflow import build_workflow, run_moment
 from app.api.clock import BroadcastClock
 from app.ledger.labels import moment_labels
@@ -37,7 +39,7 @@ WorkflowFactory = Callable[[], Workflow]
 
 
 def template_workflow() -> Workflow:
-    return build_workflow(TemplateCommentator(), FactChecker(AlwaysVerifies()))
+    return build_workflow(TemplateCommentator(), FactChecker(AlwaysVerifies()), RuleDirector())
 
 
 def workflow_factory_from_env() -> WorkflowFactory:
@@ -110,6 +112,7 @@ class MatchRun:
     finished: asyncio.Event = field(default_factory=asyncio.Event, init=False)
     _tasks: list[asyncio.Task] = field(default_factory=list, init=False)
     _producer: TemplateProducer = field(default_factory=TemplateProducer, init=False)
+    _pacing: PacingTracker = field(default_factory=PacingTracker, init=False)
 
     @property
     def match_id(self) -> str:
@@ -168,12 +171,19 @@ class MatchRun:
 
     async def _process(self, moment: CandidateMoment) -> None:
         labels = moment_labels(moment, (self.home, self.away))
-        result = await run_moment(self.workflow_factory(), moment, labels)
+        t = close_t(moment, self.events)
+        result = await run_moment(self.workflow_factory(), moment, labels, self._pacing.state_for(moment, t))
+        self._pacing.record(result.decision, t)
         verdict = result.verdict
-        self.metrics[f"verdict_{verdict.status}"] += 1
         self.metrics["number_checks"] += len(result.checks)
         self.metrics["number_checks_failed"] += sum(not c.ok for c in result.checks)
         cue, narratives = None, []
+        if verdict is None:
+            self.metrics["moments_skipped"] += 1
+            self.processed[moment.moment_id] = Processed(moment, result, None, [], asyncio.get_running_loop().time())
+            self.broadcast.publish("verdicts", "skipped", {"moment_id": moment.moment_id, "decision": result.decision.model_dump()})
+            return
+        self.metrics[f"verdict_{verdict.status}"] += 1
         if verdict.status != "rejected" and verdict.insight is not None:
             cue, check = self._producer.cue(verdict.insight, moment, labels)
             self._count(check)
@@ -183,7 +193,7 @@ class MatchRun:
                 if narrative:
                     narratives.append(narrative)
         self.processed[moment.moment_id] = Processed(moment, result, cue, narratives, asyncio.get_running_loop().time())
-        self.broadcast.publish("verdicts", "verdict", {"verdict": verdict.model_dump(), "checks": [c.model_dump() for c in result.checks]})
+        self.broadcast.publish("verdicts", "verdict", {"verdict": verdict.model_dump(), "decision": result.decision.model_dump(), "checks": [c.model_dump() for c in result.checks]})
 
     def _count(self, check: Any) -> None:
         self.metrics["number_checks"] += 1
@@ -206,6 +216,9 @@ class MatchRun:
         if done is None:
             self.metrics["cues_dropped_late"] += 1
             self.broadcast.publish("cues", "dropped", {"moment_id": moment.moment_id, "reason": "late", "seq": event.seq})
+            return
+        if done.result.verdict is None:
+            self.broadcast.publish("cues", "skipped", {"moment_id": moment.moment_id, "reason": done.result.decision.reason, "seq": event.seq})
             return
         if done.cue is None:
             self.metrics["cues_rejected"] += 1
