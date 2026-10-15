@@ -20,7 +20,7 @@ def test_every_answer_is_spoken_and_audited_during_the_match() -> None:
         app.state.workflow_factory = template_workflow
         # 60 match minutes at 150x with a 20 s delay: about 24 s of wall time, plenty to ask during it
         client.post("/api/match/start", json={"seed": 30, "speed": 150, "delay_s": 20, "minutes": 60})
-        time.sleep(1.0)  # the first cue (minute 1 plus the delay) has aired
+        time.sleep(0.8)  # the first cue (minute 1 plus the delay) has aired
         with client.websocket_connect("/api/voice?profile=kby|kby-07|casual|en") as ws:
             answered, audits_seen = [], []
             ws.send_text(json.dumps({"type": "ask", "transcript": "how is my player doing?"}))

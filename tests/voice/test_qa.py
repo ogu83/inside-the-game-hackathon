@@ -12,7 +12,7 @@ from app.voice.qa import NO_DATA, QaPipeline, RuleQaAgent, new_question, players
 @pytest.fixture(scope="module")
 def finished_run() -> MatchRun:
     async def make():
-        run = MatchRun(seed=30, speed=2000, delay_s=10, minutes=30, precompute=True)
+        run = MatchRun(seed=30, speed=2000, delay_s=10, minutes=20, precompute=True)
         await run.start()
         await asyncio.wait_for(run.finished.wait(), timeout=10)
         return run
