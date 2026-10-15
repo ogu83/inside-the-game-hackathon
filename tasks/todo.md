@@ -23,10 +23,11 @@ Nothing here starts until SPEC.md and tasks/plan.md are approved.
   - Verify: `python spikes/two_agents.py` (local) and hosted invocation both print both agent outputs; screenshot of trace; `python spikes/voice_live_hello.py` round trip works
   - Files: spikes/two_agents.py, requirements.txt, .env.example, SPEC.md
 
-- [ ] T3: Simulator v1
+- [x] T3: Simulator v1 (done 2026-10-15)
   - Acceptance: fictional league (4 clubs, 18-player squads, fictional names); phase model; same seed -> identical event list; events validate as `MatchEvent`
   - Verify: `python -m pytest tests/simulator -q`; `python -m app.simulator.run --seed 7 --speed 20` reads plausibly
   - Files: app/simulator/{league.py,model.py,emitter.py,run.py}, tests/simulator/test_simulator.py
+  - Result: Northshore League (VEL, SAL, COR, EMB), 4-4-2 starters + 7 subs; phases build_up/transition/pressing/set_piece with 8-15 min intensity windows; ~1600 events per match, ~3 goals and ~34 shots on average over 40 seeds; coords are from the acting team's view; first half ends at 45:00 exactly so the clock never runs backwards; `stream`/`astream` pace by match clock
 
 - [ ] T4: Dataset export
   - Acceptance: `--export data/match_<seed>.jsonl`; 3 sample matches committed; README section describing the schema
