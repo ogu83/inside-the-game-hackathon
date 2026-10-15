@@ -78,10 +78,11 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Files: app/simulator/export.py, data/, tests/simulator/test_export.py
   - Result: `app/simulator/export.py` (`export_match`, `load_match`, CLI), `--export` on run.py, samples `data/match_{7,30,42}.jsonl` (a test fails if they go stale against the engine), README.md started with the schema section and the frame convention. 116 tests.
 
-- [ ] T5: Ledger metrics
+- [x] T5: Ledger metrics (done 2026-10-15 in a cloud session)
   - Acceptance: pass accuracy, pass difficulty, shot speed, player distance/speed thresholds added to S2's calculators; each unit-tested on hand-built sequences
   - Verify: `python -m pytest tests/ledger -q`
   - Files: app/ledger/{state.py,metrics.py}, tests/ledger/test_metrics.py
+  - Result: `pass_difficulty` (SPEC formula), `avg_pass_difficulty`, `shot_count`, `xg_total`, `max_shot_speed_kmh`, `pressure_count`, `regains_after_pressure`, `player_distance_m` (proxy from consecutive event positions), `player_stats` and `team_stats` dicts of floats for the MCP tools and the director's pacing state. 6 new tests.
 
 - [ ] T6: Detectors (scope cut 2026-10-15: two detectors)
   - Acceptance: pressing_trap added to pass_streak (no momentum_shift, no player_milestone; player numbers come from T5 ledger queries and the MCP tools); possession keys omitted when `window_minutes < 3`; seeded match yields 25-45 moments with evidence dicts, sorted by closing seq and non-overlapping; `Detector` Protocol shared by both
