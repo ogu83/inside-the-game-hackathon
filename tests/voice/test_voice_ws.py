@@ -39,7 +39,7 @@ def run_voice(speaker: FakeSpeaker | None, lang: str = "en", profile: str | None
 
         app.state.speaker_factory = factory if speaker else None
         app.state.workflow_factory = template_workflow
-        started = client.post("/api/match/start", json={"seed": 7, "speed": 600, "delay_s": 120, "minutes": 10})
+        started = client.post("/api/match/start", json={"seed": 7, "speed": 1500, "delay_s": 120, "minutes": 8})
         assert started.status_code == 200
         if after_match:
             with client.stream("GET", "/api/stream/cues") as stream:

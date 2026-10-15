@@ -43,7 +43,7 @@
           <text class="teamname" x="103" y="66" text-anchor="end">{{ teams.away }}</text>
           <polyline class="trail" v-if="trail.length > 1" :points="trail.map(p => p.join(',')).join(' ')"/>
           <circle class="ball" v-if="ball" :cx="ball.x" :cy="ball.y" r="1.1" :fill="ball.home ? 'var(--home)' : 'var(--away)'"/>
-          <text class="label" v-if="ball" :x="Math.min(Math.max(ball.x, 8), 97)" :y="Math.min(ball.y + 4.2, 66)" text-anchor="middle">{{ ball.label }}</text>
+          <text class="label" v-if="ball && ball.label" :x="labelPos(ball, ball.label).x" :y="labelPos(ball, ball.label).y" text-anchor="middle">{{ ball.label }}</text>
         </svg>
         <div class="cuebanner" :class="{ away: !banner.home }" v-if="banner" :style="{ opacity: banner.visible ? 1 : 0 }">
           <div>
@@ -135,9 +135,16 @@ const toPitch = (ev, homeId) => {
   return { x: x * 1.05, y: y * 0.68, home };
 };
 const profileKeyOf = p => `${p.club_id || '-'}|${p.player_id || '-'}|${p.depth}|${p.language}`;
+// Player label under (or above) the ball, kept inside the 105 x 68 pitch. Font is 2.2 units; a glyph is about 1.15 wide.
+const labelPos = (ball, text) => {
+  const half = Math.min((text || '').length * 1.15 / 2, 50);
+  const x = Math.min(Math.max(ball.x, half + 1), 104 - half);
+  const y = ball.y + 4 <= 66.5 ? ball.y + 4 : ball.y - 2.4;
+  return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+};
 const pad = n => String(n).padStart(2, '0');
 const clockText = t => `${pad(Math.floor(Math.max(0, t) / 60))}:${pad(Math.floor(Math.max(0, t) % 60))}`;
-if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clockText };
+if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clockText, labelPos };
 
 createApp({
   setup() {
@@ -291,7 +298,7 @@ createApp({
       try { const s = await (await fetch('/api/match/state')).json(); if (s.metrics) state.metrics = s.metrics; } catch (e) { /* offline between polls */ }
     }, 2000);
     loadLeague();
-    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, start, stop, follow, toggleVoice };
+    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, start, stop, follow, toggleVoice };
   },
 }).mount('#app');
 </script>
