@@ -21,8 +21,9 @@ T1 (repo scaffold) done 2026-10-15. Next: T2 (Foundry spike, needs Azure enabled
 T2 (Foundry spike) once `az account show` is Enabled; T3 (simulator) can start now, it needs no Azure.
 
 ## Blockers / open decisions
-- Azure "Azure subscription 1" is Disabled because of a past-due balance: invoice G176399317 ($63.96, July 2026, "Auto pay failed"). Default card MasterCard ending 2728 is active (exp 11/2029), so the charge was likely declined by the bank. Oguz paid it on 2026-10-15; reactivation can take up to 24 h. Before T2: re-run `az login` (CLI token refresh failed with a provider/account-hint mismatch) and confirm `az account show` state is Enabled. SPEC approved 2026-10-15.
-- Innovation Studio invite pending (~2026-10-16)
+- Azure subscription was disabled over an unpaid balance; Oguz settled it on 2026-10-15 and reactivation can take up to 24 h. Before T2: re-run `az login` (CLI token refresh failed with a provider/account-hint mismatch) and confirm `az account show` state is Enabled. SPEC approved 2026-10-15.
+- Innovation Studio submission form fields still to be noted in requirements.md
+- Pre-publish (T16): squash to fresh history before going public (c28e1c0 has billing details) and remove text from entrants-only hackathon pages; checklist in tasks/todo.md T16
 - Hosted agents (Foundry Agent Service) vs in-container agents: decide in T2
 
 ## Notes

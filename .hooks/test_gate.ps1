@@ -35,8 +35,15 @@ if ($toolName -notin @("Bash", "PowerShell")) { exit 0 }
 if ($cmd -notmatch "git commit") { exit 0 }
 
 # Run the test suite.
-$result = & python -m pytest tests/ -q 2>&1
+# Bare `python` on this machine is a 3.12 install with a broken pytest; use the project venv.
+$repoRoot = Join-Path $PSScriptRoot ".."
+$venvPython = Join-Path $repoRoot ".venv/Scripts/python.exe"
+$py = if (Test-Path $venvPython) { $venvPython } else { "py" }
+$pyArgs = if ($py -eq "py") { @("-3.11", "-m", "pytest", "tests/", "-q") } else { @("-m", "pytest", "tests/", "-q") }
+Push-Location $repoRoot
+$result = & $py @pyArgs 2>&1
 $exitCode = $LASTEXITCODE
+Pop-Location
 
 if ($exitCode -ne 0) {
     Write-Host "Tests failing after commit."

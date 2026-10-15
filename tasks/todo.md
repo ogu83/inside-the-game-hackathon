@@ -1,12 +1,12 @@
 # Active Tasks: The Commentator's Brain
 
 Dependency order: T1 -> (T2 || T3 -> T4 -> T5 -> T6) -> T7 -> T8 -> T9 -> T10 -> T10b -> T11 -> T12 -> T13 -> T14 -> T15 -> T16
-Nothing here starts until SPEC.md and tasks/plan.md are approved.
+SPEC.md approved 2026-10-15.
 
 ## Pre-build blockers
-- [ ] Re-enable Azure subscription (`az account show` -> state `Disabled` on 2026-10-14) or create a new one; set a budget alert
-- [ ] Innovation Studio profile set up when the invite email arrives (~2026-10-16); note submission form fields in requirements.md
-- [ ] Approve SPEC.md assumptions (fictional league, en+tr, port 8010, Vue CDN)
+- [ ] Azure subscription: unpaid balance settled 2026-10-15, waiting for reactivation (up to 24 h); then confirm `az account show` is `Enabled` and set a budget alert
+- [x] Innovation Studio profile + registration done 2026-10-15 (submission form fields still to be noted in requirements.md)
+- [x] SPEC.md assumptions approved 2026-10-15 (fictional league, en+tr, port 8010, Vue CDN)
 
 ## Phase A: Foundations
 
@@ -97,4 +97,9 @@ Nothing here starts until SPEC.md and tasks/plan.md are approved.
 
 - [ ] T14: README + architecture diagram + judge instructions
 - [ ] T15: Demo script + under-2-minute video on YouTube (no trademarks, no copyrighted music)
-- [ ] T16: Make repo public, leak scan (keys, vault paths, client names), submit on Innovation Studio by 2026-10-26
+- [ ] T16: Make repo public, submit on Innovation Studio by 2026-10-26
+  - Pre-publish pass, in this order:
+    1. Remove text that came from entrants-only hackathon pages: "the field is crowded" / competition framing in SPEC.md and IDEA.md; competition-scan line and Innovation Studio project ID in task_state.md
+    2. Leak scan of the working tree: keys, vault paths, client names, billing details
+    3. Start the public repo with fresh history (squash into one commit). Commit c28e1c0 has billing details in task_state.md, so pushing the current history publicly would expose them
+  - Verify: `git log` on the public repo shows the single squashed commit; the grep leak scan returns nothing
