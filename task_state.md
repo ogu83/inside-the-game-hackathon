@@ -5,7 +5,7 @@
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
 ## Current task
-T2 done 2026-10-15. Plan revised the same day after review (walking skeleton first). Phase S in progress: D1, S1, S2 done; next S3 (Commentator + two-layer Fact-Checker).
+Phase S in progress on cloud branch `claude/gracious-goldberg-9u16ny`: D1, S1, S2, S3 done; S4 next; S5 stays local (Voice Live). Review with spec proposals in docs/reviews/2026-10-15-fable-review.md awaits Oguz's decisions.
 
 ## Done
 - [x] Registered for the hackathon (2026-10-14), confirmation email received
@@ -21,9 +21,10 @@ T2 done 2026-10-15. Plan revised the same day after review (walking skeleton fir
 - [x] 2026-10-15: second review applied: number check at every gate (insight, Producer incl. Turkish, speech) with en/tr parser and `NumberCheck` records; voice speaks only approved text via Voice Live `pre_generated_assistant_message` (verified verbatim in en and tr), speech transcript audit; planted errors at the translation step; T16 adds tenant ID and Foundry resource name cleanup.
 
 - [x] 2026-10-15: D1 demo script (docs/demo-script.md); S1 thin simulator (Meridian League, Kestrel Bay vs Ironvale); S2 thin ledger + pass_streak detector (17-26 moments per match). 28 tests pass.
+- [x] 2026-10-15 (cloud session): review committed (docs/reviews/2026-10-15-fable-review.md): top findings are the Analyst 60 s window vs 10 s delay conflict, the judge path needing an offline mode plus public URL, and the evaluation scheduled last. S3 done: `app/agents/{models,fact_check_rules,commentator,fact_checker,fakes,prompts,workflow,run_match}.py`, `app/ledger/labels.py`, 52 tests; `tests/agents/test_live.py` (3 real moments) is `-m live`, not yet run. 80 tests pass.
 
 ## Next step
-S3 (Commentator + two-layer Fact-Checker), S4 (API + page with broadcast delay), S5 (thin voice) by Oct 19. Then deepen T3 to T12b. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
+S4 (API + page with broadcast delay) in the cloud, then locally: `python -m pytest tests/agents -q -m live`, `python -m app.agents.run_match --seed 7 --live --jsonl runs/7.jsonl`, S5 (thin voice) by Oct 19; decide on the review proposals (sections 1, 2, 7) before T7. Then deepen T3 to T12b. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
 
 ## Working in a cloud session (claude.ai/code)
 Cloud sessions are useful for reviews and Azure-free implementation. They have no Azure login, no `.env`, no `azd`, and run Linux.

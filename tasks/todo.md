@@ -45,10 +45,11 @@ Thin vertical slices, each tested and committed. Goal: a seeded match plays in t
   - Verify: `python -m pytest tests/ledger -q`; moment count printed for seed 7
   - Files: app/ledger/{state.py,metrics.py,moments.py}, tests/ledger/test_metrics.py, tests/ledger/test_moments.py
 
-- [ ] S3: Thin agents: Commentator + two-layer Fact-Checker
+- [x] S3: Thin agents: Commentator + two-layer Fact-Checker (done 2026-10-15 in a cloud session; live check `-m live` still to run locally)
   - Acceptance: Fact-Checker layer 1 (code) rejects missing keys and mismatched numbers with no LLM call, fully unit-tested; layer 1 is a reusable number check (gates: insight, producer, speech) with an en/tr number parser (`68%`, `%68`, `yüzde 68`, `68.5`, `68,5`) and a digits-only rule, each result recorded as `NumberCheck`; layer 2 (LLM) judges wording; workflow with one retry on real S2 moments, in-process; messages between executors are dicts re-validated into SPEC models
   - Verify: `python -m pytest tests/agents -q` (layer 1 + contract, no model); `python -m pytest tests/agents -q -m live` on 3 moments
   - Files: app/agents/{models.py,prompts.py,fact_check_rules.py,commentator.py,fact_checker.py,workflow.py}, tests/agents/
+  - Result: en/tr parser + gates in fact_check_rules.py (insight, producer, speech), `NumberCheck` per gate pass; `FactChecker` runs layer 1 then a `WordingJudge` (rewrites re-enter layer 1); Agent Framework workflow with dict messages re-validated per executor and one retry; offline agents in fakes.py (`TemplateCommentator`, `TemplateProducer`, `AlwaysVerifies`) for judges and recording fallback; `python -m app.agents.run_match --seed 7 [--jsonl f] [--live]` run log for T10b; pytest.ini deselects `live` by default. 52 new tests.
 
 - [ ] S4: Thin API + page with broadcast delay
   - Acceptance: `POST /api/match/start`, `GET /api/stream/cues` (SSE), `GET /api/health`; playback clock runs `BROADCAST_DELAY_S` behind events; a cue not ready at its moment is dropped and counted; bare page shows an event ticker and cues; `speed` and `delay_s` are request parameters; speeds above 1x use precomputed verdicts (review section 1, pending spec approval)
