@@ -2,7 +2,7 @@
 
 import json
 
-from app.agents.models import Insight, PacingState
+from app.agents.models import FanProfile, Insight, PacingState
 from app.ledger.models import CandidateMoment
 
 COMMENTATOR_INSTRUCTIONS = (
@@ -24,6 +24,14 @@ ANALYST_INSTRUCTIONS = (
     "rank among them). Stay quiet when commentary would pile up: 3 cues in 2 minutes is the ceiling, and a "
     "moment inside 30 seconds of the last cue must be exceptional (rank 1) to be said. Never compute or "
     "quote numbers; give a short reason."
+)
+
+PRODUCER_INSTRUCTIONS = (
+    "You are the broadcast producer. You turn one verified insight into renderings for different audiences. "
+    "Hard rules: every number must be written as digits, copied exactly from the insight or its cited evidence "
+    "(never as words, never rounded, never approximated); do not add numbers that are not in the cited evidence; "
+    "keep every number of the insight when the depth is analyst; name teams and players only as given. "
+    "Write in the requested language. Return only the requested text."
 )
 
 FACT_CHECKER_INSTRUCTIONS = (
@@ -72,3 +80,37 @@ def director_prompt(moment: CandidateMoment, labels: dict[str, str], pacing: Pac
         f"Pacing: {json.dumps(pacing.model_dump())}\n"
         "Return a DirectorDecision with moment_id, say, angle and reason."
     )
+
+
+def cue_prompt(insight: Insight, moment: CandidateMoment, labels: dict[str, str], feedback: list[str]) -> str:
+    lines = [
+        f"Team: {labels.get('team')}. Opponent: {labels.get('opponent')}. Moment kind: {labels.get('kind', moment.kind)}.",
+        f"Verified insight: {insight.claim} {insight.why_it_matters}",
+        f"Cited evidence: {json.dumps(evidence_for_prompt({k: moment.evidence[k] for k in insight.evidence_refs if k in moment.evidence}))}",
+        "Return a CueDraft: headline (at most 60 characters, digits only for numbers), metric_label and metric_value "
+        "(the single most telling cited number as digits, or null), priority (low, normal or high).",
+    ]
+    if feedback:
+        lines.append(f"Your previous rendering failed the number check: {feedback}. Fix it.")
+    return "\n".join(lines)
+
+
+def narrative_prompt(insight: Insight, moment: CandidateMoment, labels: dict[str, str], profile: FanProfile, feedback: list[str]) -> str:
+    language = "English" if profile.language == "en" else "Turkish"
+    depth = ("one short sentence for a casual fan" if profile.depth == "casual"
+             else "two sentences for an analytically minded fan, keeping every number of the insight")
+    focus = []
+    if profile.club_id and labels.get("fan_club"):
+        focus.append(f"the fan supports {labels['fan_club']}")
+    if profile.player_id and labels.get("fan_player"):
+        focus.append(f"the fan's favourite player is {labels['fan_player']} (mention them only if the insight or evidence has a number about them)")
+    lines = [
+        f"Team: {labels.get('team')}. Opponent: {labels.get('opponent')}. Moment kind: {labels.get('kind', moment.kind)}.",
+        f"Verified insight: {insight.claim} {insight.why_it_matters}",
+        f"Cited evidence: {json.dumps(evidence_for_prompt({k: moment.evidence[k] for k in insight.evidence_refs if k in moment.evidence}))}",
+        f"Write the fan narrative in {language}: {depth}." + (f" Context: {'; '.join(focus)}." if focus else ""),
+        "Numbers as digits only (in Turkish use %62 and 68,5 forms), copied exactly. Return only the narrative text.",
+    ]
+    if feedback:
+        lines.append(f"Your previous rendering failed the number check: {feedback}. Fix it.")
+    return "\n".join(lines)

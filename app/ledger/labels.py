@@ -27,3 +27,13 @@ def moment_labels(moment: CandidateMoment, teams: tuple[str, str] | None = None)
     if moment.top_player_id and moment.top_player_id in PLAYERS:
         labels["top_player"] = PLAYERS[moment.top_player_id].name
     return labels
+
+
+def profile_labels(labels: dict[str, str], club_id: str | None, player_id: str | None) -> dict[str, str]:
+    """Labels plus the fan's club and player names, for one profile's rendering."""
+    extra = dict(labels)
+    if club_id and club_id in CLUBS:
+        extra["fan_club"] = CLUBS[club_id].short
+    if player_id and player_id in PLAYERS:
+        extra["fan_player"] = PLAYERS[player_id].name
+    return extra

@@ -13,9 +13,10 @@ from pathlib import Path
 
 from app.agents.analyst import PacingTracker, RuleDirector
 from app.agents.fact_checker import FactChecker
-from app.agents.fakes import AlwaysVerifies, TemplateCommentator, TemplateProducer
+from app.agents.fakes import AlwaysVerifies, TemplateCommentator, TemplateRenderer
 from app.agents.models import FanProfile, MomentResult
 from app.agents.planted_errors import PlantedReport, PlantingCommentator, PlantPlan, make_tamper, report_insights
+from app.agents.producer import FoundryRenderer, Producer
 from app.agents.workflow import build_workflow, run_moment
 from app.ledger.models import CandidateMoment
 from app.ledger.state import detect_all
@@ -48,7 +49,7 @@ async def run_planted(seed: int, n: int, live: bool = False, plan_seed: int = 0)
         commentator = PlantingCommentator(TemplateCommentator(), plan, plan_seed)
         workflow = offline_workflow(commentator)
     tampered: list[tuple[str, str, str]] = []
-    producer = TemplateProducer(tamper=make_tamper(plan, plan_seed, tampered))
+    producer = (live_producer if live else offline_producer)(tamper=make_tamper(plan, plan_seed, tampered))
     pacing = PacingTracker()
     results: list[MomentResult] = []
     report = PlantedReport()
@@ -62,12 +63,9 @@ async def run_planted(seed: int, n: int, live: bool = False, plan_seed: int = 0)
             continue
         labels = moment_labels_for(moment)
         before = len(tampered)
-        cue, check = producer.cue(verdict.insight, moment, labels)
-        outcomes = [(check, cue is not None)]
-        for profile in PLANT_PROFILES:
-            narrative, check = producer.narrative(verdict.insight, moment, labels, profile)
-            outcomes.append((check, narrative is not None))
-        for check, shown in outcomes:
+        output = await producer.render(verdict.insight, moment, labels, PLANT_PROFILES)
+        shown_keys = {n.profile_key for n in output.narratives} | ({"broadcast"} if output.cue else set())
+        for check in output.checks:
             kind = _tampered_kind(tampered[before:], check)
             if kind is None:
                 continue
@@ -75,7 +73,7 @@ async def run_planted(seed: int, n: int, live: bool = False, plan_seed: int = 0)
             count.planted += 1
             if not check.ok:
                 count.caught_by_code += 1
-            elif shown:
+            elif check.profile_key in shown_keys:
                 count.reached_air += 1
                 report.reached_air_detail.append(f"rendering ({kind}) {check.profile_key}: {check.text}")
     report_insights(results, commentator, report)
@@ -90,6 +88,28 @@ def moment_labels_for(moment: CandidateMoment) -> dict[str, str]:
     from app.ledger.labels import moment_labels
 
     return moment_labels(moment)
+
+
+def live_agent(model_env: str, name: str, instructions: str):
+    import os
+
+    from agent_framework_foundry import FoundryChatClient
+    from azure.identity.aio import DefaultAzureCredential
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    client = FoundryChatClient(project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], model=os.environ[model_env], credential=DefaultAzureCredential())
+    return client.as_agent(name=name, instructions=instructions)
+
+
+def live_producer(tamper=None) -> Producer:
+    from app.agents.prompts import PRODUCER_INSTRUCTIONS
+
+    return Producer(FoundryRenderer(live_agent("SMALL_MODEL_DEPLOYMENT", "producer", PRODUCER_INSTRUCTIONS)), tamper=tamper)
+
+
+def offline_producer(tamper=None) -> Producer:
+    return Producer(TemplateRenderer(), tamper=tamper)
 
 
 def live_workflow():

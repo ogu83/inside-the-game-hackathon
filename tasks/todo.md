@@ -102,10 +102,11 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Files: app/agents/{fact_checker.py,fact_check_rules.py,planted_errors.py}, tests/agents/test_fact_checker.py
   - Result: `planted_errors.py` (wrong_number, missing_key, swapped_team on attempt 1; changed_number, dropped_number, number_as_word on renderings in en and tr via the Producer `tamper` hook), `PlantPlan` from a seed, per-kind `PlantedReport` with a headline sentence; `check_rendering` adds the coverage rule for dropped numbers (proposal 1 in docs/reviews/2026-10-15-phase-b-notes.md); `python -m app.agents.run_match --seed 30 --plant 6` offline: 20 of 22 caught by code, the 2 swapped teams need layer 2 (live). 7 new tests, 1 live.
 
-- [ ] T9: Producer
+- [x] T9: Producer (done 2026-10-15 in a cloud session; live 2x2 check pending)
   - Acceptance: `OverlayCue` (headline <= 60 chars) + `FanNarrative` per profile in en and tr, per-profile calls in parallel; casual vs analyst depth visibly different; prompt requires numbers as digits; every rendering passes the producer gate (number check), a failure is regenerated once then dropped for that profile only
   - Verify: `-m live` test over 2 profiles x 2 languages
   - Files: app/agents/producer.py, tests/agents/test_producer.py
+  - Result: `Producer` renders the cue once and every profile narrative in parallel (`asyncio.gather`), gates each with `check_rendering` (coverage all for analyst and the metric, any for casual), regenerates once with the gate's reasons as feedback, then drops that profile only; `FoundryRenderer` with `PRODUCER_INSTRUCTIONS` (digits only, exact copies, en/tr), `TemplateRenderer` offline (depth and language differ, fan player mentioned only with a number about them); API and the planted harness use it; metrics `narratives_dropped`, `producer_regenerated`. 5 new tests, 1 live.
 
 - [ ] T10: Workflow + tracing + recap + hosted (hosted timeboxed to half a day, 2026-10-15)
   - Acceptance: one workflow module wires all four agents and runs in-process with spans per step in App Insights; full-time recap in en/tr; Checkpoint B criteria met. Hosted Agent deployment is a Should with a half-day timebox: if it fights back, show the T2 hosted agent in the portal and move on

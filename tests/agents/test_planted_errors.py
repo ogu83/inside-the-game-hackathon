@@ -1,9 +1,10 @@
 import random
 
 from app.agents.fact_check_rules import check_rendering
-from app.agents.fakes import TemplateProducer
+from app.agents.fakes import TemplateRenderer
 from app.agents.models import FanProfile, Insight
 from app.agents.planted_errors import PlantPlan, corrupt_insight, corrupt_text, make_tamper, number_to_words
+from app.agents.producer import Producer
 from app.agents.run_match import run_planted
 from app.ledger.labels import moment_labels
 from app.ledger.state import detect_all
@@ -64,18 +65,18 @@ def test_plan_is_reproducible_and_covers_every_kind() -> None:
     assert not set(plan.insights) & set(plan.renderings)
 
 
-def test_tamper_hook_only_touches_planned_moments() -> None:
+async def test_tamper_hook_only_touches_planned_moments() -> None:
     moments = detect_all(simulate(7))[:2]
     plan = PlantPlan(renderings={moments[0].moment_id: "changed_number"})
     log: list = []
-    producer = TemplateProducer(tamper=make_tamper(plan, 0, log))
+    producer = Producer(TemplateRenderer(), tamper=make_tamper(plan, 0, log))
     for moment in moments:
         ins = Insight(moment_id=moment.moment_id, claim="c", why_it_matters="w", evidence_refs=list(moment.evidence), confidence=1)
-        cue, check = producer.cue(ins, moment, moment_labels(moment))
+        output = await producer.render(ins, moment, moment_labels(moment), [FanProfile(language="tr", depth="analyst")])
         planned = moment.moment_id in plan.renderings
-        assert (cue is None) == planned and check.ok != planned
-        narrative, check = producer.narrative(ins, moment, moment_labels(moment), FanProfile(language="tr", depth="analyst"))
-        assert (narrative is None) == planned
+        assert (output.cue is None) == planned and (output.narratives == []) == planned
+        assert any(not c.ok for c in output.checks) == planned
+        assert output.regenerated == (2 if planned else 0)
     assert log and all(m == moments[0].moment_id for m, _, _ in log)
 
 

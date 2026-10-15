@@ -20,8 +20,9 @@ from agent_framework import Workflow
 
 from app.agents.analyst import PacingTracker, RuleDirector
 from app.agents.fact_checker import FactChecker
-from app.agents.fakes import AlwaysVerifies, TemplateCommentator, TemplateProducer
+from app.agents.fakes import AlwaysVerifies, TemplateCommentator, TemplateRenderer
 from app.agents.models import FanNarrative, FanProfile, MomentResult, OverlayCue
+from app.agents.producer import Producer
 from app.agents.run_match import close_t
 from app.agents.workflow import build_workflow, run_moment
 from app.api.clock import BroadcastClock
@@ -48,6 +49,14 @@ def workflow_factory_from_env() -> WorkflowFactory:
 
         return live_workflow
     return template_workflow
+
+
+def producer_from_env() -> Producer:
+    if os.environ.get("AGENT_MODE", "template").lower() == "foundry":
+        from app.agents.run_match import live_producer
+
+        return live_producer()
+    return Producer(TemplateRenderer())
 
 
 class Broadcast:
@@ -101,6 +110,7 @@ class MatchRun:
     away: str = "iva"
     precompute: bool | None = None
     workflow_factory: WorkflowFactory = template_workflow
+    producer: Producer = field(default_factory=lambda: Producer(TemplateRenderer()))
     profiles: list[FanProfile] = field(default_factory=lambda: list(DEFAULT_PROFILES))
 
     events: list[MatchEvent] = field(default_factory=list, init=False)
@@ -111,7 +121,6 @@ class MatchRun:
     metrics: dict[str, int] = field(default_factory=lambda: defaultdict(int), init=False)
     finished: asyncio.Event = field(default_factory=asyncio.Event, init=False)
     _tasks: list[asyncio.Task] = field(default_factory=list, init=False)
-    _producer: TemplateProducer = field(default_factory=TemplateProducer, init=False)
     _pacing: PacingTracker = field(default_factory=PacingTracker, init=False)
 
     @property
@@ -185,19 +194,14 @@ class MatchRun:
             return
         self.metrics[f"verdict_{verdict.status}"] += 1
         if verdict.status != "rejected" and verdict.insight is not None:
-            cue, check = self._producer.cue(verdict.insight, moment, labels)
-            self._count(check)
-            for profile in self.profiles:
-                narrative, check = self._producer.narrative(verdict.insight, moment, labels, profile)
-                self._count(check)
-                if narrative:
-                    narratives.append(narrative)
+            output = await self.producer.render(verdict.insight, moment, labels, list(self.profiles))
+            cue, narratives = output.cue, output.narratives
+            self.metrics["number_checks"] += len(output.checks)
+            self.metrics["number_checks_failed"] += sum(not c.ok for c in output.checks)
+            self.metrics["narratives_dropped"] += len(output.dropped_profiles)
+            self.metrics["producer_regenerated"] += output.regenerated
         self.processed[moment.moment_id] = Processed(moment, result, cue, narratives, asyncio.get_running_loop().time())
         self.broadcast.publish("verdicts", "verdict", {"verdict": verdict.model_dump(), "decision": result.decision.model_dump(), "checks": [c.model_dump() for c in result.checks]})
-
-    def _count(self, check: Any) -> None:
-        self.metrics["number_checks"] += 1
-        self.metrics["number_checks_failed"] += int(not check.ok)
 
     async def _display_loop(self) -> None:
         assert self.clock is not None

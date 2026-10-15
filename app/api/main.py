@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
-from app.api.streams import MatchRun, workflow_factory_from_env
+from app.api.streams import MatchRun, producer_from_env, workflow_factory_from_env
 from app.api.voice_ws import router as voice_router
 from app.voice.session import speaker_factory_from_env
 
@@ -31,6 +31,8 @@ class StartRequest(BaseModel):
 async def lifespan(app: FastAPI):
     app.state.run = None
     app.state.workflow_factory = getattr(app.state, "workflow_factory", None) or workflow_factory_from_env()
+    if not hasattr(app.state, "producer") or app.state.producer is None:
+        app.state.producer = producer_from_env()
     if not hasattr(app.state, "speaker_factory"):
         app.state.speaker_factory = speaker_factory_from_env()
     yield
@@ -58,7 +60,7 @@ async def start_match(request: StartRequest) -> dict:
     run = MatchRun(
         seed=request.seed, speed=request.speed, delay_s=request.delay_s if request.delay_s is not None else default_delay(),
         minutes=request.minutes, precompute=request.precompute, home=request.home, away=request.away,
-        workflow_factory=app.state.workflow_factory,
+        workflow_factory=app.state.workflow_factory, producer=app.state.producer,
     )
     app.state.run = run
     await run.start()

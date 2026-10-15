@@ -3,8 +3,9 @@ import json
 import pytest
 
 from app.agents.fact_checker import FactChecker
-from app.agents.fakes import AlwaysVerifies, ScriptedCommentator, TemplateCommentator, TemplateProducer
+from app.agents.fakes import AlwaysVerifies, ScriptedCommentator, TemplateCommentator, TemplateRenderer
 from app.agents.models import FanProfile, Insight, MomentResult
+from app.agents.producer import Producer
 from app.agents.run_match import run, summary
 from app.agents.workflow import build_workflow, run_moment
 from app.ledger.labels import moment_labels
@@ -31,10 +32,9 @@ async def test_template_commentator_handles_pressing_traps(moments) -> None:
     result = await run_moment(build_workflow(TemplateCommentator(), FactChecker(None)), trap)
     assert result.verdict.status == "verified"
     assert "pressed" in result.attempts[0].claim and "won the ball" in result.attempts[0].claim
-    cue, check = TemplateProducer().cue(result.attempts[0], trap, moment_labels(trap))
-    assert cue is not None and check.ok and cue.priority == "high"
-    narrative, check = TemplateProducer().narrative(result.attempts[0], trap, moment_labels(trap), FanProfile(language="tr"))
-    assert narrative is not None and check.ok and "baskı" in narrative.text
+    output = await Producer(TemplateRenderer()).render(result.attempts[0], trap, moment_labels(trap), [FanProfile(language="tr")])
+    assert output.cue is not None and output.cue.priority == "high" and all(c.ok for c in output.checks)
+    assert len(output.narratives) == 1 and "baskı" in output.narratives[0].text
 
 
 async def test_rejected_insight_is_retried_once_with_feedback() -> None:
@@ -68,25 +68,26 @@ def test_labels_name_teams_not_ids() -> None:
     assert moment_labels(MOMENT.model_copy(update={"top_player_id": "kby-02"}))["top_player"] == "Tomas Vire"
 
 
-def test_template_producer_renders_cue_and_narratives(moments) -> None:
-    producer = TemplateProducer()
+async def test_template_producer_renders_cue_and_narratives(moments) -> None:
     moment = moments[1]
     ins = Insight(moment_id=moment.moment_id, claim="c", why_it_matters="w", evidence_refs=list(moment.evidence), confidence=1)
-    cue, check = producer.cue(ins, moment, moment_labels(moment))
-    assert cue is not None and check.ok and cue.show_at_seq == moment.window[1] and len(cue.headline) <= 60
-    for profile in (FanProfile(language="en"), FanProfile(language="tr", depth="analyst", club_id="iva")):
-        narrative, check = producer.narrative(ins, moment, moment_labels(moment), profile)
-        assert narrative is not None and check.ok and check.profile_key == profile.key()
+    profiles = [FanProfile(language="en"), FanProfile(language="tr", depth="analyst", club_id="iva")]
+    output = await Producer(TemplateRenderer()).render(ins, moment, moment_labels(moment), profiles)
+    assert output.cue is not None and output.cue.show_at_seq == moment.window[1] and len(output.cue.headline) <= 60
+    assert [n.profile_key for n in output.narratives] == [p.key() for p in profiles]
+    assert all(c.ok for c in output.checks) and output.dropped_profiles == [] and output.regenerated == 0
     assert FanProfile(language="tr", depth="analyst", club_id="iva").key() == "iva|-|analyst|tr"
 
 
-def test_producer_gate_drops_a_rendering_that_cites_nothing(moments) -> None:
+async def test_producer_gate_drops_a_rendering_that_cites_nothing(moments) -> None:
     moment = moments[0]
-    ins = Insight(moment_id=moment.moment_id, claim="c", why_it_matters="w", evidence_refs=[], confidence=1)
-    narrative, check = TemplateProducer().narrative(Insight(moment_id=moment.moment_id, claim="14 passes", why_it_matters="w", evidence_refs=[], confidence=1), moment, {}, FanProfile())
-    assert narrative is None and not check.ok
-    cue, _ = TemplateProducer().cue(ins, moment, {})
-    assert cue is not None  # the claim has no numbers, so the headline passes
+    ins = Insight(moment_id=moment.moment_id, claim="14 passes", why_it_matters="w", evidence_refs=[], confidence=1)
+    output = await Producer(TemplateRenderer()).render(ins, moment, {}, [FanProfile()])
+    assert output.narratives == [] and output.dropped_profiles == [FanProfile().key()]
+    assert output.cue is None  # the fallback headline carries the uncited 14
+    no_numbers = Insight(moment_id=moment.moment_id, claim="patient play", why_it_matters="w", evidence_refs=[], confidence=1)
+    output = await Producer(TemplateRenderer()).render(no_numbers, moment, {}, [FanProfile()])
+    assert output.cue is not None and len(output.narratives) == 1
 
 
 async def test_run_match_offline_summary_and_jsonl(tmp_path) -> None:

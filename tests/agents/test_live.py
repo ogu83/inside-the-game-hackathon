@@ -53,3 +53,22 @@ async def test_live_wording_judge_catches_a_swapped_team_and_planted_run_reaches
     assert swapped.planted >= 1
     assert report.reached_air == 0, report.reached_air_detail
     assert report.caught == report.planted
+
+
+async def test_live_producer_renders_two_profiles_in_two_languages() -> None:
+    from app.agents.models import FanProfile
+    from app.agents.run_match import live_producer
+    from app.ledger.labels import moment_labels
+
+    events = simulate(30)
+    moment = detect_all(events)[0]
+    workflow = live_workflow()
+    result = await run_moment(workflow, moment)
+    assert result.verdict is not None and result.verdict.insight is not None
+    profiles = [FanProfile(language="en", depth="casual", club_id="iva"), FanProfile(language="en", depth="analyst"),
+                FanProfile(language="tr", depth="casual"), FanProfile(language="tr", depth="analyst", club_id="kby", player_id="kby-07")]
+    output = await live_producer().render(result.verdict.insight, moment, moment_labels(moment), profiles)
+    assert output.cue is not None and len(output.cue.headline) <= 60
+    assert len(output.narratives) + len(output.dropped_profiles) == 4
+    assert len(output.narratives) >= 3, output.checks
+    assert all(c.gate == "producer" for c in output.checks)
