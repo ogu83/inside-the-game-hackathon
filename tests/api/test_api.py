@@ -9,7 +9,7 @@ from app.agents.fakes import AlwaysVerifies, TemplateCommentator
 from app.agents.workflow import build_workflow
 from app.api.clock import BroadcastClock
 from app.api.main import app
-from app.api.streams import MatchRun
+from app.api.streams import MatchRun, template_workflow
 from app.ledger.state import detect_all
 from app.simulator.engine import simulate
 
@@ -117,6 +117,28 @@ async def test_live_mode_drops_cues_that_are_not_ready_in_time() -> None:
     expected = len(detect_all(simulate(7, minutes=20)))
     assert run.metrics["moments_detected"] == expected
     assert run.metrics["cues_dropped_late"] == expected and run.metrics.get("cues_shown", 0) == 0
+    assert len(run._late) == expected, "every late moment is remembered, whether detected before or after its closing event aired"
+
+
+async def test_moment_detected_after_its_closing_event_aired_counts_as_late() -> None:
+    """Deterministic version of the race behind the flaky test: at tiny delays the display loop can pass a moment's
+    closing seq before the ingest loop detects it; such a moment is late at once and never shown."""
+    run = MatchRun(seed=7, speed=1, delay_s=600, minutes=10, precompute=False, workflow_factory=template_workflow)
+    run.events = simulate(7, minutes=10)
+    run.clock = BroadcastClock(started_at=0.0, speed=1, delay_s=600)
+    moments = detect_all(run.events)
+    first, second = moments[0], moments[1]
+    run._displayed_seq = first.window[1]  # the display loop already aired the first moment's closing event
+    run._on_moment_detected(first)
+    run._on_moment_detected(second)
+    await asyncio.gather(*run._tasks)
+    assert run.metrics["moments_detected"] == 2 and run.metrics["cues_dropped_late"] == 1
+    assert first.moment_id in run._late and run.processed[first.moment_id].displayed == "late"
+    assert run.pending_by_seq[second.window[1]] == [second] and first.window[1] not in run.pending_by_seq
+    event = run.events[second.window[1] - 1]
+    run._displayed_seq = event.seq
+    await run._show_or_drop(second, event)
+    assert run.metrics["cues_shown"] == 1 and run.processed[second.moment_id].displayed == "shown"
 
 
 async def test_live_mode_shows_cues_that_are_ready_before_display() -> None:

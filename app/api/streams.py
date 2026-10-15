@@ -169,6 +169,7 @@ class MatchRun:
     _tasks: list[asyncio.Task] = field(default_factory=list, init=False)
     _pacing: PacingTracker = field(default_factory=PacingTracker, init=False)
     _late: set[str] = field(default_factory=set, init=False)
+    _displayed_seq: int = field(default=0, init=False)
 
     @property
     def match_id(self) -> str:
@@ -291,9 +292,19 @@ class MatchRun:
         for event in self.events:
             await asyncio.sleep(max(0.0, self.clock.ingest_wall(event.t) - loop.time()))
             for moment in ledger.ingest(event):
-                self.pending_by_seq[moment.window[1]].append(moment)
-                self.metrics["moments_detected"] += 1
-                self._tasks.append(asyncio.create_task(self._process(moment)))
+                self._on_moment_detected(moment)
+
+    def _on_moment_detected(self, moment: CandidateMoment) -> None:
+        """Queue a detected moment for display, or count it as late at once when its closing event has already aired
+        (tiny delays: the display loop can pass the closing seq before the ingest loop sees it)."""
+        self.metrics["moments_detected"] += 1
+        if moment.window[1] <= self._displayed_seq:
+            self.metrics["cues_dropped_late"] += 1
+            self._late.add(moment.moment_id)
+            self.broadcast.publish("cues", "dropped", {"moment_id": moment.moment_id, "reason": "late", "seq": moment.window[1]})
+        else:
+            self.pending_by_seq[moment.window[1]].append(moment)
+        self._tasks.append(asyncio.create_task(self._process(moment)))
 
     async def _process(self, moment: CandidateMoment) -> None:
         labels = moment_labels(moment, (self.home, self.away))
@@ -343,6 +354,7 @@ class MatchRun:
         try:
             for event in self.events:
                 await asyncio.sleep(max(0.0, self.clock.display_wall(event.t) - loop.time()))
+                self._displayed_seq = event.seq
                 self.broadcast.publish("events", "event", self._event_payload(event))
                 for moment in self.pending_by_seq.pop(event.seq, []):
                     await self._show_or_drop(moment, event)
