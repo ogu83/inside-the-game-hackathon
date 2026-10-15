@@ -106,6 +106,7 @@ class MomentResult(BaseModel):
     verdict: Verdict | None = None
     attempts: list[Insight] = Field(default_factory=list)
     checks: list[NumberCheck] = Field(default_factory=list)
+    rejections: list[Verdict] = Field(default_factory=list)  # verdicts of the attempts that were sent back for a retry
 
 
 class Question(BaseModel):

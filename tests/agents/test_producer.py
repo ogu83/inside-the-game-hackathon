@@ -78,7 +78,7 @@ async def test_failed_rendering_is_regenerated_once_with_feedback_then_dropped()
     moment = streak_moment()
     renderer = FlakyRenderer()
     output = await Producer(renderer).render(full_insight(moment), moment, moment_labels(moment), PROFILES[:2])
-    assert output.cue is None and len(renderer.feedback_seen) == 2 and renderer.feedback_seen[1] and "99 not in cited evidence" in renderer.feedback_seen[1][0]
+    assert output.cue is None and len(renderer.feedback_seen) == 2 and renderer.feedback_seen[1] and "99 passes does not match the cited passes value" in renderer.feedback_seen[1][0]
     assert len(output.narratives) == 2 and output.dropped_profiles == []
     assert output.regenerated == 3  # cue once, each narrative once
     assert [c.ok for c in output.checks if c.profile_key == "broadcast"] == [False, False]

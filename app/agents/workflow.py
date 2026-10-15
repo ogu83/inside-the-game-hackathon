@@ -46,7 +46,7 @@ class DirectorExecutor(Executor):
         if decision.say:
             await ctx.send_message(message)
         else:
-            await ctx.yield_output({**message, "moment_id": moment.moment_id, "verdict": None, "attempts": [], "checks": []})
+            await ctx.yield_output({**message, "moment_id": moment.moment_id, "verdict": None, "attempts": [], "checks": [], "rejections": []})
 
 
 class CommentatorExecutor(Executor):
@@ -62,7 +62,7 @@ class CommentatorExecutor(Executor):
         attempt = draft.get("attempt", 0) + 1
         await ctx.send_message({
             **{k: draft[k] for k in ("moment", "labels", "decision")},
-            "checks": draft.get("checks", []),
+            "checks": draft.get("checks", []), "rejections": draft.get("rejections", []),
             "insight": insight.model_dump(), "attempt": attempt, "attempts": draft.get("attempts", []) + [insight.model_dump()],
         })
 
@@ -78,10 +78,11 @@ class FactCheckerExecutor(Executor):
         insight = Insight.model_validate(draft["insight"])
         verdict, checks = await self.checker.check(insight, moment, draft["labels"], draft["attempt"])
         all_checks = draft["checks"] + [c.model_dump() for c in checks]
+        rejections = draft.get("rejections", [])
         if verdict.status == "rejected" and draft["attempt"] <= MAX_RETRIES:
-            await ctx.send_message({**draft, "checks": all_checks, "status": "rejected", "reasons": verdict.reasons})
+            await ctx.send_message({**draft, "checks": all_checks, "status": "rejected", "reasons": verdict.reasons, "rejections": rejections + [verdict.model_dump()]})
             return
-        await ctx.yield_output({"moment_id": moment.moment_id, "decision": draft["decision"], "verdict": verdict.model_dump(), "attempts": draft["attempts"], "checks": all_checks})
+        await ctx.yield_output({"moment_id": moment.moment_id, "decision": draft["decision"], "verdict": verdict.model_dump(), "attempts": draft["attempts"], "checks": all_checks, "rejections": rejections})
 
 
 def build_workflow(writer: InsightWriter, checker: FactChecker, director: Director | None = None) -> Workflow:
@@ -107,4 +108,5 @@ async def run_moment(workflow: Workflow, moment: CandidateMoment, labels: dict[s
         verdict=Verdict.model_validate(output["verdict"]) if output["verdict"] else None,
         attempts=[Insight.model_validate(a) for a in output["attempts"]],
         checks=[NumberCheck.model_validate(c) for c in output["checks"]],
+        rejections=[Verdict.model_validate(r) for r in output.get("rejections", [])],
     )

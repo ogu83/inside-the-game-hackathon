@@ -28,7 +28,7 @@ class FactChecker:
         self.judge = judge
 
     async def check(self, insight: Insight, moment: CandidateMoment, labels: dict[str, str], attempt: int) -> tuple[Verdict, list[NumberCheck]]:
-        rejected, check = check_insight(insight, moment, attempt)
+        rejected, check = check_insight(insight, moment, attempt, labels)
         checks = [check]
         if rejected is not None:
             return rejected, checks
@@ -41,7 +41,7 @@ class FactChecker:
             return Verdict(moment_id=moment.moment_id, status="rejected", insight=insight, reasons=wording.reasons or ["wording rejected"], layer="llm", attempt=attempt), checks
         if wording.status == "rewritten":
             rewritten = insight.model_copy(update={"claim": wording.claim or insight.claim, "why_it_matters": wording.why_it_matters or insight.why_it_matters})
-            rejected_rewrite, recheck = check_insight(rewritten, moment, attempt)
+            rejected_rewrite, recheck = check_insight(rewritten, moment, attempt, labels)
             checks.append(recheck)
             if rejected_rewrite is not None:
                 reasons = ["rewrite failed the number check"] + rejected_rewrite.reasons

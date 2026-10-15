@@ -42,7 +42,9 @@ async def test_rejected_insight_is_retried_once_with_feedback() -> None:
     result = await run_moment(build_workflow(writer, FactChecker(AlwaysVerifies())), MOMENT)
     assert result.verdict.status == "verified" and result.verdict.attempt == 2
     assert len(result.attempts) == 2
-    assert writer.calls[1] == ["6 not in cited evidence (pass_streak_passes = 14, team_possession_pct_window = 67.6)"]
+    assert writer.calls[1] == ["6 not in cited evidence (pass_streak_passes = 14, team_possession_pct_window = 67.6)",
+                               "Ironvale named as the actor, but the moment is Kestrel Bay's (name Kestrel Bay as the actor, or use opponent phrasing such as 'against Ironvale')"]
+    assert [r.layer for r in result.rejections] == ["code"] and result.rejections[0].attempt == 1
     assert [c.ok for c in result.checks] == [False, True]
 
 
@@ -51,7 +53,7 @@ async def test_second_rejection_is_final() -> None:
     result = await run_moment(build_workflow(writer, FactChecker(AlwaysVerifies())), MOMENT)
     assert result.verdict.status == "rejected" and result.verdict.attempt == 2 and result.verdict.layer == "code"
     assert len(writer.calls) == 2
-    assert result.verdict.reasons == ["number written as word: six"]
+    assert result.verdict.reasons == ["number written as word: six", "Ironvale named as the actor, but the moment is Kestrel Bay's (name Kestrel Bay as the actor, or use opponent phrasing such as 'against Ironvale')"]
 
 
 async def test_workflow_output_is_json_safe_and_revalidates() -> None:

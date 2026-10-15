@@ -91,3 +91,50 @@ async def test_layer_2_can_reject_wording() -> None:
 def test_insight_confidence_is_bounded() -> None:
     with pytest.raises(ValueError):
         Insight(moment_id="m", claim="x", why_it_matters="y", evidence_refs=[], confidence=1.5)
+
+
+from app.agents.fact_check_rules import check_actors  # noqa: E402
+
+IVA_TRAP = CandidateMoment(
+    moment_id="kby-iva-30-474-pressing_trap", window=(470, 474), kind="pressing_trap", team_id="iva", minute=20, top_player_id="iva-10",
+    evidence={"pressing_trap_pressures": 2.0, "pressing_trap_window_s": 21.0, "pressing_trap_regain_distance_to_goal_m": 25.5},
+)
+IVA_LABELS = {"team": "Ironvale", "opponent": "Kestrel Bay", "top_player": "Jory Calloway"}
+KBY_LABELS = {"team": "Kestrel Bay", "opponent": "Ironvale"}
+
+
+def test_swapped_team_is_rejected_by_code_the_live_case() -> None:
+    claim = Insight(moment_id=IVA_TRAP.moment_id, claim="Kestrel Bay set a pressing trap with 2 pressures in 21 seconds and Jory Calloway led the action.",
+                    why_it_matters="Winning it 25.5 metres from goal is a chance.", evidence_refs=list(IVA_TRAP.evidence), confidence=0.8)
+    verdict, check = check_insight(claim, IVA_TRAP, 1, IVA_LABELS)
+    assert check.ok, "the numbers are right; the attribution is wrong"
+    assert verdict is not None and verdict.layer == "code"
+    assert verdict.reasons == ["Kestrel Bay named as the actor, but the moment is Ironvale's (name Ironvale as the actor, or use opponent phrasing such as 'against Kestrel Bay')"]
+    assert check_insight(claim, IVA_TRAP, 1)[0] is None, "without labels the attribution check cannot run"
+
+
+def test_opponent_allowed_only_as_the_one_acted_upon_en() -> None:
+    assert check_actors("Ironvale sprung a pressing trap against Kestrel Bay and won it 25.5 metres from goal.", IVA_TRAP, IVA_LABELS) == []
+    assert check_actors("Ironvale won the ball from Luca Brightwater high up the pitch.", IVA_TRAP, IVA_LABELS) == []
+    assert check_actors("Ironvale pressed Kestrel Bay into a mistake.", IVA_TRAP, IVA_LABELS) == []
+    assert check_actors("It comes with 68% of the ball, so Kestrel Bay are chasing.", IVA_TRAP, IVA_LABELS) == []
+    assert check_actors("Kestrel Bay could not get out of their half.", IVA_TRAP, IVA_LABELS) == []
+    assert check_actors("Luca Brightwater led the press and Ironvale won it.", IVA_TRAP, IVA_LABELS) == ["Luca Brightwater plays for Kestrel Bay, not Ironvale (name one of Ironvale's players, or use opponent phrasing)"]
+    assert check_actors("Kestrel Bay have strung together 22 passes.", IVA_TRAP, IVA_LABELS)[0].startswith("Kestrel Bay named as the actor")
+    assert check_actors("Jory Calloway won the ball for Ironvale.", IVA_TRAP, IVA_LABELS) == [], "the moment's own player is fine"
+    assert check_actors("Ironvale have strung together 10 passes.", IVA_TRAP, KBY_LABELS)[0].startswith("Ironvale named as the actor")
+
+
+def test_opponent_allowed_only_as_the_one_acted_upon_tr() -> None:
+    assert check_actors("Kestrel Bay 21 saniyede 2 kez baskı yaptı ve topu kazandı.", IVA_TRAP, IVA_LABELS, "tr")[0].startswith("Kestrel Bay named as the actor")
+    assert check_actors("Ironvale, Kestrel Bay'a karşı 21 saniyede 2 kez baskı yaptı.", IVA_TRAP, IVA_LABELS, "tr") == []
+    assert check_actors("Ironvale Kestrel Bay savunmasında topu kazandı.", IVA_TRAP, IVA_LABELS, "tr") == []
+    assert check_actors("Ironvale topu Luca Brightwater'dan kazandı.", IVA_TRAP, IVA_LABELS, "tr") == []
+    assert check_actors("Luca Brightwater baskıya öncülük etti.", IVA_TRAP, IVA_LABELS, "tr")[0].startswith("Luca Brightwater plays for Kestrel Bay")
+
+
+async def test_fact_checker_passes_labels_so_the_rewrite_is_checked_too() -> None:
+    judge = ScriptedJudge([WordingVerdict(status="rewritten", claim="Kestrel Bay set the trap with 2 pressures in 21 seconds.")])
+    good = Insight(moment_id=IVA_TRAP.moment_id, claim="Ironvale set a pressing trap with 2 pressures in 21 seconds.", why_it_matters="w", evidence_refs=list(IVA_TRAP.evidence), confidence=0.8)
+    verdict, checks = await FactChecker(judge).check(good, IVA_TRAP, IVA_LABELS, 1)
+    assert verdict.status == "rejected" and verdict.reasons[0] == "rewrite failed the number check" and "Kestrel Bay named as the actor" in verdict.reasons[1]

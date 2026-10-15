@@ -186,10 +186,10 @@ def report_insights(results: list[MomentResult], commentator: PlantingCommentato
         count = report.insights[kind]
         count.planted += 1
         verdict = result.verdict
-        first_check = result.checks[0] if result.checks else None
-        if first_check is not None and not first_check.ok:
+        first = result.rejections[0] if result.rejections else (verdict if verdict.status == "rejected" else None)
+        if first is not None and first.layer == "code":
             count.caught_by_code += 1
-        elif verdict.attempt > 1 or verdict.status == "rejected" or (verdict.status == "rewritten" and verdict.insight and verdict.insight.claim != planted.claim):
+        elif first is not None or (verdict.status == "rewritten" and verdict.insight and verdict.insight.claim != planted.claim):
             count.caught_by_llm += 1
         elif verdict.insight is not None and verdict.insight.claim == planted.claim:
             count.reached_air += 1

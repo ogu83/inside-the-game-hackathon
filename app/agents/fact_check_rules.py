@@ -33,6 +33,32 @@ _NUMBER_RE = re.compile(
     re.IGNORECASE,
 )
 _UNIT_RE = re.compile(r"^\s*(?:-\s*)?(?P<unit>minutes?|mins?|dakika\w*|dk|seconds?|secs?|saniye\w*|sn|metres?|meters?|m)\b", re.IGNORECASE)
+# The noun after a number names the fact it quotes; a family must match a cited key that carries it (key-aware matching).
+_FAMILY_RE = re.compile(
+    r"^\s*(?:-\s*|\s+)?(?:(?:completed|consecutive|straight|successful|quick|different|separate|high|more|fewer|art arda|ardışık|farklı|isabetli)\s+)?"
+    r"(?P<noun>pass(?:es)?|pas\w*|pressures?|presses|bask[ıi]\w*|players?|oyuncu\w*|shots?|[şs]ut\w*|goals?|gol\w*|regains?|"
+    r"interceptions?|tackles?|touches|touch|seconds?|secs?|saniye\w*|minutes?|mins?|dakika\w*|metres?|meters?|percent|yüzde|yuzde)\b",
+    re.IGNORECASE,
+)
+_TIME = ("_s", "second", "duration", "minute", "_min")  # seconds and minutes cross-match through unit conversion
+FAMILIES: dict[str, tuple[str, ...]] = {  # family -> fragments a cited key must contain ("_x" fragments must end the key)
+    "passes": ("pass",), "pressures": ("pressure",), "players": ("player",), "shots": ("shot",), "goals": ("goal",),
+    "regains": ("regain",), "interceptions": ("intercept",), "tackles": ("tackle",), "touches": ("touch",),
+    "seconds": _TIME, "minutes": _TIME, "metres": ("_m", "metre", "distance", "progress"), "pct": ("pct", "percent"),
+}
+_NOUN_FAMILY = [
+    (("pass", "pas"), "passes"), (("pressure", "press", "bask"), "pressures"), (("player", "oyuncu"), "players"), (("shot", "şut", "sut"), "shots"),
+    (("goal", "gol"), "goals"), (("regain",), "regains"), (("intercept",), "interceptions"), (("tackle",), "tackles"), (("touch",), "touches"),
+    (("sec", "san"), "seconds"), (("min", "dak"), "minutes"), (("met",), "metres"), (("percent", "yüzde", "yuzde"), "pct"),
+]
+
+
+def _family_of(noun: str) -> str | None:
+    folded = noun.casefold()
+    for prefixes, family in _NOUN_FAMILY:
+        if folded.startswith(prefixes):
+            return family
+    return None
 
 _EN_WORDS = {
     "zero", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
@@ -54,6 +80,7 @@ class FoundNumber:
     raw: str
     decimals: int
     unit: str | None  # "pct", "min", "s", "m" or None
+    family: str | None = None  # the fact the number quotes, from the noun after it: "passes", "pressures", "seconds", ...
 
 
 def _fold(word: str) -> str:
@@ -91,14 +118,21 @@ def extract_numbers(text: str, lang: Lang = "en") -> list[FoundNumber]:
             value = -value
         tail = m.group("tail") or ""
         unit: str | None = None
+        family: str | None = None
+        after = text[m.end():]
         if m.group("pct_pre") or tail == "%":
-            unit = "pct"
+            unit, family = "pct", "pct"
         else:
-            unit_match = _UNIT_RE.match(text[m.end():])
+            unit_match = _UNIT_RE.match(after)
             if unit_match:
                 word = unit_match.group("unit").casefold()
                 unit = "min" if word.startswith(("min", "dak", "dk")) else "s" if word.startswith(("sec", "san", "sn")) else "m"
-        found.append(FoundNumber(value=value, raw=m.group(0).strip(), decimals=decimals, unit=unit))
+            noun = _FAMILY_RE.match(after)
+            if noun:
+                family = _family_of(noun.group("noun"))
+            elif unit:
+                family = {"min": "minutes", "s": "seconds", "m": "metres"}[unit]
+        found.append(FoundNumber(value=value, raw=m.group(0).strip(), decimals=decimals, unit=unit, family=family))
     return found
 
 
@@ -138,12 +172,28 @@ def _candidates(key: str, value: float, unit: str | None) -> list[float]:
     return values
 
 
-def matches(number: FoundNumber, cited: dict[str, float]) -> bool:
-    for key, value in cited.items():
-        for candidate in _candidates(key, value, number.unit):
+def _key_in_family(key: str, family: str) -> bool:
+    lowered = key.casefold()
+    return any(lowered.endswith(fragment) if fragment.startswith("_") else fragment in lowered for fragment in FAMILIES[family])
+
+
+def matching_key(number: FoundNumber, cited: dict[str, float]) -> str | None:
+    """The cited key that justifies the number. A number with a family ("13 pressures") must match a key of that
+    family (`pressing_trap_pressures`), so a value borrowed from another fact (the 13-second window) does not count."""
+    keys = list(cited)
+    if number.family and any(_key_in_family(k, number.family) for k in keys):
+        keys = [k for k in keys if _key_in_family(k, number.family)]
+    elif number.family:
+        return None  # the text quotes a fact that was not cited at all
+    for key in keys:
+        for candidate in _candidates(key, cited[key], number.unit):
             if abs(round_half_up(candidate, number.decimals) - number.value) < 1e-9:
-                return True
-    return False
+                return key
+    return None
+
+
+def matches(number: FoundNumber, cited: dict[str, float]) -> bool:
+    return matching_key(number, cited) is not None
 
 
 def _describe(cited: dict[str, float]) -> str:
@@ -162,7 +212,15 @@ def check_numbers(
     lang: Lang = "en",
 ) -> NumberCheck:
     """The reusable gate: every digit number must match a cited value; number words are not allowed."""
-    mismatches = [f"{n.raw} not in cited evidence ({_describe(cited)})" for n in extract_numbers(text, lang) if not matches(n, cited)]
+    mismatches = []
+    for n in extract_numbers(text, lang):
+        if matches(n, cited):
+            continue
+        if n.family and any(_key_in_family(k, n.family) for k in cited):
+            own = ", ".join(f"{k} = {v:g}" for k, v in cited.items() if _key_in_family(k, n.family))
+            mismatches.append(f"{n.raw} {n.family} does not match the cited {n.family} value ({own})")
+        else:
+            mismatches.append(f"{n.raw} not in cited evidence ({_describe(cited)})")
     mismatches += [f"number written as word: {w}" for w in number_words(text, lang)]
     return NumberCheck(gate=gate, moment_id=moment_id, profile_key=profile_key, text=text, ok=not mismatches, mismatches=mismatches)
 
@@ -233,6 +291,75 @@ def check_rendering(
     return check
 
 
+# Opponent phrasing: the other club or its players may be named only as the ones acted upon.
+_EN_BEFORE = {"against", "on", "over", "past", "from", "versus", "vs", "to", "beat", "beating", "behind", "through", "around", "off", "by",
+              "under", "at", "with", "than", "pressing", "pressed", "pressured", "pressure", "trapped", "trap", "caught", "forced", "forcing",
+              "denied", "stopped", "dispossessed", "robbed", "chasing", "pinned", "outnumbered", "overran", "overrun", "squeezed", "hemmed",
+              "left", "leaving", "while", "as", "whilst", "for", "and", "so"}
+_EN_AFTER = {"chasing", "chase", "chased", "concede", "conceded", "conceding", "struggle", "struggled", "struggling", "pinned", "overrun",
+             "could", "couldn't", "cannot", "can't", "failed", "fail", "lost", "lose", "losing", "defend", "defending", "defended",
+             "sat", "sit", "sitting", "drop", "dropped", "dropping", "retreat", "retreated", "retreating", "scrambling", "scrambled", "are", "were", "have", "had", "did", "look", "looked"}
+_EN_AFTER_SUBJECT = {"are", "were", "have", "had", "did", "look", "looked"}  # these need a passive-sounding word right after
+_EN_PASSIVE = {"chasing", "pinned", "overrun", "struggling", "scrambling", "stretched", "exposed", "tired", "tiring", "unable", "forced", "pushed", "penned", "second", "behind", "outnumbered", "powerless", "passive", "reactive", "deep", "defending", "sitting", "rattled", "on", "under"}
+_TR_AFTER = {"karşı", "karşısında", "karşısına", "üzerinde", "üzerine", "önünde", "savunmasında", "savunmasına", "savunması", "sahasında", "yarısında",
+             "kalesine", "kalesinde", "ceza", "baskısı", "baskısına", "baskısıyla", "ardından", "peşinden", "arkasından", "gerisinde", "geriye", "zorlandı", "zorlanıyor",
+             "koşuyor", "koşturuyor", "kovalıyor", "yoruldu", "sıkıştı", "sıkışıyor"}
+_TR_SUFFIX = re.compile(r"'(?:y?[aeıiuü]|n?[ıiuü]n|d[ae]n|t[ae]n|y?l[ae]|d[ae]|t[ae])\b")
+
+
+def _tokens(text: str) -> list[str]:
+    return re.findall(r"[^\W_]+(?:'[^\W_]+)?", text, re.UNICODE)
+
+
+def _name_positions(tokens: list[str], name: str) -> list[int]:
+    parts = [p.casefold() for p in name.split()]
+    folded = [t.casefold().split("'")[0] for t in tokens]
+    return [i for i in range(len(folded) - len(parts) + 1) if folded[i:i + len(parts)] == parts]
+
+
+def _as_object(tokens: list[str], start: int, length: int, lang: Lang) -> bool:
+    """True when the name at tokens[start:start+length] is acted upon rather than acting."""
+    before = [t.casefold() for t in tokens[max(0, start - 3):start]]
+    after = [t.casefold() for t in tokens[start + length:start + length + 3]]
+    last = tokens[start + length - 1]
+    if lang == "tr":
+        return bool(_TR_SUFFIX.search(last)) or any(w in _TR_AFTER for w in after[:2]) or any(w in ("karşı", "karşısında", "üzerinde") for w in before)
+    if any(w in _EN_BEFORE for w in before[-2:]):
+        return True
+    if after and after[0] in _EN_AFTER:
+        if after[0] in _EN_AFTER_SUBJECT:
+            return any(w in _EN_PASSIVE for w in after[1:3])
+        return True
+    return False
+
+
+def check_actors(text: str, moment: CandidateMoment, labels: dict[str, str], lang: Lang = "en") -> list[str]:
+    """Deterministic attribution: the moment belongs to `labels['team']`; the opponent and its players may appear only
+    as the ones acted upon. Returns reasons, empty when the attribution is fine."""
+    from app.simulator.league import CLUBS
+
+    team, opponent = labels.get("team"), labels.get("opponent")
+    if not team or not opponent or team == opponent:
+        return []
+    tokens = _tokens(text)
+    reasons = []
+    for start in _name_positions(tokens, opponent):
+        if not _as_object(tokens, start, len(opponent.split()), lang):
+            reasons.append(f"{opponent} named as the actor, but the moment is {team}'s (name {team} as the actor, or use opponent phrasing such as 'against {opponent}')")
+            break
+    other_club = next((c for c in CLUBS.values() if c.short == opponent or c.name == opponent), None)
+    if other_club is not None:
+        for player in other_club.players:
+            for start in _name_positions(tokens, player.name):
+                if not _as_object(tokens, start, len(player.name.split()), lang):
+                    reasons.append(f"{player.name} plays for {opponent}, not {team} (name one of {team}'s players, or use opponent phrasing)")
+                    break
+            else:
+                continue
+            break
+    return reasons
+
+
 def cited_evidence(insight: Insight, moment: CandidateMoment) -> tuple[dict[str, float], list[str]]:
     """Split the insight's refs into (cited values, unknown keys)."""
     cited = {k: moment.evidence[k] for k in insight.evidence_refs if k in moment.evidence}
@@ -240,15 +367,18 @@ def cited_evidence(insight: Insight, moment: CandidateMoment) -> tuple[dict[str,
     return cited, unknown
 
 
-def check_insight(insight: Insight, moment: CandidateMoment, attempt: int) -> tuple[Verdict | None, NumberCheck]:
-    """Layer 1 on an Insight. Returns (rejected verdict or None, the NumberCheck record)."""
+def check_insight(insight: Insight, moment: CandidateMoment, attempt: int, labels: dict[str, str] | None = None, lang: Lang = "en") -> tuple[Verdict | None, NumberCheck]:
+    """Layer 1 on an Insight: keys, numbers (family-aware) and, with labels, the actor attribution.
+    Returns (rejected verdict or None, the NumberCheck record)."""
     reasons: list[str] = []
     if insight.moment_id != moment.moment_id:
         reasons.append(f"insight is about {insight.moment_id}, expected {moment.moment_id}")
     cited, unknown = cited_evidence(insight, moment)
     reasons += [f"unknown evidence key: {k}" for k in unknown]
-    check = check_numbers(f"{insight.claim}\n{insight.why_it_matters}", cited, gate="insight", moment_id=moment.moment_id)
+    check = check_numbers(f"{insight.claim}\n{insight.why_it_matters}", cited, gate="insight", moment_id=moment.moment_id, lang=lang)
     reasons += check.mismatches
+    if labels:
+        reasons += check_actors(f"{insight.claim} {insight.why_it_matters}", moment, labels, lang)
     if reasons:
         return Verdict(moment_id=moment.moment_id, status="rejected", insight=insight, reasons=reasons, layer="code", attempt=attempt), check
     return None, check

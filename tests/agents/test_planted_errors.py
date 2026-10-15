@@ -90,8 +90,8 @@ async def test_offline_harness_catches_every_number_error_by_code() -> None:
         assert count.planted >= 1, kind
         assert count.caught_by_code == count.planted and count.reached_air == 0, kind
     swapped = report.insights["swapped_team"]
-    assert swapped.planted >= 1 and swapped.caught_by_code == 0, "a swapped team keeps every number right: only layer 2 can catch it"
-    assert report.reached_air == swapped.reached_air, "offline mode has no wording judge; the live harness must bring this to 0"
+    assert swapped.planted >= 1 and swapped.caught_by_code == swapped.planted, "a swapped team keeps every number right; the actor check in layer 1 catches it"
+    assert report.reached_air == 0 and report.caught == report.planted, report.headline()
     assert sum(len(r.attempts) - 1 for r in results) >= report.insights["wrong_number"].planted
     assert "caught" in report.headline()
 

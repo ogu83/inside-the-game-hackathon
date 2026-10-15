@@ -53,7 +53,7 @@ async def test_live_wording_judge_catches_a_swapped_team_and_planted_run_reaches
 
     results, report = await run_planted(30, 4, live=True, limit=12)
     swapped = report.insights["swapped_team"]
-    missed_by_layer_2 = [line for line in report.reached_air_detail if "(swapped_team)" in line]
+    missed_by_layer_2 = [line for line in report.reached_air_detail if "(swapped_team)" in line]  # layer 1 now rejects swapped actors; layer 2 stays the second net
     detail = "\n".join([
         report.headline(),
         json.dumps(report.as_dict(), indent=1),
