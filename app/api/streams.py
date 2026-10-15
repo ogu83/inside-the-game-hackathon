@@ -245,6 +245,17 @@ class MatchRun:
         if audit.question_id:
             self.metrics["answers_spoken"] += 1
 
+    def mark_interrupted(self, ref: str) -> SpeechAudit | None:
+        """The fan barged in while the line `ref` (a moment id or question id) was still playing in the browser: the
+        server had long finished sending it, so only the page knows. Marks the latest audit of that line."""
+        for audit in reversed(self.audits):
+            if ref in (audit.moment_id, audit.question_id):
+                if not audit.interrupted:
+                    audit.interrupted = True
+                    self.metrics["lines_interrupted"] += 1
+                return audit
+        return None
+
     def _fall_back(self, reason: str) -> None:
         """Switch to offline agents for the rest of the match (design rule 7) and tell every listener once."""
         if self.agent_mode == "template":

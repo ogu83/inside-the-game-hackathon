@@ -87,10 +87,20 @@ async def _speak_loop(run: MatchRun, speaker: Speaker, fan: FanProfile, waiting:
         state["busy"] = False
 
 
-async def _ask(run: MatchRun, ws: WebSocket, fan: FanProfile, transcript: str, waiting: asyncio.Queue, speaker: Speaker, state: dict) -> None:
-    """Barge-in: stop the current line, drop stale lines, answer text first, then speak the answer verbatim."""
+async def _barge_in(run: MatchRun, ws: WebSocket, speaker: Speaker, state: dict, interrupting: str | None) -> None:
+    """Stop the current line. `interrupting` names the line still playing in the browser (the server may have finished
+    sending it long ago); its audit is marked interrupted so a cut-off transcript is never counted as a mismatch."""
     state["interrupted"] = True
     await speaker.cancel()
+    if interrupting:
+        audit = run.mark_interrupted(interrupting)
+        if audit is not None:
+            await ws.send_json({"type": "audit_updated", "audit": audit.model_dump()})
+
+
+async def _ask(run: MatchRun, ws: WebSocket, fan: FanProfile, transcript: str, waiting: asyncio.Queue, speaker: Speaker, state: dict, interrupting: str | None = None) -> None:
+    """Barge-in: stop the current line, drop stale lines, answer text first, then speak the answer verbatim."""
+    await _barge_in(run, ws, speaker, state, interrupting)
     while not waiting.empty():
         stale = waiting.get_nowait()
         if isinstance(stale, Answer):
@@ -148,7 +158,7 @@ async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asynci
                 continue
             kind = data.get("type")
             if kind == "ask" and data.get("transcript", "").strip():
-                await _ask(run, ws, fan, data["transcript"], waiting, speaker, state)
+                await _ask(run, ws, fan, data["transcript"], waiting, speaker, state, data.get("interrupting"))
             elif kind == "talk_start":
                 if talking:
                     continue  # a repeated press while already listening: one press, one question
@@ -156,8 +166,7 @@ async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asynci
                     pending.cancel()  # the fan moved on: the earlier utterance is dropped
                     run.metrics["transcriptions_superseded"] += 1
                 talking, pcm = True, bytearray()
-                state["interrupted"] = True
-                await speaker.cancel()
+                await _barge_in(run, ws, speaker, state, data.get("interrupting"))
             elif kind == "talk_end" and talking:
                 talking = False
                 pending = asyncio.create_task(_transcribe_then_ask(run, ws, fan, bytes(pcm), waiting, speaker, state))

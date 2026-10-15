@@ -331,3 +331,38 @@ def test_a_new_press_supersedes_a_slow_transcription() -> None:
     assert len(questions) == 1, "the first utterance was superseded before its slow transcription finished"
     assert metrics["transcriptions_superseded"] == 1 and metrics["questions_answered"] == 1
     assert len(speaker.transcribed) == 2, "both transcriptions started; the first was cancelled"
+
+
+def test_a_line_cut_off_in_the_browser_is_marked_interrupted() -> None:
+    """The server finished sending the line long before the fan pressed; the page names the line it cut off."""
+    speaker = FakeSpeaker()
+    with TestClient(app) as client:
+        async def factory():
+            return speaker
+
+        app.state.speaker_factory = factory
+        app.state.workflow_factory = template_workflow
+        client.post("/api/match/start", json={"seed": 30, "speed": 1500, "delay_s": 10, "minutes": 8})
+        with client.stream("GET", "/api/stream/cues") as stream:
+            for line in stream.iter_lines():
+                if line.startswith("event: match_end"):
+                    break
+        with client.websocket_connect("/api/voice?profile=iva|iva-07|casual|en") as ws:
+            spoken = None
+            while spoken is None:
+                m = ws.receive()
+                if m.get("text") and json.loads(m["text"])["type"] == "spoken":
+                    spoken = json.loads(m["text"])["audit"]
+            assert spoken["interrupted"] is False and spoken["moment_id"]
+            ws.send_text(json.dumps({"type": "talk_start", "interrupting": spoken["moment_id"]}))
+            updated = None
+            while updated is None:
+                m = ws.receive()
+                if m.get("text") and json.loads(m["text"])["type"] == "audit_updated":
+                    updated = json.loads(m["text"])["audit"]
+            assert updated["moment_id"] == spoken["moment_id"] and updated["interrupted"] is True and updated["ok"] is True
+            ws.send_text(json.dumps({"type": "talk_end"}))
+        audits = client.get("/api/match/audits").json()["audits"]
+        assert [a for a in audits if a["moment_id"] == spoken["moment_id"]][-1]["interrupted"] is True
+        assert app.state.run.metrics["lines_interrupted"] == 1
+        assert app.state.run.mark_interrupted("nonexistent") is None

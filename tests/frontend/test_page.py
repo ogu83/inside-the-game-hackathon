@@ -70,12 +70,14 @@ def test_page_script_parses_and_pure_helpers_behave(tmp_path: Path) -> None:
     )
     out = subprocess.run(["node", "-e", gate_probe, str(tmp_path / "helpers.js")], check=True, capture_output=True, text=True).stdout
     assert json.loads(out) == [True, True, False, False, 1, True, False, True, 2, True], "interrupt mutes until the next line starts"
-    assert "if (state.voice) bargeIn(); startTalk();" in HTML, "the press mutes playback before anything async"
+    assert "interrupting = state.voice ? bargeIn() : null; startTalk();" in HTML, "the press mutes playback before anything async"
     script = SCRIPT
     assert script.count("getUserMedia(") == 1 and script.index("getUserMedia(") < script.index("const toggleVoice"), "the mic is opened once, by warmMic, before the first press"
     assert "warmMic();  // in parallel with the socket" in script and "releaseMic(); return closeVoice();" in script
     assert "if (!state.talking || !socketOpen()) return;" in script, "frames flow only while the button is held"
     assert "if (!gate.accept(buffer)) return;" in HTML
+    assert "type: 'talk_start', interrupting" in HTML and "type: 'ask', transcript, interrupting: cut" in HTML, "the cut-off line's id travels with the press"
+    assert "const stillPlaying = () =>" in HTML and "audit_updated" in HTML
     assert left_edge["x"] >= 9 and left_edge["y"] == 34, "a long name near the left edge is pushed inside the pitch"
     assert bottom_right["x"] <= 97.7 and bottom_right["y"] == 63.6, "near the goal line and the bottom edge the label moves inside and above the ball"
     assert middle == {"x": 50, "y": 34}

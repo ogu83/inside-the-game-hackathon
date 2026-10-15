@@ -25,7 +25,7 @@
     <span v-if="voiceStatus">{{ voiceStatus }}</span>
     <span v-else-if="speaking">speaking ({{ profile.language }}): {{ speaking }}</span>
     <span v-else>voice ready{{ micReady ? ', microphone warm' : '' }}, waiting for the next verified line</span>
-    <span class="audit">speech audit {{ speechChecks - speechMismatches }}/{{ speechChecks }} exact</span>
+    <span class="audit">speech audit {{ speechChecks - speechMismatches }}/{{ speechChecks }} exact<span v-if="interruptedLines">, {{ interruptedLines }} interrupted</span></span>
   </div>
   <main>
     <section>
@@ -188,7 +188,7 @@ createApp({
       teams: { home: 'Home', away: 'Away', homeId: 'kby' }, league: { clubs: [] }, playerNames: {},
       ticker: [], ball: null, trail: [], banner: null, narratives: [], metrics: null, timeline: [], drawerOpen: true, filter: 'all',
       profile: { club_id: null, player_id: null, depth: 'casual', language: 'en' }, profileKey: null,
-      askText: '', talking: false, qa: [], micReady: false,
+      askText: '', talking: false, qa: [], micReady: false, interruptedLines: 0,
       sources: [], fanSource: null, startedAt: null,
       voice: false, voiceStatus: '', speaking: '', speechChecks: 0, speechMismatches: 0,
     });
@@ -212,9 +212,12 @@ createApp({
     // Voice: pcm16 mono 24 kHz chunks from /api/voice, scheduled back to back on one AudioContext. Speaks only approved text.
     let audioCtx = null, playHead = 0, voiceWs = null, carry = null, scheduled = [];
     const gate = new PlaybackGate();
+    let speakingId = null;  // moment id or question id of the line being played, from the last 'speaking' message
+    const stillPlaying = () => !!audioCtx && audioCtx.currentTime < playHead - 0.05;
     const dropPlayback = () => { scheduled.forEach(src => { try { src.stop(); } catch (e) { /* already ended */ } }); scheduled = []; playHead = 0; carry = null; };
     // Audible within a frame of the press: stop what is scheduled and mute whatever still arrives for this line.
-    const bargeIn = () => { gate.interrupt(); dropPlayback(); state.speaking = ''; };
+    // Returns the id of the line that was cut off (null if nothing was playing), so the server can mark its audit.
+    const bargeIn = () => { const cut = stillPlaying() ? speakingId : null; gate.interrupt(); dropPlayback(); state.speaking = ''; speakingId = null; return cut; };
     const playPcm = (buffer) => {
       if (!gate.accept(buffer)) return;  // a chunk of the interrupted line
       let bytes = new Uint8Array(buffer);
@@ -271,7 +274,12 @@ createApp({
       ws.onmessage = (m) => {
         if (m.data instanceof ArrayBuffer) return playPcm(m.data);
         const msg = JSON.parse(m.data);
-        if (msg.type === 'speaking') { gate.nextLine(); state.speaking = msg.text; playHead = 0; }
+        if (msg.type === 'speaking') { gate.nextLine(); state.speaking = msg.text; playHead = 0; speakingId = msg.question_id || msg.moment_id || null; }
+        if (msg.type === 'audit_updated') {
+          const a = msg.audit;
+          const q = a.question_id && state.qa.find(q => q.answer && q.answer.question_id === a.question_id); if (q) q.audit = a;
+          state.interruptedLines++;
+        }
         if (msg.type === 'spoken') {
           state.speechChecks++; if (!msg.audit.ok) state.speechMismatches++;
           if (msg.audit.question_id) { const q = state.qa.find(q => q.answer && q.answer.question_id === msg.audit.question_id); if (q) q.audit = msg.audit; }
@@ -329,9 +337,10 @@ createApp({
       const transcript = state.askText.trim(); if (!transcript) return;
       const route = askRoute(state.voice, socketOpen());
       if (route !== 'text') {
+        const cut = bargeIn();  // a typed question interrupts too
         if (route === 'reconnect' && !(await ensureVoiceSocket())) return;  // the question stays in the box
         state.askText = '';
-        return voiceWs.send(JSON.stringify({ type: 'ask', transcript }));
+        return voiceWs.send(JSON.stringify({ type: 'ask', transcript, interrupting: cut }));
       }
       state.askText = '';
       const entry = { key: 't' + Date.now(), transcript, answer: null, audit: null, textOnly: true };
@@ -342,7 +351,8 @@ createApp({
     // Push-to-talk: with the voice on, mic audio (pcm16 mono 24 kHz) streams to the socket between talk_start and talk_end
     // and Voice Live transcribes it; with the voice off, the browser's own speech recognition supplies the transcript.
     const ptt = new PushToTalk();
-    const pressTalk = (e) => { if (state.running && ptt.press(e)) { if (state.voice) bargeIn(); startTalk(); } };  // mute first, then anything async
+    let interrupting = null;  // set at press time, sent with talk_start
+    const pressTalk = (e) => { if (state.running && ptt.press(e)) { interrupting = state.voice ? bargeIn() : null; startTalk(); } };  // mute first, then anything async
     const releaseTalk = () => { if (ptt.release()) stopTalk(); };
     const startTalk = async () => {
       if (!state.running || state.talking) return;
@@ -352,7 +362,7 @@ createApp({
         if (!mic && !(await warmMic())) { ptt.release(); return; }  // normally already warm since the voice was turned on
         if (!ptt.held) return;
         state.talking = true;
-        voiceWs.send(JSON.stringify({ type: 'talk_start' }));
+        voiceWs.send(JSON.stringify({ type: 'talk_start', interrupting }));
         return;
       }
       state.talking = true;
