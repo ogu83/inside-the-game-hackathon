@@ -5,7 +5,7 @@
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
 ## Current task
-T2 (Azure + Foundry spike) done 2026-10-15. Next: T3 (simulator).
+T2 done 2026-10-15. Plan revised the same day after review (walking skeleton first). Next: D1 (demo script), then S1 to S5.
 
 ## Done
 - [x] Registered for the hackathon (2026-10-14), confirmation email received
@@ -17,9 +17,10 @@ T2 (Azure + Foundry spike) done 2026-10-15. Next: T3 (simulator).
 - [x] 2026-10-15: competition scan (docs/private/competition.md, gitignored) -> voice-first pivot written into SPEC.md, IDEA.md, tasks/todo.md
 - [x] 2026-10-15: T1 repo scaffold: app/{simulator,ledger,agents,api} packages, requirements.txt, .env.example, tests/test_placeholder.py (5 pass), .venv (3.11), git init on `main`, private repo ogu83/inside-the-game-hackathon. docs/document.{md,pdf} gitignored (agreement text stays local).
 - [x] 2026-10-15: T2 Foundry spike: eastus2 rg-matchday with Foundry resource + project `matchday`, Foundry User role, App Insights linked, $50/month budget alert (`hackathon-monthly`). gpt-5.4-mini deployed. Local 2-agent workflow with reject edge, same workflow deployed as hosted agent `t2-spike` via azd and invoked remotely, spans in App Insights, Voice Live hello world (cancel ~0.4 s). Findings + pins in SPEC.md.
+- [x] 2026-10-15: post-T2 review applied: SPEC.md (pitch line, pipeline design rules: broadcast delay, two-layer Fact-Checker, Analyst as director, ledger over MCP, parallel Producer; Verdict gains layer/attempt; criteria 3, 8, 10 revised/added), tasks/plan.md rewritten with Must/Should/Cut table, tasks/todo.md reordered (D1, S1-S5 skeleton), IDEA.md annotated.
 
 ## Next step
-T3 (simulator v1). T7+ use `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
+D1 demo script, then walking skeleton S1 (thin simulator) to S5 (thin voice) by Oct 19. Then deepen T3 to T12b. T7+ use `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
 
 ## Blockers / open decisions
 - Azure: subscription is **Enabled** again (2026-10-15). CLI login needs `az login --tenant 09c5e5e8-d9dd-4923-bbf2-9749f2e8082c` (MFA; plain `az login` skips the tenant). Ignore the "Microsoft" tenant (hackathon B2B guest). Budget alert set 2026-10-15. Still open: find what drove the July bill (Portal > Cost analysis, Jun-Jul by service). SPEC approved 2026-10-15.

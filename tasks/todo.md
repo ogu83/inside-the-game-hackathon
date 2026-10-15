@@ -1,15 +1,15 @@
-# Active Tasks: The Commentator's Brain
+# Active Tasks: Matchday Companion (The Commentator's Brain)
 
-Dependency order: T1 -> (T2 || T3 -> T4 -> T5 -> T6) -> T7 -> T8 -> T9 -> T10 -> T10b -> T11 -> T12 -> T13 -> T14 -> T15 -> T16
-SPEC.md approved 2026-10-15.
+Order: T1 -> T2 -> D1 -> S1 -> S2 -> S3 -> S4 -> S5 (walking skeleton, by Oct 19) -> T3..T12b (deepen, by Oct 23; T10b starts as soon as T10 runs) -> T13 -> T14 -> T15 -> T16
+SPEC.md approved 2026-10-15; revised 2026-10-15 after the T2 review (see SPEC.md status line and tasks/plan.md scope table).
 
 ## Pre-build blockers
-- [ ] Azure subscription: unpaid balance settled 2026-10-15, waiting for reactivation (up to 24 h); then confirm `az account show` is `Enabled` and set a budget alert
+- [x] Azure subscription re-enabled 2026-10-15; $50/month budget alert set
 - [x] Innovation Studio profile + registration done 2026-10-15 (submission form fields still to be noted in requirements.md)
 - [x] SPEC.md assumptions approved 2026-10-15 (fictional league, en+tr, port 8010, Vue CDN)
+- [ ] Frontier model quota request for gpt-5.5 in eastus2 (Oguz)
 
-## Phase A: Foundations
-
+## Phase A: Foundations (done)
 - [x] T1: Repo scaffold (done 2026-10-15)
   - Acceptance: `app/` packages exist, `requirements.txt`, `.env.example`, `tests/test_placeholder.py`; `python -m pytest tests/ -q` passes; `git init` + private GitHub repo `ogu83/inside-the-game-hackathon` (public before submission)
   - Verify: `python -m pytest tests/ -q`
@@ -25,80 +25,115 @@ SPEC.md approved 2026-10-15.
   - Result: eastus2 Foundry resource + project, Foundry User role, App Insights linked, $50/month budget alert; `gpt-5.4-mini` deployed (DataZone Standard). `spikes/two_agents.py` runs locally (reject edge proven with `--inject-false`); `spikes/hosted/` deploys with `azd deploy` and answers `azd ai agent invoke t2-spike 'inject-false'`; spans from both in App Insights; `spikes/voice_live_hello.py` interrupt stops in ~0.4 s, reply in ~1.6 s. Findings and pins in SPEC.md "T2 decisions and findings".
   - Manual follow-ups (Oguz): (1) file a quota request for `gpt-5.5` in eastus2, then deploy it and set `FRONTIER_MODEL_DEPLOYMENT`; (2) open the project's Tracing tab in the Foundry portal and take the trace screenshot for the README.
 
-- [ ] T3: Simulator v1
-  - Acceptance: fictional league (4 clubs, 18-player squads, fictional names); phase model; same seed -> identical event list; events validate as `MatchEvent`
-  - Verify: `python -m pytest tests/simulator -q`; `python -m app.simulator.run --seed 7 --speed 20` reads plausibly
-  - Files: app/simulator/{league.py,model.py,emitter.py,run.py}, tests/simulator/test_simulator.py
+
+## Phase S: Walking skeleton (Oct 15-19)
+
+Thin vertical slices, each tested and committed. Goal: a seeded match plays in the browser with verified cues shown on time and spoken. Later phases deepen the same files.
+
+- [ ] D1: Demo script draft
+  - Acceptance: docs/demo-script.md, scene by scene, timed to under 2 minutes, every scene mapped to a Must item in tasks/plan.md; no trademarks, no copyrighted music
+  - Verify: read aloud with a stopwatch
+  - Files: docs/demo-script.md, tasks/plan.md (scope table if the script changes it)
+
+- [ ] S1: Thin simulator
+  - Acceptance: 2 fictional clubs (11 + 3 subs each, fictional names), build-up and transition phases, seeded emitter; same seed -> identical events; every event validates as `MatchEvent`; text printer
+  - Verify: `python -m pytest tests/simulator -q`; `python -m app.simulator.run --seed 7 --speed 20` reads like football for 5 minutes
+  - Files: app/simulator/{models.py,league.py,engine.py,run.py}, tests/simulator/test_simulator.py
+
+- [ ] S2: Thin ledger + first detector
+  - Acceptance: possession % and pass streak calculators; `pass_streak` detector emits `CandidateMoment` with an evidence dict; unit tests on hand-built sequences
+  - Verify: `python -m pytest tests/ledger -q`; moment count printed for seed 7
+  - Files: app/ledger/{state.py,metrics.py,moments.py}, tests/ledger/test_metrics.py, tests/ledger/test_moments.py
+
+- [ ] S3: Thin agents: Commentator + two-layer Fact-Checker
+  - Acceptance: Fact-Checker layer 1 (code) rejects missing keys and mismatched numbers with no LLM call, fully unit-tested; layer 2 (LLM) judges wording; workflow with one retry on real S2 moments, in-process; messages between executors are dicts re-validated into SPEC models
+  - Verify: `python -m pytest tests/agents -q` (layer 1 + contract, no model); `python -m pytest tests/agents -q -m live` on 3 moments
+  - Files: app/agents/{models.py,prompts.py,fact_check_rules.py,commentator.py,fact_checker.py,workflow.py}, tests/agents/
+
+- [ ] S4: Thin API + page with broadcast delay
+  - Acceptance: `POST /api/match/start`, `GET /api/stream/cues` (SSE), `GET /api/health`; playback clock runs `BROADCAST_DELAY_S` behind events; a cue not ready at its moment is dropped and counted; bare page shows an event ticker and cues
+  - Verify: `python -m pytest tests/api -q`; open http://localhost:8010 and watch a seeded match
+  - Files: app/api/{main.py,streams.py,clock.py}, frontend/index.html, tests/api/test_api.py
+
+- [ ] S5: Thin voice
+  - Acceptance: browser plays Voice Live speech for each verified line (text in, audio out) in en; no barge-in yet
+  - Verify: manual: start a match, hear verified lines
+  - Files: app/voice/session.py, app/api/voice_ws.py, frontend/index.html
+
+Checkpoint S: one command, seeded match plays, verified cues appear on time and are spoken. Submittable in an emergency.
+
+## Phase B: Deepen (Oct 19-23)
+
+- [ ] T3: Simulator v1 full
+  - Acceptance: 4 clubs; phase model with build-up, pressing, transition, set pieces; substitutions; goals with xG-like quality; deterministic per seed
+  - Verify: `python -m pytest tests/simulator -q`; 5 minutes of text output reads plausibly
+  - Files: app/simulator/*, tests/simulator/test_simulator.py
 
 - [ ] T4: Dataset export
   - Acceptance: `--export data/match_<seed>.jsonl`; 3 sample matches committed; README section describing the schema
   - Verify: export then re-load and validate every line
   - Files: app/simulator/export.py, data/, tests/simulator/test_export.py
 
-## Phase B: Ledger
-
-- [ ] T5: Ledger core metrics
-  - Acceptance: possession %, pass accuracy, pass difficulty, shot speed, player distance/speed thresholds, all from events; each calculator unit-tested on hand-built sequences
+- [ ] T5: Ledger metrics
+  - Acceptance: pass accuracy, pass difficulty, shot speed, player distance/speed thresholds added to S2's calculators; each unit-tested on hand-built sequences
   - Verify: `python -m pytest tests/ledger -q`
   - Files: app/ledger/{state.py,metrics.py}, tests/ledger/test_metrics.py
 
-- [ ] T6: Candidate-moment detectors
-  - Acceptance: pressing_trap, momentum_shift, pass_streak, player_milestone, lull; seeded match yields 30-60 moments with evidence dicts
+- [ ] T6: Detectors
+  - Acceptance: pressing_trap, momentum_shift, player_milestone added to pass_streak; seeded match yields 30-60 moments with evidence dicts
   - Verify: `python -m pytest tests/ledger -q`; count printed for seed 7
   - Files: app/ledger/moments.py, tests/ledger/test_moments.py
 
-## Phase C: Agents
+- [ ] T7: Analyst as director + Commentator
+  - Acceptance: Analyst runs once per window over the moment batch, ranks, and returns which to say now and which to skip (stay quiet), never computing numbers; Commentator returns valid `Insight` citing only existing evidence keys
+  - Verify: `python -m pytest tests/agents -q`; `-m live` on 5 fixture moments
+  - Files: app/agents/{prompts.py,analyst.py,commentator.py}, tests/agents/test_analyst.py, tests/agents/test_commentator.py
 
-- [ ] T7: Analyst + Commentator
-  - Acceptance: Analyst ranks/drops moments; Commentator returns valid `Insight` citing only existing evidence keys
-  - Verify: `python -m pytest tests/agents -q -m live` on 5 fixture moments
-  - Files: app/agents/{prompts.py,analyst.py,commentator.py}, tests/agents/test_commentator.py
-
-- [ ] T8: Fact-Checker
-  - Acceptance: verified/rewritten/rejected verdicts; one retry loop; deliberately false claim fixture is rejected or rewritten, never passed through
-  - Verify: `python -m pytest tests/agents -q` (contract) and `-m live`
-  - Files: app/agents/fact_checker.py, tests/agents/test_fact_checker.py
+- [ ] T8: Fact-Checker full + planted errors
+  - Acceptance: verified/rewritten/rejected with `layer` and `attempt` set; planted-error harness corrupts N insights per match (wrong number, missing key, swapped team); run report shows planted errors caught and 0 reaching a cue
+  - Verify: `python -m pytest tests/agents -q`; `-m live` planted-error run on one seeded match
+  - Files: app/agents/{fact_checker.py,fact_check_rules.py,planted_errors.py}, tests/agents/test_fact_checker.py
 
 - [ ] T9: Producer
-  - Acceptance: `OverlayCue` (headline <= 60 chars) + `FanNarrative` per profile in en and tr; casual vs analyst depth visibly different
+  - Acceptance: `OverlayCue` (headline <= 60 chars) + `FanNarrative` per profile in en and tr, per-profile calls in parallel; casual vs analyst depth visibly different
   - Verify: `-m live` test over 2 profiles x 2 languages
   - Files: app/agents/producer.py, tests/agents/test_producer.py
 
-- [ ] T10: Workflow + tracing + recap
-  - Acceptance: Agent Framework workflow wires all four agents; traces per step in Foundry; full-time recap in en/tr; Checkpoint C criteria met
-  - Verify: `python -m app.agents.run_match --seed 7 --speed 30` summary; trace screenshot
-  - Files: app/agents/workflow.py, app/agents/recap.py, app/agents/run_match.py, tests/agents/test_workflow.py
+- [ ] T10: Workflow + tracing + recap + hosted
+  - Acceptance: one workflow module wires all four agents, runs in-process and as the Foundry Hosted Agent; spans per step in App Insights; full-time recap in en/tr; Checkpoint B criteria met
+  - Verify: `python -m app.agents.run_match --seed 7 --speed 30` summary (cues, rejects, planted errors caught, ready-before-display %); hosted invoke works
+  - Files: app/agents/{workflow.py,recap.py,run_match.py}, hosted/ (azd project), tests/agents/test_workflow.py
 
-- [ ] T10b: Foundry evaluation (Groundedness proof point)
-  - Acceptance: 3 recorded seeded matches exported as an evaluation dataset; Foundry cloud evaluation (Groundedness, Task Adherence) run with Fact-Checker on vs off; results table saved to docs/eval-results.md
-  - Verify: evaluation job submitted and polled to completion (long-running operation); scores visible in the Foundry portal
+- [ ] T10b: Foundry evaluation (start as soon as T10 runs)
+  - Acceptance: 3 recorded seeded matches exported as an evaluation dataset; Foundry cloud evaluation (Groundedness, Task Adherence) with Fact-Checker on vs off; planted-error count; results table in docs/eval-results.md with one headline sentence for README and video
+  - Verify: evaluation job submitted and polled to completion; scores visible in the Foundry portal
   - Files: app/eval/export_runs.py, app/eval/run_eval.py, docs/eval-results.md
 
-## Phase D: Product surface
-
-- [ ] T11: FastAPI + SSE
-  - Acceptance: `/api/health`, `POST /api/match/start`, `GET /api/stream/cues`, `GET /api/stream/fan?profile=...`, `GET /api/profiles`
+- [ ] T11: API full
+  - Acceptance: adds `GET /api/stream/fan?profile=...`, `GET /api/profiles`, verdict stream for the debug drawer
   - Verify: `python -m pytest tests/api -q`; `curl -N localhost:8010/api/stream/cues`
   - Files: app/api/main.py, app/api/streams.py, tests/api/test_api.py
 
 - [ ] T12: Frontend
-  - Acceptance: broadcast panel (overlay cues timed to match clock), fan panel with profile switch, verdict debug drawer; no console errors; works at 1440x900 and phone width
+  - Acceptance: SVG pitch with ball and player dots from event x/y on the delayed clock; overlay cues; fan panel with profile switch; verdict debug drawer showing rejects and the Analyst's skipped moments; no console errors; works at 1440x900 and phone width
   - Verify: manual run in browser, golden path + profile switch
   - Files: frontend/index.html, frontend/style.css
 
-- [ ] T12b: Voice co-commentator
-  - Acceptance: per-fan Voice Live session speaks verified Producer narratives (en, tr); barge-in stops playback < 500 ms; spoken "why?" routed to the evidence-grounded answer path; unknowns answered with "I don't have data on that"
-  - Verify: manual browser test with mic, golden path + interruption + unanswerable question; latency logged in traces
-  - Files: app/voice/session.py, app/voice/qa.py, app/api/voice_ws.py, frontend/index.html
+- [ ] T12b: Voice: barge-in + Q&A over MCP
+  - Acceptance: ledger read-only MCP server (team stats, player stats, recent moments); voice Q&A agent answers "why?" and "how is my player doing?" by calling MCP tools, answer passes the Fact-Checker; barge-in stops playback < 500 ms; unknowns get "I don't have data on that"; en and tr; MCP tool-call span visible in trace
+  - Verify: manual browser test with mic: golden path, interruption, unanswerable question; `python -m pytest tests/voice -q` for the MCP tools
+  - Files: app/ledger/mcp_server.py, app/voice/{session.py,qa.py}, app/api/voice_ws.py, frontend/index.html, tests/voice/
 
-## Phase E: Ship
+## Phase E: Ship (Oct 23-26)
 
-- [ ] T13: Deploy: agent workflow as Foundry Hosted Agent + API/UI on Azure Container Apps
-  - Acceptance: `docker compose up --build` from clean clone (local judge path); hosted agent deployed via `azd`; public Container Apps URL serving the demo and invoking the hosted agent
+- [ ] T13: Deploy
+  - Must: `docker compose up --build` from a clean clone runs the full demo with only `.env` filled in
+  - Should: API + UI on one Azure Container App with a public HTTPS URL (needed for mic in remote browsers), invoking the hosted agent
   - Files: Dockerfile, docker-compose.yml, docs/deploy.md
 
-- [ ] T14: README + architecture diagram + judge instructions
-- [ ] T15: Demo script + under-2-minute video on YouTube (no trademarks, no copyrighted music)
+- [ ] T14: README + architecture diagram + judge instructions (pitch line, eval headline, trace screenshot)
+- [ ] T15: Record the video from docs/demo-script.md on a local in-process run, hosted agent warmed up first; upload to YouTube (no trademarks, no copyrighted music)
+
 - [ ] T16: Make repo public, submit on Innovation Studio by 2026-10-26
   - Pre-publish pass, in this order:
     1. Remove text that came from entrants-only hackathon pages: "the field is crowded" / competition framing in SPEC.md and IDEA.md; competition-scan line and Innovation Studio project ID in task_state.md

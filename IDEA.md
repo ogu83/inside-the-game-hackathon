@@ -5,6 +5,8 @@ Rules: https://github.com/microsoft/insidethegamehackathon/blob/main/OFFICIAL%20
 Registered: 2026-10-14 (GitHub sign-in). Submission deadline: 2026-10-27, 11:59 PM PT. Judging to 2026-11-10.
 Entrant: solo. Target category: Best Use of Microsoft Foundry (secondary fit: Best Multi-Agent System; judges may reassign).
 
+> **Current pitch (2026-10-15, after the voice pivot and the T2 review):** a live co-commentator you can interrupt, and that can't lie: every number it says is checked against the match data before it is spoken. SPEC.md is the source of truth from here; this file keeps the original reasoning.
+
 ## Problem Statement
 
 How might we turn a live stream of football match events into intelligence a commentator would actually say (what happened, why it matters, and how to say it to *this* viewer), fast enough to sit on screen during play, and verifiable enough that a broadcaster would trust it?
@@ -13,9 +15,9 @@ How might we turn a live stream of football match events into intelligence a com
 
 Model the pipeline on how a colour commentator thinks, and make each step of that thinking a separate Microsoft Foundry agent with a distinct role, shared state, and a handoff contract:
 
-1. **Analyst agent (notice).** Consumes the event stream (passes, shots, tackles, pressure events, possession changes) and maintains the match state ledger: rolling possession, pass-quality ratings, pressing intensity, momentum windows, player speed/distance thresholds. Deterministic code does the arithmetic; the agent decides which deltas are *notable* and emits "candidate moments".
+1. **Analyst agent (notice).** Consumes the event stream (passes, shots, tackles, pressure events, possession changes) and maintains the match state ledger: rolling possession, pass-quality ratings, pressing intensity, momentum windows, player speed/distance thresholds. Deterministic code does the arithmetic; the agent decides which deltas are *notable* and emits "candidate moments". (Revised: the Analyst acts as the director, once per window, deciding what to say now and when to stay quiet.)
 2. **Commentator agent (judge).** Takes a candidate moment plus the ledger and explains *why it matters*: control vs. chaos, a pressing trap that just closed, a rhythm change after a substitution. Produces a structured insight (claim, evidence pointers into the ledger, confidence, suggested timing).
-3. **Fact-Checker agent (check yourself).** Verifies every claim in the insight against the ledger before anything reaches a screen. Rejects or rewrites unsupported claims. This is the explainability story made concrete, and it is where Foundry tracing and evaluation earn their place in the demo.
+3. **Fact-Checker agent (check yourself).** Verifies every claim in the insight against the ledger before anything reaches a screen. Rejects or rewrites unsupported claims. (Revised: two layers. Plain code checks every number against the cited evidence first; an LLM then judges only the wording.) This is the explainability story made concrete, and it is where Foundry tracing and evaluation earn their place in the demo.
 4. **Producer agent (say it for this audience).** Renders the verified insight into two outputs from one truth: (a) a timed, machine-readable overlay cue (JSON with on-screen text, metric, duration, priority) for the broadcast track; (b) a personalized narrative for the fan track, shaped by viewer profile (favourite club, favourite player, analyst vs. casual depth, language).
 
 Why this wins on the rules: it hits all five pipeline stages the rules demand (ingest, interpret, explain, render, personalize), it is explicitly multi-agent with distinct roles and handoffs, and the Fact-Checker gives judges a reason the Foundry platform (connected agents, tracing, evals) mattered rather than being a wrapper around one prompt. The one-pipeline-two-outputs shape answers the rules' own warning that "a solution that only generates metrics has no audience, and a solution that only personalizes has nothing to personalize."
@@ -41,7 +43,7 @@ In:
 - Deployment: FastAPI backend on Azure Container Apps; agents in Foundry; tracing visible in the Foundry portal for the demo.
 - Public GitHub repo with README, architecture diagram, run instructions; under-2-minute demo video on YouTube.
 
-Out of MVP (see Not Doing): video/auto-eventing, real player data, voice, more than two languages, multi-match dashboards.
+Out of MVP (see Not Doing): video/auto-eventing, real player data, more than two languages, multi-match dashboards. Voice moved into MVP on 2026-10-15 (see Not Doing); MCP moved into MVP for the voice Q&A path (judging criterion 2 names MCP).
 
 ## Not Doing (and Why)
 
