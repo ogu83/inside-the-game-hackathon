@@ -26,11 +26,17 @@ FACT_CHECKER_INSTRUCTIONS = (
 )
 
 
+def evidence_for_prompt(evidence: dict[str, float]) -> dict[str, int | float]:
+    """Integral values are shown as integers so a model copies "14", not "14.0"; the number check accepts both."""
+    return {k: int(v) if float(v).is_integer() else v for k, v in evidence.items()}
+
+
 def commentator_prompt(moment: CandidateMoment, labels: dict[str, str], feedback: list[str]) -> str:
     lines = [
         f"League: {labels.get('league', 'fictional league')}. Team: {labels.get('team')}. Opponent: {labels.get('opponent')}.",
         f"Moment kind: {labels.get('kind', moment.kind)}, minute {moment.minute}, moment_id {moment.moment_id}.",
-        f"Evidence: {json.dumps(moment.evidence)}",
+        *([f"Most involved player: {labels['top_player']} (top_player_passes)."] if labels.get("top_player") else []),
+        f"Evidence: {json.dumps(evidence_for_prompt(moment.evidence))}",
         "Return an Insight with moment_id, claim, why_it_matters, evidence_refs and confidence (0 to 1).",
     ]
     if feedback:
@@ -41,7 +47,7 @@ def commentator_prompt(moment: CandidateMoment, labels: dict[str, str], feedback
 def wording_prompt(insight: Insight, cited: dict[str, float], labels: dict[str, str]) -> str:
     return (
         f"Team: {labels.get('team')}. Opponent: {labels.get('opponent')}.\n"
-        f"Evidence cited: {json.dumps(cited)}\n"
+        f"Evidence cited: {json.dumps(evidence_for_prompt(cited))}\n"
         f"Claim: {insight.claim}\nWhy it matters: {insight.why_it_matters}\n"
         "Judge the wording only."
     )
