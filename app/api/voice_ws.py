@@ -19,7 +19,7 @@ from app.agents.fact_check_rules import check_speech, cited_evidence
 from app.agents.models import Answer, FanProfile, SpeechAudit
 from app.api.streams import MatchRun
 from app.voice.qa import new_question
-from app.voice.session import Lang, Speaker
+from app.voice.session import Lang, Speaker, SpeechError, TranscriptionError
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -68,7 +68,14 @@ async def _speak_loop(run: MatchRun, speaker: Speaker, fan: FanProfile, waiting:
             text, moment_id, question_id = item["text"], item["moment_id"], None
             await ws.send_json({"type": "speaking", "moment_id": moment_id, "text": text, "replay": item.get("replay", False), "lang": lang})
         state["interrupted"] = False
-        transcript = await speaker.speak(text, lang, ws.send_bytes)
+        try:
+            transcript = await speaker.speak(text, lang, ws.send_bytes)
+        except (SpeechError, RuntimeError) as exc:  # the line is lost, the socket and the match are not
+            log.warning("speech failed for %s: %s", moment_id or question_id, exc)
+            run.metrics["speech_errors"] += 1
+            await ws.send_json({"type": "speech_error", "moment_id": moment_id, "question_id": question_id, "reason": str(exc)})
+            state["busy"] = False
+            continue
         check = check_speech(text, transcript, cited, moment_id=moment_id or f"qa-{question_id}", profile_key=fan.key(), lang=lang)
         interrupted = state["interrupted"]
         ok = check.ok or (interrupted and not [m for m in check.mismatches if "transcript differs" not in m])
@@ -126,7 +133,13 @@ async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asynci
                 if len(pcm) < 4800:  # under 0.1 s of audio
                     await ws.send_json({"type": "question", "question": None, "reason": "no speech captured"})
                     continue
-                transcript = await speaker.transcribe(bytes(pcm), fan.language)
+                try:
+                    transcript = await speaker.transcribe(bytes(pcm), fan.language)
+                except (TranscriptionError, RuntimeError) as exc:  # reported to the page; the voice keeps working
+                    log.warning("transcription failed: %s", exc)
+                    run.metrics["transcription_errors"] += 1
+                    await ws.send_json({"type": "question", "question": None, "reason": f"could not transcribe: {exc}"})
+                    continue
                 if transcript.strip():
                     await _ask(run, ws, fan, transcript, waiting, speaker, state)
                 else:
