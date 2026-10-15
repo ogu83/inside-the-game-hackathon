@@ -62,3 +62,37 @@ section h2 .right { margin-left: auto; font-weight: 400; text-transform: none; l
 .metrics { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); margin-top: 8px; }
 .metrics b { color: var(--text); }
 .empty { color: var(--muted); font-size: 13px; }
+
+/* Phone width (about 400 px): one column, wrapped header, compact drawer rows, readable banner. */
+@media (max-width: 480px) {
+  html { font-size: 14px; }
+  header { padding: 8px 10px; gap: 6px 8px; }
+  header h1 { font-size: 16px; width: 100%; margin: 0; }
+  header label { font-size: 12px; }
+  header input { width: 52px; }
+  header button { padding: 5px 10px; font-size: 13px; }
+  .clock { font-size: 18px; margin-left: 0; }
+  .badge { font-size: 11px; padding: 2px 8px; }
+  .voicebar { padding: 6px 10px; font-size: 12px; }
+  .voicebar .audit { margin-left: 0; width: 100%; }
+  main { padding: 10px; gap: 10px; }
+  section { padding: 10px; }
+  section h2 { flex-wrap: wrap; }
+  section h2 .right { margin-left: 0; width: 100%; font-size: 11px; }
+  .cuebanner { left: 2%; right: 2%; bottom: 3%; padding: 6px 8px; gap: 8px; border-left-width: 4px; }
+  .cuebanner .headline { font-size: 13px; }
+  .cuebanner .verified { display: none; }
+  .cuebanner .metric b { font-size: 18px; }
+  .pitch .label { display: none; }
+  .ticker { font-size: 11px; max-height: 90px; }
+  .profile { grid-template-columns: 1fr; }
+  .narrative .text { font-size: 14px; }
+  .drawer { margin: 0 10px 10px; padding: 10px; }
+  .drawer h2 { flex-wrap: wrap; }
+  .row { grid-template-columns: 1fr; gap: 4px; }
+  .row .when { display: flex; gap: 8px; }
+  .row .when br { display: none; }
+  .step .who { min-width: 0; width: 100%; }
+  .metrics { font-size: 12px; gap: 4px 10px; }
+  .reason.mono { word-break: break-word; }
+}

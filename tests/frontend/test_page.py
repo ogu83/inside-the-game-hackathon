@@ -21,7 +21,12 @@ def test_page_has_the_t12_panels_and_keeps_the_voice_controls() -> None:
         assert needle in HTML, needle
     assert "\u2014" not in HTML
     assert "font-size: 2.2px" in (ROOT / "frontend" / "style.css").read_text(encoding="utf-8"), "player label stays small"
-    assert 'href="/static/style.css"' in HTML and "@media (max-width: 900px)" in (ROOT / "frontend" / "style.css").read_text(encoding="utf-8")
+    css = (ROOT / "frontend" / "style.css").read_text(encoding="utf-8")
+    assert 'href="/static/style.css"' in HTML and "@media (max-width: 900px)" in css
+    phone = css.split("@media (max-width: 480px)")[1]
+    for rule in (".profile { grid-template-columns: 1fr; }", ".row { grid-template-columns: 1fr;", ".pitch .label { display: none; }", "header h1 { font-size: 16px; width: 100%;"):
+        assert rule in phone, rule
+    assert '<meta name="viewport" content="width=device-width, initial-scale=1">' in HTML
 
 
 async def test_static_css_and_index_are_served() -> None:
