@@ -118,10 +118,11 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Verify: evaluation job submitted and polled to completion; scores visible in the Foundry portal
   - Files: app/eval/export_runs.py, app/eval/run_eval.py, docs/eval-results.md
 
-- [ ] T11: API full
+- [x] T11: API full (done 2026-10-15 in a cloud session)
   - Acceptance: adds `GET /api/stream/fan?profile=...`, `GET /api/profiles`, verdict stream for the debug drawer
   - Verify: `python -m pytest tests/api -q`; `curl -N localhost:8010/api/stream/cues`
   - Files: app/api/main.py, app/api/streams.py, tests/api/test_api.py
+  - Result: `GET /api/profiles` (clubs, players, depths, languages, active profiles), `POST /api/fan/profile` (registers a profile and re-renders the latest shown moment immediately), `GET /api/stream/fan?profile=key` (replays the latest, then follows), `GET /api/match/moments` (agent timeline per moment for the drawer: decision, attempts, verdict, checks, cue, narratives, dropped profiles, displayed state), verdict stream carries full timelines and skips, `match_end` on every channel; per-visitor live-run limit (`PUBLIC_LIVE_RUNS_PER_DAY`, X-Forwarded-For aware) and offline fallback on agent or producer errors mid-match (`fallback` event, `agent_mode` and `fallback_reason` in the report); `/api/voice` unchanged and green. 7 new tests, 153 pass in about 13 s.
 
 - [ ] T12: Frontend
   - Acceptance: SVG pitch with ball and player dots from event x/y on the delayed clock; overlay cues; fan panel with profile switch; verdict debug drawer showing rejects and the Analyst's skipped moments; no console errors; works at 1440x900 and phone width

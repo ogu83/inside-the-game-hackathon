@@ -10,6 +10,7 @@ Two modes:
 
 import asyncio
 import json
+import logging
 import os
 from collections import defaultdict
 from collections.abc import AsyncIterator, Callable
@@ -35,6 +36,7 @@ from app.simulator.run import describe
 
 DEFAULT_PROFILES = [FanProfile(language="en"), FanProfile(language="tr")]
 END = object()
+log = logging.getLogger(__name__)
 
 WorkflowFactory = Callable[[], Workflow]
 
@@ -51,6 +53,10 @@ def workflow_factory_from_env() -> WorkflowFactory:
     return template_workflow
 
 
+def template_producer() -> Producer:
+    return Producer(TemplateRenderer())
+
+
 def producer_from_env() -> Producer:
     if os.environ.get("AGENT_MODE", "template").lower() == "foundry":
         from app.agents.run_match import live_producer
@@ -65,21 +71,28 @@ class Broadcast:
     def __init__(self) -> None:
         self._queues: dict[str, set[asyncio.Queue]] = defaultdict(set)
         self.closed = False
+        self._final: tuple[str, dict[str, Any] | None] | None = None
 
     def publish(self, channel: str, event: str, data: dict[str, Any]) -> None:
         for queue in list(self._queues[channel]):
             queue.put_nowait({"event": event, "data": json.dumps(data, ensure_ascii=False)})
 
-    def close(self) -> None:
+    def close(self, final_event: str | None = None, final_data: dict[str, Any] | None = None) -> None:
+        """Send an optional final message to every channel, then end every subscription."""
         self.closed = True
-        for queues in self._queues.values():
-            for queue in queues:
+        self._final = (final_event, final_data) if final_event else None
+        for channel in list(self._queues):
+            if final_event:
+                self.publish(channel, final_event, final_data or {})
+            for queue in self._queues[channel]:
                 queue.put_nowait(END)
 
     async def subscribe(self, channel: str) -> AsyncIterator[dict[str, str]]:
         queue: asyncio.Queue = asyncio.Queue()
         self._queues[channel].add(queue)
         if self.closed:
+            if self._final:
+                queue.put_nowait({"event": self._final[0], "data": json.dumps(self._final[1] or {}, ensure_ascii=False)})
             queue.put_nowait(END)
         try:
             while True:
@@ -98,6 +111,26 @@ class Processed:
     cue: OverlayCue | None
     narratives: list[FanNarrative]
     ready_wall: float
+    producer_checks: list = field(default_factory=list)
+    dropped_profiles: list[str] = field(default_factory=list)
+    displayed: str | None = None  # "shown", "skipped", "rejected", "late" once its closing event has played
+    fallback: bool = False
+
+    def timeline(self) -> dict[str, Any]:
+        """One moment's agent timeline for the verdict drawer."""
+        r = self.result
+        return {
+            "moment_id": self.moment.moment_id, "kind": self.moment.kind, "team_id": self.moment.team_id, "minute": self.moment.minute,
+            "evidence": self.moment.evidence, "top_player_id": self.moment.top_player_id,
+            "decision": r.decision.model_dump(),
+            "attempts": [a.model_dump() for a in r.attempts],
+            "verdict": r.verdict.model_dump() if r.verdict else None,
+            "checks": [c.model_dump() for c in r.checks] + [c.model_dump() for c in self.producer_checks],
+            "cue": self.cue.model_dump() if self.cue else None,
+            "narratives": [n.model_dump() for n in self.narratives],
+            "dropped_profiles": self.dropped_profiles,
+            "displayed": self.displayed, "fallback": self.fallback,
+        }
 
 
 @dataclass
@@ -112,6 +145,8 @@ class MatchRun:
     workflow_factory: WorkflowFactory = template_workflow
     producer: Producer = field(default_factory=lambda: Producer(TemplateRenderer()))
     profiles: list[FanProfile] = field(default_factory=lambda: list(DEFAULT_PROFILES))
+    agent_mode: str = "template"
+    fallback_reason: str | None = None
 
     events: list[MatchEvent] = field(default_factory=list, init=False)
     clock: BroadcastClock | None = field(default=None, init=False)
@@ -122,6 +157,7 @@ class MatchRun:
     finished: asyncio.Event = field(default_factory=asyncio.Event, init=False)
     _tasks: list[asyncio.Task] = field(default_factory=list, init=False)
     _pacing: PacingTracker = field(default_factory=PacingTracker, init=False)
+    _late: set[str] = field(default_factory=set, init=False)
 
     @property
     def match_id(self) -> str:
@@ -159,13 +195,50 @@ class MatchRun:
     def _finish(self) -> None:
         if not self.finished.is_set():
             self.finished.set()
-            data = {"metrics": self.report()}
-            self.broadcast.publish("cues", "match_end", data)
-            self.broadcast.publish("events", "match_end", data)
-            self.broadcast.close()
+            self.broadcast.close("match_end", {"metrics": self.report()})
 
     def report(self) -> dict[str, Any]:
-        return {**dict(self.metrics), "mode": self.mode, "match_id": self.match_id}
+        return {**dict(self.metrics), "mode": self.mode, "match_id": self.match_id, "agent_mode": self.agent_mode, "fallback_reason": self.fallback_reason}
+
+    def timelines(self) -> list[dict[str, Any]]:
+        return [p.timeline() for p in sorted(self.processed.values(), key=lambda p: p.moment.window[1])]
+
+    def _fall_back(self, reason: str) -> None:
+        """Switch to offline agents for the rest of the match (design rule 7) and tell every listener once."""
+        if self.agent_mode == "template":
+            return
+        log.warning("falling back to offline agents: %s", reason)
+        self.agent_mode, self.fallback_reason = "template", reason
+        self.workflow_factory = template_workflow
+        self.producer = Producer(TemplateRenderer(), tamper=self.producer.tamper)
+        data = {"reason": reason}
+        self.broadcast.publish("cues", "fallback", data)
+        self.broadcast.publish("verdicts", "fallback", data)
+
+    def add_profile(self, profile: FanProfile) -> None:
+        if profile.key() not in {p.key() for p in self.profiles}:
+            self.profiles.append(profile)
+
+    async def render_latest(self, profile: FanProfile) -> FanNarrative | None:
+        """Re-render the most recently displayed verified moment for a (new) profile, right away."""
+        shown = [p for p in self.processed.values() if p.displayed == "shown" and p.result.verdict and p.result.verdict.insight]
+        if not shown:
+            return None
+        latest = max(shown, key=lambda p: p.moment.window[1])
+        existing = next((n for n in latest.narratives if n.profile_key == profile.key()), None)
+        if existing is None:
+            labels = moment_labels(latest.moment, (self.home, self.away))
+            output = await self.producer.render(latest.result.verdict.insight, latest.moment, labels, [profile])
+            latest.producer_checks += output.checks
+            self.metrics["number_checks"] += len(output.checks)
+            self.metrics["number_checks_failed"] += sum(not c.ok for c in output.checks)
+            if not output.narratives:
+                return None
+            existing = output.narratives[0]
+            latest.narratives.append(existing)
+        event = self.events[latest.moment.window[1] - 1]
+        self.broadcast.publish(f"fan:{profile.key()}", "narrative", {**existing.model_dump(), "minute": event.minute, "second": event.second, "replay": True})
+        return existing
 
     async def _ingest_loop(self) -> None:
         assert self.clock is not None
@@ -181,7 +254,14 @@ class MatchRun:
     async def _process(self, moment: CandidateMoment) -> None:
         labels = moment_labels(moment, (self.home, self.away))
         t = close_t(moment, self.events)
-        result = await run_moment(self.workflow_factory(), moment, labels, self._pacing.state_for(moment, t))
+        pacing = self._pacing.state_for(moment, t)
+        fallback = False
+        try:
+            result = await run_moment(self.workflow_factory(), moment, labels, pacing)
+        except Exception as exc:  # a Foundry error must not take the broadcast down
+            self._fall_back(f"agent error: {type(exc).__name__}")
+            fallback = True
+            result = await run_moment(self.workflow_factory(), moment, labels, pacing)
         self._pacing.record(result.decision, t)
         verdict = result.verdict
         self.metrics["number_checks"] += len(result.checks)
@@ -189,19 +269,29 @@ class MatchRun:
         cue, narratives = None, []
         if verdict is None:
             self.metrics["moments_skipped"] += 1
-            self.processed[moment.moment_id] = Processed(moment, result, None, [], asyncio.get_running_loop().time())
-            self.broadcast.publish("verdicts", "skipped", {"moment_id": moment.moment_id, "decision": result.decision.model_dump()})
+            done = Processed(moment, result, None, [], asyncio.get_running_loop().time(), fallback=fallback)
+            self.processed[moment.moment_id] = done
+            self.broadcast.publish("verdicts", "skipped", done.timeline())
             return
         self.metrics[f"verdict_{verdict.status}"] += 1
+        producer_checks, dropped = [], []
         if verdict.status != "rejected" and verdict.insight is not None:
-            output = await self.producer.render(verdict.insight, moment, labels, list(self.profiles))
-            cue, narratives = output.cue, output.narratives
+            try:
+                output = await self.producer.render(verdict.insight, moment, labels, list(self.profiles))
+            except Exception as exc:
+                self._fall_back(f"producer error: {type(exc).__name__}")
+                fallback = True
+                output = await self.producer.render(verdict.insight, moment, labels, list(self.profiles))
+            cue, narratives, producer_checks, dropped = output.cue, output.narratives, output.checks, output.dropped_profiles
             self.metrics["number_checks"] += len(output.checks)
             self.metrics["number_checks_failed"] += sum(not c.ok for c in output.checks)
             self.metrics["narratives_dropped"] += len(output.dropped_profiles)
             self.metrics["producer_regenerated"] += output.regenerated
-        self.processed[moment.moment_id] = Processed(moment, result, cue, narratives, asyncio.get_running_loop().time())
-        self.broadcast.publish("verdicts", "verdict", {"verdict": verdict.model_dump(), "decision": result.decision.model_dump(), "checks": [c.model_dump() for c in result.checks]})
+        done = Processed(moment, result, cue, narratives, asyncio.get_running_loop().time(), producer_checks, dropped, fallback=fallback)
+        if moment.moment_id in self._late:
+            done.displayed = "late"
+        self.processed[moment.moment_id] = done
+        self.broadcast.publish("verdicts", "verdict", done.timeline())
 
     async def _display_loop(self) -> None:
         assert self.clock is not None
@@ -219,20 +309,26 @@ class MatchRun:
         done = self.processed.get(moment.moment_id)
         if done is None:
             self.metrics["cues_dropped_late"] += 1
+            self._late.add(moment.moment_id)
             self.broadcast.publish("cues", "dropped", {"moment_id": moment.moment_id, "reason": "late", "seq": event.seq})
             return
         if done.result.verdict is None:
+            done.displayed = "skipped"
             self.broadcast.publish("cues", "skipped", {"moment_id": moment.moment_id, "reason": done.result.decision.reason, "seq": event.seq})
             return
         if done.cue is None:
+            done.displayed = "rejected"
             self.metrics["cues_rejected"] += 1
             self.broadcast.publish("cues", "dropped", {"moment_id": moment.moment_id, "reason": done.result.verdict.status, "seq": event.seq, "reasons": done.result.verdict.reasons})
             return
+        done.displayed = "shown"
         self.metrics["cues_shown"] += 1
         self.broadcast.publish("cues", "cue", {
             "cue": done.cue.model_dump(), "verdict": done.result.verdict.model_dump(),
             "narratives": [n.model_dump() for n in done.narratives], "minute": event.minute, "second": event.second,
         })
+        for narrative in done.narratives:
+            self.broadcast.publish(f"fan:{narrative.profile_key}", "narrative", {**narrative.model_dump(), "minute": event.minute, "second": event.second, "replay": False})
 
     def _event_payload(self, event: MatchEvent) -> dict[str, Any]:
         return {"seq": event.seq, "minute": event.minute, "second": event.second, "type": event.type, "team_id": event.team_id,

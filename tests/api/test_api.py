@@ -120,10 +120,11 @@ async def test_live_mode_drops_cues_that_are_not_ready_in_time() -> None:
 
 
 async def test_live_mode_shows_cues_that_are_ready_before_display() -> None:
-    run = MatchRun(seed=7, speed=500, delay_s=60, minutes=20, precompute=False)  # 2.4 s wall, 0.12 s wall delay, instant agents
+    run = MatchRun(seed=7, speed=1000, delay_s=60, minutes=10, precompute=False)  # 0.6 s wall, 0.06 s wall delay, instant agents
     await run.start()
     await asyncio.wait_for(run.finished.wait(), timeout=30)
-    expected = len(detect_all(simulate(7, minutes=20)))
+    expected = len(detect_all(simulate(7, minutes=10)))
+    assert expected >= 2
     assert run.metrics["cues_shown"] + run.metrics.get("moments_skipped", 0) == expected and run.metrics.get("cues_dropped_late", 0) == 0
     for done in run.processed.values():
         assert done.ready_wall <= run.clock.display_wall(run.events[done.moment.window[1] - 1].t)
@@ -140,3 +141,84 @@ async def test_starting_again_replaces_the_running_match(client: httpx.AsyncClie
 async def test_index_serves_the_page(client: httpx.AsyncClient) -> None:
     response = await client.get("/")
     assert response.status_code == 200 and "Matchday Companion" in response.text
+
+
+async def test_profiles_endpoint_lists_the_fictional_league(client: httpx.AsyncClient) -> None:
+    data = (await client.get("/api/profiles")).json()
+    assert [c["id"] for c in data["clubs"]] == ["kby", "iva"] and len(data["clubs"][0]["players"]) == 14
+    assert data["depths"] == ["casual", "analyst"] and data["languages"] == ["en", "tr"] and data["active"] == []
+
+
+async def test_fan_profile_re_renders_the_latest_moment_immediately(client: httpx.AsyncClient) -> None:
+    await client.post("/api/match/start", json={"seed": 30, "speed": FAST, "delay_s": 10, "minutes": 20})
+    await read_sse(client, "/api/stream/cues")  # play the whole match
+    response = await client.post("/api/fan/profile", json={"club_id": "iva", "player_id": "iva-06", "depth": "analyst", "language": "tr"})
+    body = response.json()
+    assert body["profile_key"] == "iva|iva-06|analyst|tr"
+    assert body["latest"] is not None and body["latest"]["profile_key"] == "iva|iva-06|analyst|tr" and body["latest"]["text"]
+    moments = (await client.get("/api/match/moments")).json()["moments"]
+    shown = [m for m in moments if m["displayed"] == "shown"]
+    assert shown and any(n["profile_key"] == "iva|iva-06|analyst|tr" for n in shown[-1]["narratives"])
+    assert (await client.get("/api/profiles")).json()["active"][-1] == "iva|iva-06|analyst|tr"
+
+
+async def test_fan_stream_replays_latest_then_follows_the_match(client: httpx.AsyncClient) -> None:
+    await client.post("/api/match/start", json={"seed": 30, "speed": FAST, "delay_s": 60, "minutes": 20, "precompute": True})
+    received = await read_sse(client, "/api/stream/fan?profile=-|-|casual|tr")
+    narratives = [d for e, d in received if e == "narrative"]
+    assert narratives and all(n["profile_key"] == "-|-|casual|tr" for n in narratives)
+    assert all("pası" in n["text"] or "baskı" in n["text"] for n in narratives)
+    assert received[-1][0] == "match_end"
+    assert (await client.get("/api/stream/fan?profile=nonsense")).status_code == 422
+
+
+async def test_moments_endpoint_carries_the_agent_timeline(client: httpx.AsyncClient) -> None:
+    await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "delay_s": 10, "minutes": 20})
+    await read_sse(client, "/api/stream/cues")
+    data = (await client.get("/api/match/moments")).json()
+    timeline = data["moments"][0]
+    assert {"decision", "attempts", "verdict", "checks", "cue", "narratives", "displayed", "evidence", "kind"} <= timeline.keys()
+    assert timeline["decision"]["say"] in (True, False) and timeline["displayed"] in ("shown", "skipped", "rejected", "late")
+    assert all(c["gate"] in ("insight", "producer") for c in timeline["checks"])
+    assert data["metrics"]["agent_mode"] == "template"
+
+
+async def test_verdict_stream_streams_timelines_and_skips(client: httpx.AsyncClient) -> None:
+    await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "delay_s": 60, "minutes": 20, "precompute": False})
+    received = await read_sse(client, "/api/stream/verdicts")
+    kinds = {e for e, _ in received}
+    assert "verdict" in kinds and received[-1][0] == "match_end"
+    verdicts = [d for e, d in received if e in ("verdict", "skipped")]
+    assert all("decision" in d and "attempts" in d for d in verdicts)
+
+
+class ExplodingWriter:
+    async def write(self, moment, labels, feedback):
+        raise RuntimeError("Foundry is down")
+
+
+def exploding_workflow():
+    return build_workflow(ExplodingWriter(), FactChecker(AlwaysVerifies()))
+
+
+async def test_agent_errors_fall_back_to_offline_agents_mid_match() -> None:
+    run = MatchRun(seed=7, speed=FAST, delay_s=10, minutes=20, precompute=True, workflow_factory=exploding_workflow, agent_mode="foundry")
+    await run.start()
+    await asyncio.wait_for(run.finished.wait(), timeout=10)
+    report = run.report()
+    assert report["agent_mode"] == "template" and report["fallback_reason"] == "agent error: RuntimeError"
+    assert report["cues_shown"] >= 1 and all(p.fallback for p in run.processed.values() if p.result.decision.say) is not None
+
+
+async def test_live_run_limit_falls_back_to_offline_mode(client: httpx.AsyncClient, monkeypatch) -> None:
+    from app.api.limits import RunLimiter
+
+    monkeypatch.setenv("AGENT_MODE", "foundry")
+    app.state.limiter = RunLimiter(per_day=1)
+    first = (await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "minutes": 4}, headers={"x-forwarded-for": "203.0.113.5"})).json()
+    assert first["agent_mode"] == "foundry" and first["live_runs_remaining"] == 0 and first["fallback_reason"] is None
+    second = (await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "minutes": 4}, headers={"x-forwarded-for": "203.0.113.5"})).json()
+    assert second["agent_mode"] == "template" and "limit reached" in second["fallback_reason"]
+    other = (await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "minutes": 4}, headers={"x-forwarded-for": "203.0.113.9"})).json()
+    assert other["agent_mode"] == "foundry"
+    assert RunLimiter(per_day=0).allow("anyone") and RunLimiter(per_day=0).remaining("anyone") is None
