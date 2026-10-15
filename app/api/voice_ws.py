@@ -125,6 +125,8 @@ async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asynci
             if kind == "ask" and data.get("transcript", "").strip():
                 await _ask(run, ws, fan, data["transcript"], waiting, speaker, state)
             elif kind == "talk_start":
+                if talking:
+                    continue  # a repeated press while already listening: one press, one question
                 talking, pcm = True, bytearray()
                 state["interrupted"] = True
                 await speaker.cancel()

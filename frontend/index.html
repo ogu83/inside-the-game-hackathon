@@ -76,7 +76,7 @@
         <button @click="follow" :disabled="!running">{{ profileKey ? 'switch profile' : 'follow the match for me' }}</button>
       </div>
       <div class="ask">
-        <button class="talk" :class="{ held: talking }" :disabled="!running" @mousedown.prevent="startTalk" @mouseup.prevent="stopTalk" @mouseleave="stopTalk" @touchstart.prevent="startTalk" @touchend.prevent="stopTalk">{{ talking ? 'listening, release to ask' : 'hold to talk' }}</button>
+        <button class="talk" :class="{ held: talking }" :disabled="!running" @pointerdown.prevent="pressTalk" @pointerup.prevent="releaseTalk" @pointercancel="releaseTalk" @pointerleave="releaseTalk" @keydown.space.enter.prevent="pressTalk" @keyup.space.enter.prevent="releaseTalk" @contextmenu.prevent>{{ talking ? 'listening, release to ask' : 'hold to talk' }}</button>
         <input type="text" v-model="askText" :disabled="!running" placeholder="or type a question: why does that matter? how is my player doing?" @keyup.enter="askTyped">
       </div>
       <div v-for="q in qa" :key="q.key" class="qa">
@@ -162,7 +162,15 @@ const clockText = t => `${pad(Math.floor(Math.max(0, t) / 60))}:${pad(Math.floor
 // With the voice on a question always goes over the voice socket (reconnecting first if needed) so the answer is
 // spoken and audited; text-only /api/qa is used only when the voice is off. Never a silent fallback.
 const askRoute = (voiceOn, socketOpen) => (!voiceOn ? 'text' : socketOpen ? 'socket' : 'reconnect');
-if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clockText, labelPos, askRoute };
+// One press, one question: pointer, mouse, touch and key-repeat events all funnel through this state machine.
+// press() is true only on idle -> held; release() is true only on held -> idle; result() is true once per press.
+class PushToTalk {
+  constructor() { this.held = false; this.pressId = 0; this.resultTaken = false; }
+  press(e) { if (this.held || (e && e.repeat)) return false; this.held = true; this.pressId++; this.resultTaken = false; return true; }
+  release() { if (!this.held) return false; this.held = false; return true; }
+  result() { if (this.resultTaken) return false; this.resultTaken = true; return true; }
+}
+if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clockText, labelPos, askRoute, PushToTalk };
 
 createApp({
   setup() {
@@ -292,10 +300,14 @@ createApp({
     // Push-to-talk: with the voice on, mic audio (pcm16 mono 24 kHz) streams to the socket between talk_start and talk_end
     // and Voice Live transcribes it; with the voice off, the browser's own speech recognition supplies the transcript.
     let mic = null, micCtx = null, micNode = null, recognition = null;
+    const ptt = new PushToTalk();
+    const pressTalk = (e) => { if (state.running && ptt.press(e)) startTalk(); };
+    const releaseTalk = () => { if (ptt.release()) stopTalk(); };
     const startTalk = async () => {
       if (!state.running || state.talking) return;
       if (state.voice) {
-        if (!(await ensureVoiceSocket())) return;  // voice on but no socket: say so, never fall back to text
+        if (!(await ensureVoiceSocket())) { ptt.release(); return; }  // voice on but no socket: say so, never fall back to text
+        if (!ptt.held) return;  // released while reconnecting
         state.talking = true;
         voiceWs.send(JSON.stringify({ type: 'talk_start' }));
         try {
@@ -316,8 +328,13 @@ createApp({
       state.talking = true;
       const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!Rec) { state.voiceStatus = 'no speech recognition in this browser; type your question'; state.talking = false; return; }
-      recognition = new Rec(); recognition.lang = state.profile.language === 'tr' ? 'tr-TR' : 'en-GB'; recognition.interimResults = false;
-      recognition.onresult = (e) => { state.askText = e.results[0][0].transcript; askTyped(); };
+      recognition = new Rec(); recognition.lang = state.profile.language === 'tr' ? 'tr-TR' : 'en-GB';
+      recognition.interimResults = false; recognition.continuous = false; recognition.maxAlternatives = 1;
+      recognition.onresult = (e) => {
+        const last = e.results[e.results.length - 1];
+        if (!last.isFinal || !ptt.result()) return;  // one final transcript per press, never the partials
+        state.askText = last[0].transcript; askTyped();
+      };
       recognition.onerror = (e) => { state.voiceStatus = 'speech recognition: ' + e.error; };
       recognition.start();
     };
@@ -328,7 +345,8 @@ createApp({
       if (micCtx) { micCtx.close(); micCtx = null; }
       if (mic) { mic.getTracks().forEach(t => t.stop()); mic = null; }
       if (recognition) { recognition.stop(); recognition = null; return; }
-      if (voiceWs && voiceWs.readyState === 1) setTimeout(() => voiceWs && voiceWs.send(JSON.stringify({ type: 'talk_end' })), 150);
+      const ws = voiceWs, pressId = ptt.pressId;
+      if (ws && ws.readyState === 1) setTimeout(() => { if (ws.readyState === 1 && pressId === ptt.pressId) ws.send(JSON.stringify({ type: 'talk_end' })); }, 150);
     };
     const listen = (path, handlers) => {
       const es = new EventSource(path);
@@ -416,7 +434,7 @@ createApp({
       try { const s = await (await fetch('/api/match/state')).json(); if (s.metrics) state.metrics = s.metrics; } catch (e) { /* offline between polls */ }
     }, 2000);
     loadLeague();
-    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, start, stop, follow, toggleVoice, askTyped, startTalk, stopTalk };
+    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk };
   },
 }).mount('#app');
 </script>

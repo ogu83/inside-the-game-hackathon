@@ -19,8 +19,10 @@ SCRIPT = re.findall(r"<script>(.*?)</script>", HTML, re.S)[0]
 def test_page_has_the_t12_panels_and_keeps_the_voice_controls() -> None:
     for needle in ("<svg class=\"pitch\"", "cuebanner", "Agent timeline", "follow", "toggleVoice", "speech audit", "/api/stream/fan", "/api/match/moments", "/api/voice?profile=",
                    "hold to talk", "talk_start", "talk_end", "/api/qa", "getUserMedia", "webkitSpeechRecognition", "dropPlayback",
-                   "ensureVoiceSocket", "reconnecting the voice", "text only (voice off)", "ws.onclose"):
+                   "ensureVoiceSocket", "reconnecting the voice", "text only (voice off)", "ws.onclose",
+                   "@pointerdown.prevent=\"pressTalk\"", "@pointercancel=\"releaseTalk\"", "class PushToTalk", "isFinal"):
         assert needle in HTML, needle
+    assert "@mousedown" not in HTML and "@touchstart" not in HTML, "pointer events only, so a touch is not also a mouse press"
     assert "\u2014" not in HTML
     assert "font-size: 2.2px" in (ROOT / "frontend" / "style.css").read_text(encoding="utf-8"), "player label stays small"
     css = (ROOT / "frontend" / "style.css").read_text(encoding="utf-8")
@@ -54,6 +56,13 @@ def test_page_script_parses_and_pure_helpers_behave(tmp_path: Path) -> None:
     out = subprocess.run(["node", "-e", probe, str(tmp_path / "helpers.js")], check=True, capture_output=True, text=True).stdout
     home, away, key1, key2, c0, c125, left_edge, bottom_right, middle, *routes = json.loads(out)
     assert routes == ["socket", "reconnect", "text", "text"], "voice on never falls back to text; voice off is text only"
+    ptt_probe = (
+        "const h = require(process.argv[1]); const p = new h.PushToTalk();"
+        "const out = [p.press(), p.press(), p.press({repeat: true}), p.release(), p.release(), p.press({repeat: true}), p.press(), p.result(), p.result(), p.release(), p.press(), p.result(), p.pressId];"
+        "console.log(JSON.stringify(out))"
+    )
+    out = subprocess.run(["node", "-e", ptt_probe, str(tmp_path / "helpers.js")], check=True, capture_output=True, text=True).stdout
+    assert json.loads(out) == [True, False, False, True, False, False, True, True, False, True, True, True, 3], "idle->held once, held->idle once, one result per press, key repeat ignored"
     assert left_edge["x"] >= 9 and left_edge["y"] == 34, "a long name near the left edge is pushed inside the pitch"
     assert bottom_right["x"] <= 97.7 and bottom_right["y"] == 63.6, "near the goal line and the bottom edge the label moves inside and above the ball"
     assert middle == {"x": 50, "y": 34}

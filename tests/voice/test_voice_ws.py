@@ -239,3 +239,18 @@ def test_too_short_push_to_talk_is_reported_not_answered() -> None:
                     if msg["type"] == "question":
                         assert msg["question"] is None and msg["reason"] == "no speech captured"
                         break
+
+
+def test_repeated_press_and_release_frames_make_exactly_one_question() -> None:
+    def jittery_talk(ws):
+        for _ in range(3):
+            ws.send_text(json.dumps({"type": "talk_start"}))  # pointer, mouse and touch all firing
+        ws.send_bytes(b"\x00\x01" * 12000)
+        ws.send_bytes(b"\x00\x01" * 12000)
+        for _ in range(3):
+            ws.send_text(json.dumps({"type": "talk_end"}))
+
+    messages, speaker, metrics, _ = ask_over_voice("iva|iva-06|casual|en", jittery_talk)
+    questions = [m for m in messages if m["type"] == "question" and m.get("question")]
+    assert len(questions) == 1 and speaker.transcribed == [48000], "one transcription with all the audio, one question"
+    assert metrics["questions_answered"] == 1 and metrics["answers_spoken"] == 1
