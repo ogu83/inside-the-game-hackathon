@@ -43,3 +43,13 @@ async def test_live_director_decides_with_pacing_state() -> None:
     director = workflow.executors["analyst"].director if hasattr(workflow, "executors") else None
     if isinstance(director, FoundryDirector):
         assert not (await director.decide(moments[0], {"team": "Kestrel Bay", "opponent": "Ironvale"}, crowded)).say
+
+
+async def test_live_wording_judge_catches_a_swapped_team_and_planted_run_reaches_zero() -> None:
+    from app.agents.run_match import run_planted
+
+    results, report = await run_planted(30, 4, live=True)
+    swapped = report.insights["swapped_team"]
+    assert swapped.planted >= 1
+    assert report.reached_air == 0, report.reached_air_detail
+    assert report.caught == report.planted

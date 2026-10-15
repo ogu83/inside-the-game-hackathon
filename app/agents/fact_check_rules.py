@@ -167,6 +167,38 @@ def check_numbers(
     return NumberCheck(gate=gate, moment_id=moment_id, profile_key=profile_key, text=text, ok=not mismatches, mismatches=mismatches)
 
 
+Coverage = str  # "all" | "any" | "none"
+
+
+def check_rendering(
+    text: str,
+    cited: dict[str, float],
+    source_text: str,
+    *,
+    moment_id: str,
+    profile_key: str | None,
+    lang: Lang = "en",
+    source_lang: Lang = "en",
+    coverage: Coverage = "any",
+) -> NumberCheck:
+    """Producer gate: the number check plus a coverage rule against the verified source text.
+
+    coverage "all": every number in the source must survive (analyst depth, overlay metric);
+    "any": at least one must survive when the source has numbers (casual depth); "none": no rule.
+    A dropped number is reported as "dropped number: 14".
+    """
+    check = check_numbers(text, cited, gate="producer", moment_id=moment_id, profile_key=profile_key, lang=lang)
+    if coverage == "none":
+        return check
+    source = {round(n.value, 6) for n in extract_numbers(source_text, source_lang)}
+    present = {round(n.value, 6) for n in extract_numbers(text, lang)}
+    missing = sorted(source - present)
+    if (coverage == "all" and missing) or (coverage == "any" and source and not present):
+        dropped = [f"dropped number: {m:g}" for m in missing]
+        return check.model_copy(update={"ok": False, "mismatches": check.mismatches + dropped})
+    return check
+
+
 def cited_evidence(insight: Insight, moment: CandidateMoment) -> tuple[dict[str, float], list[str]]:
     """Split the insight's refs into (cited values, unknown keys)."""
     cited = {k: moment.evidence[k] for k in insight.evidence_refs if k in moment.evidence}

@@ -5,7 +5,7 @@
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
 ## Current task
-Phase B on cloud branch `claude/gracious-goldberg-9u16ny` (merged with main at fd2f5fe, S5 included): T3 to T7 done; working T8, T6, T7, T8, T9, T11, T12 with offline agents. T10, T10b, T12b, T13 stay local.
+Phase B on cloud branch `claude/gracious-goldberg-9u16ny` (merged with main at fd2f5fe, S5 included): T3 to T8 done; working T9, T6, T7, T8, T9, T11, T12 with offline agents. T10, T10b, T12b, T13 stay local.
 
 ## Done
 - [x] Registered for the hackathon (2026-10-14), confirmation email received
@@ -31,6 +31,7 @@ Phase B on cloud branch `claude/gracious-goldberg-9u16ny` (merged with main at f
 - [x] 2026-10-15 (cloud session): T5 ledger metrics (pass difficulty, shots, xG, pressing regains, player and team stats). 122 tests.
 - [x] 2026-10-15 (cloud session): T6 pressing_trap detector, Detector Protocol, possession omitted under 3 minutes. 127 tests.
 - [x] 2026-10-15 (cloud session): T7 director per moment (DirectorDecision, PacingState, RuleDirector, FoundryDirector) as the workflow start executor. 134 tests, 2 live.
+- [x] 2026-10-15 (cloud session): T8 planted-error harness (insight and rendering corruptions incl. Turkish, per-kind report, coverage rule), spec proposals in docs/reviews/2026-10-15-phase-b-notes.md. 141 tests, 3 live.
 
 ## Next step
 Locally (T3 and later not started): `python -m pytest tests/agents -q -m live`, `python -m app.agents.run_match --seed 7 --live --jsonl runs/7.jsonl`, merge `claude/gracious-goldberg-9u16ny` into `main`; S5 (thin voice) by Oct 19; then Phase B in todo.md order (T3 with the cut scope, T10b can start from the S3 run log as soon as the live run log exists). Then deepen T3 to T12b. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.

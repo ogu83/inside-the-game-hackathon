@@ -3,6 +3,7 @@
     python -m app.agents.run_match --seed 7                      # offline template agents, summary
     python -m app.agents.run_match --seed 7 --jsonl runs/7.jsonl # also write one row per moment (eval export)
     python -m app.agents.run_match --seed 7 --live               # Foundry agents from .env (costs tokens)
+    python -m app.agents.run_match --seed 30 --plant 6           # planted-error report (6 insights + 6 renderings)
 """
 
 import argparse
@@ -12,8 +13,9 @@ from pathlib import Path
 
 from app.agents.analyst import PacingTracker, RuleDirector
 from app.agents.fact_checker import FactChecker
-from app.agents.fakes import AlwaysVerifies, TemplateCommentator
-from app.agents.models import MomentResult
+from app.agents.fakes import AlwaysVerifies, TemplateCommentator, TemplateProducer
+from app.agents.models import FanProfile, MomentResult
+from app.agents.planted_errors import PlantedReport, PlantingCommentator, PlantPlan, make_tamper, report_insights
 from app.agents.workflow import build_workflow, run_moment
 from app.ledger.models import CandidateMoment
 from app.ledger.state import detect_all
@@ -26,8 +28,68 @@ def close_t(moment: CandidateMoment, events: list[MatchEvent]) -> int:
     return events[moment.window[1] - 1].t
 
 
-def offline_workflow():
-    return build_workflow(TemplateCommentator(), FactChecker(AlwaysVerifies()), RuleDirector())
+def offline_workflow(writer=None):
+    return build_workflow(writer or TemplateCommentator(), FactChecker(AlwaysVerifies()), RuleDirector())
+
+
+PLANT_PROFILES = [FanProfile(language="en", depth="casual"), FanProfile(language="tr", depth="analyst")]
+
+
+async def run_planted(seed: int, n: int, live: bool = False, plan_seed: int = 0) -> tuple[list[MomentResult], PlantedReport]:
+    """Plant n insight errors and n rendering errors (en and tr) on a seeded match and report what the gates caught."""
+    events = simulate(seed)
+    moments = detect_all(events)
+    plan = PlantPlan.build([m.moment_id for m in moments], n, n, plan_seed)
+    if live:
+        workflow = live_workflow()
+        workflow.executors["commentator"].writer = PlantingCommentator(workflow.executors["commentator"].writer, plan, plan_seed)
+        commentator = workflow.executors["commentator"].writer
+    else:
+        commentator = PlantingCommentator(TemplateCommentator(), plan, plan_seed)
+        workflow = offline_workflow(commentator)
+    tampered: list[tuple[str, str, str]] = []
+    producer = TemplateProducer(tamper=make_tamper(plan, plan_seed, tampered))
+    pacing = PacingTracker()
+    results: list[MomentResult] = []
+    report = PlantedReport()
+    for moment in moments:
+        t = close_t(moment, events)
+        result = await run_moment(workflow, moment, pacing=pacing.state_for(moment, t))
+        pacing.record(result.decision, t)
+        results.append(result)
+        verdict = result.verdict
+        if verdict is None or verdict.status == "rejected" or verdict.insight is None:
+            continue
+        labels = moment_labels_for(moment)
+        before = len(tampered)
+        cue, check = producer.cue(verdict.insight, moment, labels)
+        outcomes = [(check, cue is not None)]
+        for profile in PLANT_PROFILES:
+            narrative, check = producer.narrative(verdict.insight, moment, labels, profile)
+            outcomes.append((check, narrative is not None))
+        for check, shown in outcomes:
+            kind = _tampered_kind(tampered[before:], check)
+            if kind is None:
+                continue
+            count = report.renderings[kind]
+            count.planted += 1
+            if not check.ok:
+                count.caught_by_code += 1
+            elif shown:
+                count.reached_air += 1
+                report.reached_air_detail.append(f"rendering ({kind}) {check.profile_key}: {check.text}")
+    report_insights(results, commentator, report)
+    return results, report
+
+
+def _tampered_kind(tampered: list[tuple[str, str, str]], check) -> str | None:
+    return next((kind for m, p, kind in tampered if m == check.moment_id and p == check.profile_key), None)
+
+
+def moment_labels_for(moment: CandidateMoment) -> dict[str, str]:
+    from app.ledger.labels import moment_labels
+
+    return moment_labels(moment)
 
 
 def live_workflow():
@@ -96,7 +158,16 @@ def main() -> None:
     parser.add_argument("--live", action="store_true", help="use Foundry agents from .env")
     parser.add_argument("--jsonl", type=Path, default=None)
     parser.add_argument("--limit", type=int, default=None, help="only the first N moments")
+    parser.add_argument("--plant", type=int, default=0, help="plant N insight and N rendering errors and report the catches")
     args = parser.parse_args()
+    if args.plant:
+        results, report = asyncio.run(run_planted(args.seed, args.plant, args.live))
+        print(json.dumps(summary(results)))
+        print(json.dumps(report.as_dict()))
+        print(report.headline())
+        for line in report.reached_air_detail:
+            print("REACHED AIR:", line)
+        return
     results = asyncio.run(run(args.seed, args.live, args.jsonl, args.limit))
     for r in results:
         v = r.verdict

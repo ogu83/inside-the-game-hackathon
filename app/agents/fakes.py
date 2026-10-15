@@ -4,9 +4,13 @@ Offline mode is what `docker compose` runs without Azure and what the API falls 
 model is configured. Every template still passes through the same Fact-Checker gates.
 """
 
-from app.agents.fact_check_rules import check_numbers
+from collections.abc import Callable
+
+from app.agents.fact_check_rules import check_rendering
 from app.agents.models import FanNarrative, FanProfile, Insight, NumberCheck, OverlayCue, WordingVerdict
 from app.ledger.models import CandidateMoment
+
+Tamper = Callable[[str, str, str, str], str]  # (text, moment_id, profile_key, lang) -> text; test hook for planted errors
 
 
 def _n(value: float) -> str:
@@ -83,7 +87,17 @@ class ScriptedJudge:
 
 
 class TemplateProducer:
-    """Renders a verified insight as an OverlayCue and a FanNarrative per profile, each number-checked."""
+    """Renders a verified insight as an OverlayCue and a FanNarrative per profile, each number-checked.
+
+    `tamper` is applied to every rendering before its gate; the planted-error harness uses it to
+    corrupt renderings (changed number, dropped number, number as a word) and count what the gate catches.
+    """
+
+    def __init__(self, tamper: Tamper | None = None) -> None:
+        self.tamper = tamper
+
+    def _text(self, text: str, moment_id: str, profile_key: str, lang: str) -> str:
+        return self.tamper(text, moment_id, profile_key, lang) if self.tamper else text
 
     def cue(self, insight: Insight, moment: CandidateMoment, labels: dict[str, str]) -> tuple[OverlayCue | None, NumberCheck]:
         e = moment.evidence
@@ -104,7 +118,13 @@ class TemplateProducer:
         else:
             cue = OverlayCue(moment_id=moment.moment_id, show_at_seq=moment.window[1], duration_s=8, priority="low", headline=_shorten(insight.claim, 60))
         cited = {k: e[k] for k in insight.evidence_refs if k in e}
-        check = check_numbers(f"{cue.headline} {cue.metric_value or ''}", cited, gate="producer", moment_id=moment.moment_id, profile_key="broadcast")
+        source = f"{cue.headline} {cue.metric_value or ''}"
+        if cue.metric_value is not None:
+            cue = cue.model_copy(update={"metric_value": self._text(cue.metric_value, moment.moment_id, "broadcast", "en")})
+        headline = self._text(cue.headline, moment.moment_id, "broadcast", "en")
+        cue = cue.model_copy(update={"headline": headline[:60]})
+        text = f"{cue.headline} {cue.metric_value or ''}"
+        check = check_rendering(text, cited, source, moment_id=moment.moment_id, profile_key="broadcast", coverage="all")
         return (cue if check.ok else None), check
 
     def narrative(self, insight: Insight, moment: CandidateMoment, labels: dict[str, str], profile: FanProfile) -> tuple[FanNarrative | None, NumberCheck]:
@@ -120,6 +140,8 @@ class TemplateProducer:
         else:
             text = insight.claim if profile.depth == "casual" else f"{insight.claim} {insight.why_it_matters}"
         cited = {k: e[k] for k in insight.evidence_refs if k in e}
-        check = check_numbers(text, cited, gate="producer", moment_id=moment.moment_id, profile_key=profile.key(), lang=profile.language)
+        text = self._text(text, moment.moment_id, profile.key(), profile.language)
+        coverage = "all" if profile.depth == "analyst" else "any"
+        check = check_rendering(text, cited, insight.claim, moment_id=moment.moment_id, profile_key=profile.key(), lang=profile.language, coverage=coverage)
         narrative = FanNarrative(moment_id=moment.moment_id, profile_key=profile.key(), text=text)
         return (narrative if check.ok else None), check
