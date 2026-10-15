@@ -30,7 +30,7 @@ class FakeSpeaker:
         self.closed = True
 
 
-def run_voice(speaker: FakeSpeaker | None, lang: str = "en") -> tuple[list[dict], int, dict]:
+def run_voice(speaker: FakeSpeaker | None, lang: str = "en", profile: str | None = None, after_match: bool = False) -> tuple[list[dict], int, dict]:
     """Start a short precomputed match, listen on /api/voice until it closes."""
     messages, audio_bytes = [], 0
     with TestClient(app) as client:
@@ -41,7 +41,13 @@ def run_voice(speaker: FakeSpeaker | None, lang: str = "en") -> tuple[list[dict]
         app.state.workflow_factory = template_workflow
         started = client.post("/api/match/start", json={"seed": 7, "speed": 600, "delay_s": 120, "minutes": 10})
         assert started.status_code == 200
-        with client.websocket_connect(f"/api/voice?lang={lang}") as ws:
+        if after_match:
+            with client.stream("GET", "/api/stream/cues") as stream:
+                for line in stream.iter_lines():
+                    if line.startswith("event: match_end"):
+                        break
+        query = f"profile={profile}" if profile else f"lang={lang}"
+        with client.websocket_connect(f"/api/voice?{query}") as ws:
             while True:
                 try:
                     message = ws.receive()
@@ -106,3 +112,34 @@ def test_narrative_for_picks_the_listener_language(lang: str, expected: str | No
     ]}
     found = narrative_for(cue, lang)
     assert (found["text"] if found else None) == expected
+
+
+def test_profile_switch_speaks_the_re_rendered_latest_line_first_in_the_new_language() -> None:
+    speaker = FakeSpeaker()
+    messages, audio_bytes, metrics = run_voice(speaker, profile="iva|iva-06|analyst|tr", after_match=True)
+    speaking = [m for m in messages if m["type"] == "speaking"]
+    assert speaking and speaking[0]["replay"] is True and speaking[0]["lang"] == "tr"
+    assert speaker.spoken[0][1] == "tr" and ("pası" in speaker.spoken[0][0] or "baskı" in speaker.spoken[0][0])
+    spoken = [m for m in messages if m["type"] == "spoken"]
+    assert spoken[0]["check"]["ok"] and spoken[0]["check"]["profile_key"] == "iva|iva-06|analyst|tr" and spoken[0]["check"]["gate"] == "speech"
+    assert audio_bytes >= 2 * len(CHUNK) and metrics["speech_checks"] >= 1
+
+
+def test_voice_follows_the_profile_during_the_match() -> None:
+    speaker = FakeSpeaker()
+    messages, _, _ = run_voice(speaker, profile="kby|-|analyst|en")
+    spoken = [m for m in messages if m["type"] == "spoken"]
+    assert spoken and all(m["check"]["profile_key"] == "kby|-|analyst|en" for m in spoken)
+    assert {lang for _, lang in speaker.spoken} == {"en"}
+
+
+def test_bad_profile_key_is_reported() -> None:
+    with TestClient(app) as client:
+        async def factory():
+            return FakeSpeaker()
+
+        app.state.speaker_factory = factory
+        app.state.workflow_factory = template_workflow
+        client.post("/api/match/start", json={"seed": 7, "speed": 600, "delay_s": 120, "minutes": 4})
+        with client.websocket_connect("/api/voice?profile=nonsense") as ws:
+            assert ws.receive_json()["type"] == "unavailable"

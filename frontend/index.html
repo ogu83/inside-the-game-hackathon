@@ -186,12 +186,13 @@ createApp({
     const closeVoice = () => { if (voiceWs) { voiceWs.close(); voiceWs = null; } state.speaking = ''; };
     const connectVoice = () => {
       closeVoice(); state.voiceStatus = '';
-      voiceWs = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/voice?lang=${state.profile.language}`);
+      const key = encodeURIComponent(state.profileKey || profileKeyOf(state.profile));
+      voiceWs = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/voice?profile=${key}`);
       voiceWs.binaryType = 'arraybuffer';
       voiceWs.onmessage = (m) => {
         if (m.data instanceof ArrayBuffer) return playPcm(m.data);
         const msg = JSON.parse(m.data);
-        if (msg.type === 'speaking') state.speaking = msg.text;
+        if (msg.type === 'speaking') { state.speaking = msg.text; playHead = 0; }
         if (msg.type === 'spoken') { state.speechChecks++; if (!msg.check.ok) state.speechMismatches++; }
         if (msg.type === 'unavailable') state.voiceStatus = 'voice unavailable: ' + msg.reason;
       };

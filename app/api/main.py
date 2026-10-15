@@ -110,10 +110,9 @@ async def profiles() -> dict:
 
 def parse_profile_key(key: str) -> FanProfile:
     try:
-        club, player, depth, language = key.split("|")
-        return FanProfile(club_id=None if club == "-" else club, player_id=None if player == "-" else player, depth=depth, language=language)  # type: ignore[arg-type]
-    except (ValueError, TypeError) as exc:
-        raise HTTPException(status_code=422, detail=f"bad profile key {key!r}: expected club|player|depth|language") from exc
+        return FanProfile.from_key(key)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/api/fan/profile")

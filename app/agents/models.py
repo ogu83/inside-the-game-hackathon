@@ -54,6 +54,15 @@ class FanProfile(BaseModel):
     def key(self) -> str:
         return f"{self.club_id or '-'}|{self.player_id or '-'}|{self.depth}|{self.language}"
 
+    @classmethod
+    def from_key(cls, key: str) -> "FanProfile":
+        """Inverse of key(); raises ValueError on a malformed key."""
+        parts = key.split("|")
+        if len(parts) != 4:
+            raise ValueError(f"bad profile key {key!r}: expected club|player|depth|language")
+        club, player, depth, language = parts
+        return cls(club_id=None if club == "-" else club, player_id=None if player == "-" else player, depth=depth, language=language)  # type: ignore[arg-type]
+
 
 class FanNarrative(BaseModel):
     moment_id: str

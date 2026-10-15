@@ -1,9 +1,11 @@
-"""WebSocket /api/voice: speaks each displayed cue's narrative in the listener's language.
+"""WebSocket /api/voice: speaks the listener's profile narrative for each displayed cue, verbatim.
 
-Binary frames are pcm16 mono audio at 24 kHz; text frames are JSON status messages:
-{"type": "speaking", ...}, {"type": "spoken", "check": NumberCheck}, {"type": "skipped", ...},
-{"type": "unavailable", "reason": ...}. Lines are spoken one at a time; if cues arrive faster
-than speech, only the newest waiting line is kept (a stale line is worse than a skipped one).
+Query: `profile=<club|player|depth|language>` (preferred) or `lang=en|tr` (a default profile in that language).
+On connect the latest shown moment is re-rendered for the profile and spoken first, so a profile switch is
+heard at once (demo scene 3). Binary frames are pcm16 mono audio at 24 kHz; text frames are JSON status
+messages: {"type": "speaking", ...}, {"type": "spoken", "check": NumberCheck}, {"type": "skipped", ...},
+{"type": "unavailable", "reason": ...}. Lines are spoken one at a time; if cues arrive faster than speech,
+only the newest waiting line is kept (a stale line is worse than a skipped one).
 """
 
 import asyncio
@@ -14,6 +16,7 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.agents.fact_check_rules import check_speech, cited_evidence
+from app.agents.models import FanProfile
 from app.api.streams import MatchRun
 from app.voice.session import Lang, Speaker
 
@@ -23,16 +26,20 @@ DONE = object()
 
 
 def narrative_for(cue: dict[str, Any], lang: str) -> dict[str, Any] | None:
+    """Kept for the cue payload shape: the narrative in `lang` among a cue's narratives."""
     return next((n for n in cue["narratives"] if n["profile_key"].rsplit("|", 1)[-1] == lang), None)
 
 
-async def _feed(run: MatchRun, lang: str, waiting: asyncio.Queue, ws: WebSocket) -> None:
-    async for item in run.broadcast.subscribe("cues"):
-        if item["event"] != "cue":
+async def _feed(run: MatchRun, fan: FanProfile, waiting: asyncio.Queue, ws: WebSocket) -> None:
+    channel = f"fan:{fan.key()}"
+    queue = run.broadcast.open(channel)  # register before rendering, so nothing published meanwhile is lost
+    latest = await run.render_latest(fan)
+    if latest is not None:
+        waiting.put_nowait({**run.narrative_payload(latest, replay=True)})
+    async for item in run.broadcast.drain(channel, queue):
+        if item["event"] != "narrative":
             continue
-        narrative = narrative_for(json.loads(item["data"]), lang)
-        if narrative is None:
-            continue
+        narrative = json.loads(item["data"])
         while not waiting.empty():
             stale = waiting.get_nowait()
             run.metrics["speech_skipped_stale"] += 1
@@ -46,7 +53,7 @@ async def _speak_loop(run: MatchRun, speaker: Speaker, lang: Lang, waiting: asyn
         processed = run.processed[narrative["moment_id"]]
         insight = processed.result.verdict.insight
         cited, _ = cited_evidence(insight, processed.moment)
-        await ws.send_json({"type": "speaking", "moment_id": narrative["moment_id"], "text": narrative["text"]})
+        await ws.send_json({"type": "speaking", "moment_id": narrative["moment_id"], "text": narrative["text"], "replay": narrative.get("replay", False), "lang": lang})
         transcript = await speaker.speak(narrative["text"], lang, ws.send_bytes)
         check = check_speech(narrative["text"], transcript, cited, moment_id=narrative["moment_id"],
                              profile_key=narrative["profile_key"], lang=lang)
@@ -64,7 +71,7 @@ async def _until_disconnect(ws: WebSocket) -> None:
 
 
 @router.websocket("/api/voice")
-async def voice(ws: WebSocket, lang: Lang = "en") -> None:
+async def voice(ws: WebSocket, lang: Lang = "en", profile: str | None = None) -> None:
     await ws.accept()
     run: MatchRun | None = ws.app.state.run
     factory = ws.app.state.speaker_factory
@@ -73,11 +80,18 @@ async def voice(ws: WebSocket, lang: Lang = "en") -> None:
         await ws.send_json({"type": "unavailable", "reason": reason})
         await ws.close()
         return
+    try:
+        fan = FanProfile.from_key(profile) if profile else FanProfile(language=lang)
+    except ValueError as exc:
+        await ws.send_json({"type": "unavailable", "reason": str(exc)})
+        await ws.close()
+        return
+    run.add_profile(fan)
     speaker = await factory()
     waiting: asyncio.Queue = asyncio.Queue()
     tasks = [
-        asyncio.create_task(_feed(run, lang, waiting, ws)),
-        asyncio.create_task(_speak_loop(run, speaker, lang, waiting, ws)),
+        asyncio.create_task(_feed(run, fan, waiting, ws)),
+        asyncio.create_task(_speak_loop(run, speaker, fan.language, waiting, ws)),
         asyncio.create_task(_until_disconnect(ws)),
     ]
     try:

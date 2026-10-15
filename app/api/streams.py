@@ -311,11 +311,28 @@ class MatchRun:
                 await asyncio.sleep(max(0.0, self.clock.display_wall(event.t) - loop.time()))
                 self.broadcast.publish("events", "event", self._event_payload(event))
                 for moment in self.pending_by_seq.pop(event.seq, []):
-                    self._show_or_drop(moment, event)
+                    await self._show_or_drop(moment, event)
         finally:
             self._finish()
 
-    def _show_or_drop(self, moment: CandidateMoment, event: MatchEvent) -> None:
+    async def _ensure_narratives(self, done: Processed) -> None:
+        """Profiles registered after a moment was processed (precompute mode) get their rendering at display time."""
+        insight = done.result.verdict.insight if done.result.verdict else None
+        if insight is None or done.cue is None:
+            return
+        have = {n.profile_key for n in done.narratives} | set(done.dropped_profiles)
+        missing = [p for p in self.profiles if p.key() not in have]
+        if not missing:
+            return
+        output = await self.producer.render(insight, done.moment, moment_labels(done.moment, (self.home, self.away)), missing)
+        done.narratives += output.narratives
+        done.dropped_profiles += output.dropped_profiles
+        done.producer_checks += output.checks
+        self.metrics["number_checks"] += len(output.checks)
+        self.metrics["number_checks_failed"] += sum(not c.ok for c in output.checks)
+        self.metrics["narratives_dropped"] += len(output.dropped_profiles)
+
+    async def _show_or_drop(self, moment: CandidateMoment, event: MatchEvent) -> None:
         done = self.processed.get(moment.moment_id)
         if done is None:
             self.metrics["cues_dropped_late"] += 1
@@ -331,6 +348,7 @@ class MatchRun:
             self.metrics["cues_rejected"] += 1
             self.broadcast.publish("cues", "dropped", {"moment_id": moment.moment_id, "reason": done.result.verdict.status, "seq": event.seq, "reasons": done.result.verdict.reasons})
             return
+        await self._ensure_narratives(done)
         done.displayed = "shown"
         self.metrics["cues_shown"] += 1
         self.broadcast.publish("cues", "cue", {
