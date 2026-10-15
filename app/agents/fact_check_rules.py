@@ -169,6 +169,40 @@ def check_numbers(
 
 Coverage = str  # "all" | "any" | "none"
 
+# Evaluative words a commentator reaches for; each needs a supporting number. Checked by code as a hint for layer 2.
+EVALUATIVE_WORDS: dict[str, str] = {
+    "control": "possession", "controlled": "possession", "controlling": "possession", "dominate": "possession", "dominated": "possession",
+    "dominating": "possession", "dominant": "possession", "dominance": "possession", "dictate": "possession", "dictated": "possession",
+    "dictating": "possession", "tempo": "possession", "one-way": "possession", "in charge": "possession", "bossing": "possession",
+    "suffocating": "pressing", "relentless": "pressing", "swarmed": "pressing", "overwhelmed": "pressing",
+    "clinical": "shot", "ruthless": "shot", "devastating": "shot", "unstoppable": "shot",
+}
+
+
+def wording_support(cited: dict[str, float]) -> set[str]:
+    """Which evaluative families the cited numbers support."""
+    support: set[str] = set()
+    if cited.get("team_possession_pct_window", 0.0) >= 60 and cited.get("window_minutes", 0.0) >= 3:
+        support.add("possession")
+    if cited.get("pass_streak_passes", 0.0) >= 15:
+        support.add("possession")
+    if cited.get("pressing_trap_pressures", 0.0) >= 3 or cited.get("team_regains_last_10min", 0.0) >= 3:
+        support.add("pressing")
+    if cited.get("pass_streak_ended_in_shot", 0.0) >= 1:
+        support.add("shot")
+    return support
+
+
+def wording_flags(text: str, cited: dict[str, float]) -> list[str]:
+    """Evaluative words in `text` that no cited number supports, e.g. ["'dominated' (needs possession evidence)"]."""
+    lowered = text.casefold()
+    supported = wording_support(cited)
+    flags = []
+    for word, family in EVALUATIVE_WORDS.items():
+        if re.search(rf"\b{re.escape(word)}\b", lowered) and family not in supported:
+            flags.append(f"'{word}' (needs {family} evidence)")
+    return flags
+
 
 def check_rendering(
     text: str,

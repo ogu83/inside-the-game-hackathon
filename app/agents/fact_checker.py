@@ -2,7 +2,7 @@
 
 from typing import Any, Protocol
 
-from app.agents.fact_check_rules import check_insight, cited_evidence
+from app.agents.fact_check_rules import check_insight, cited_evidence, wording_flags
 from app.agents.models import Insight, NumberCheck, Verdict, WordingVerdict
 from app.agents.prompts import wording_prompt
 from app.ledger.models import CandidateMoment
@@ -17,7 +17,8 @@ class FoundryWordingJudge:
         self.agent = agent
 
     async def judge(self, insight: Insight, cited: dict[str, float], labels: dict[str, str]) -> WordingVerdict:
-        response = await self.agent.run(wording_prompt(insight, cited, labels), options={"response_format": WordingVerdict})
+        flags = wording_flags(f"{insight.claim} {insight.why_it_matters}", cited)
+        response = await self.agent.run(wording_prompt(insight, cited, labels, flags), options={"response_format": WordingVerdict})
         value = response.value
         return WordingVerdict.model_validate(value if isinstance(value, dict) else value.model_dump())
 

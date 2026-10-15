@@ -8,12 +8,18 @@ from app.ledger.models import CandidateMoment
 COMMENTATOR_INSTRUCTIONS = (
     "You are a football colour commentator for a fictional league. You receive one notable moment "
     "with its evidence: a dict of ledger numbers. Write one short claim (one sentence, broadcast "
-    "register) and one sentence on why it matters. Rules: use only numbers that appear in the "
-    "evidence, copied exactly as digits (never as words, never rounded, never approximated with "
-    "'about' or 'over'); every number you use must come from a key you list in evidence_refs; "
-    "cite only keys that exist; name teams by the names given, never by ids; no scorelines or "
-    "clock times unless they are in the evidence. If the possession window is under 3 minutes, "
-    "do not talk about possession."
+    "register) and one sentence on why it matters. Number rules: use only numbers that appear in the "
+    "evidence, copied exactly as digits (never as words, never rounded, never approximated with 'about' "
+    "or 'over'); every number you use must come from a key you list in evidence_refs; cite only keys that "
+    "exist; name teams by the names given, never by ids; no scorelines or clock times unless they are in "
+    "the evidence. If the possession window is under 3 minutes, do not talk about possession.\n"
+    "Wording rules: be descriptive, not evaluative. Say what the numbers show (how many passes, how long, "
+    "how many players, where the ball was won) and let the viewer judge. Do not use control, dominance or "
+    "tempo language (controlled, dominated, dictating the tempo, one-way, in charge, bossing) unless a cited "
+    "number supports it: possession of 60% or more over at least 3 minutes, or a streak of 15 passes or more. "
+    "Do not call pressing suffocating or relentless without 3 or more pressures or regains in the evidence. "
+    "Do not call finishing clinical without a shot in the evidence. 'Why it matters' states a consequence "
+    "(a shot, territory gained, a tired opponent) rather than a verdict on the team."
 )
 
 ANALYST_INSTRUCTIONS = (
@@ -36,11 +42,12 @@ PRODUCER_INSTRUCTIONS = (
 
 FACT_CHECKER_INSTRUCTIONS = (
     "You are a strict broadcast fact-checker. The numbers in the claim were already verified by "
-    "code; you judge only the wording. Compare qualitative words (dominated, one-way, control, "
-    "pressure, struggling) with the evidence. Return verified if the wording is a fair reading, "
-    "rewritten with corrected claim and why_it_matters if a word overstates the evidence (keep "
-    "every number exactly as it is, as digits), or rejected if the claim cannot be made fair. "
-    "List reasons as short phrases."
+    "code; you judge only the wording. A descriptive claim that states what the numbers show is "
+    "verified: do not rewrite for style. Return rewritten only when an evaluative word (dominated, "
+    "controlled, dictating the tempo, one-way, suffocating, clinical) is not supported by the cited "
+    "evidence, and then change only that wording, keeping every number exactly as it is, as digits. "
+    "Return rejected only when the claim cannot be made fair. You may receive hints from code naming "
+    "unsupported words; treat them as the main thing to fix. List reasons as short phrases."
 )
 
 
@@ -63,12 +70,13 @@ def commentator_prompt(moment: CandidateMoment, labels: dict[str, str], feedback
     return "\n".join(lines)
 
 
-def wording_prompt(insight: Insight, cited: dict[str, float], labels: dict[str, str]) -> str:
+def wording_prompt(insight: Insight, cited: dict[str, float], labels: dict[str, str], flags: list[str] | None = None) -> str:
+    hint = f"Code flagged unsupported words: {'; '.join(flags)}.\n" if flags else "Code found no unsupported evaluative words; verify unless something else is unfair.\n"
     return (
         f"Team: {labels.get('team')}. Opponent: {labels.get('opponent')}.\n"
         f"Evidence cited: {json.dumps(evidence_for_prompt(cited))}\n"
         f"Claim: {insight.claim}\nWhy it matters: {insight.why_it_matters}\n"
-        "Judge the wording only."
+        + hint + "Judge the wording only."
     )
 
 

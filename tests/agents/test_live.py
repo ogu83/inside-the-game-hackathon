@@ -83,3 +83,27 @@ async def test_live_producer_renders_two_profiles_in_two_languages() -> None:
     assert len(output.narratives) + len(output.dropped_profiles) == 4
     assert len(output.narratives) >= 3, output.checks
     assert all(c.gate == "producer" for c in output.checks)
+
+
+async def test_live_first_attempt_verified_rate() -> None:
+    """Most claims should pass both layers unchanged at attempt 1 (descriptive prompt, hinted judge)."""
+    from app.agents.analyst import PacingTracker
+    from app.agents.run_match import close_t
+
+    events = simulate(30)
+    moments = detect_all(events)[:10]
+    workflow = live_workflow()
+    pacing = PacingTracker()
+    said, first_attempt_verified, lines = 0, 0, []
+    for moment in moments:
+        result = await run_moment(workflow, moment, pacing=pacing.state_for(moment, close_t(moment, events)))
+        pacing.record(result.decision, close_t(moment, events))
+        if result.verdict is None:
+            continue
+        said += 1
+        v = result.verdict
+        first_attempt_verified += v.status == "verified" and v.attempt == 1
+        lines.append(f"{v.status:9} attempt {v.attempt} L{'1' if v.layer == 'code' else '2'}: {result.attempts[0].claim}  {v.reasons}")
+    rate = first_attempt_verified / said if said else 0.0
+    assert said >= 5, lines
+    assert rate >= 0.7, f"first-attempt verified rate {rate:.0%} ({first_attempt_verified}/{said})\n" + "\n".join(lines)
