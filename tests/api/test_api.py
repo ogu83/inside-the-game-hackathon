@@ -172,6 +172,17 @@ async def test_fan_stream_replays_latest_then_follows_the_match(client: httpx.As
     assert (await client.get("/api/stream/fan?profile=nonsense")).status_code == 422
 
 
+async def test_fan_stream_sends_the_replay_first_even_after_the_match(client: httpx.AsyncClient) -> None:
+    await client.post("/api/match/start", json={"seed": 30, "speed": FAST, "delay_s": 10, "minutes": 20})
+    await read_sse(client, "/api/stream/cues")
+    received = await read_sse(client, "/api/stream/fan?profile=kby|kby-07|analyst|en")
+    assert [e for e, _ in received] == ["narrative", "match_end"]
+    replay = received[0][1]
+    assert replay["replay"] is True and replay["profile_key"] == "kby|kby-07|analyst|en" and replay["minute"] >= 1
+    moments = (await client.get("/api/match/moments")).json()["moments"]
+    assert any(n["profile_key"] == "kby|kby-07|analyst|en" for m in moments for n in m["narratives"])
+
+
 async def test_moments_endpoint_carries_the_agent_timeline(client: httpx.AsyncClient) -> None:
     await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "delay_s": 10, "minutes": 20})
     await read_sse(client, "/api/stream/cues")

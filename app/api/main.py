@@ -1,12 +1,14 @@
 """FastAPI app: start a match, stream delayed events and verified cues over SSE."""
 
 import asyncio
+import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
@@ -47,6 +49,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Matchday Companion", lifespan=lifespan)
 app.include_router(voice_router)
+app.mount("/static", StaticFiles(directory=FRONTEND.parent), name="static")
 
 
 def default_delay() -> float:
@@ -182,9 +185,11 @@ async def stream_fan(profile: str) -> EventSourceResponse:
     channel = f"fan:{fan.key()}"
 
     async def stream():
-        subscription = run.broadcast.subscribe(channel)
-        await run.render_latest(fan)
-        async for item in subscription:
+        queue = run.broadcast.open(channel)
+        latest = await run.render_latest(fan)
+        if latest is not None:
+            yield {"event": "narrative", "data": json.dumps(run.narrative_payload(latest, replay=True), ensure_ascii=False)}
+        async for item in run.broadcast.drain(channel, queue):
             yield item
 
     return EventSourceResponse(stream())

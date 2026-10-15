@@ -87,13 +87,17 @@ class Broadcast:
             for queue in self._queues[channel]:
                 queue.put_nowait(END)
 
-    async def subscribe(self, channel: str) -> AsyncIterator[dict[str, str]]:
+    def open(self, channel: str) -> asyncio.Queue:
+        """Register a subscriber queue now, so nothing published before iteration starts is lost."""
         queue: asyncio.Queue = asyncio.Queue()
         self._queues[channel].add(queue)
         if self.closed:
             if self._final:
                 queue.put_nowait({"event": self._final[0], "data": json.dumps(self._final[1] or {}, ensure_ascii=False)})
             queue.put_nowait(END)
+        return queue
+
+    async def drain(self, channel: str, queue: asyncio.Queue) -> AsyncIterator[dict[str, str]]:
         try:
             while True:
                 item = await queue.get()
@@ -102,6 +106,9 @@ class Broadcast:
                 yield item
         finally:
             self._queues[channel].discard(queue)
+
+    def subscribe(self, channel: str) -> AsyncIterator[dict[str, str]]:
+        return self.drain(channel, self.open(channel))
 
 
 @dataclass
@@ -236,9 +243,12 @@ class MatchRun:
                 return None
             existing = output.narratives[0]
             latest.narratives.append(existing)
-        event = self.events[latest.moment.window[1] - 1]
-        self.broadcast.publish(f"fan:{profile.key()}", "narrative", {**existing.model_dump(), "minute": event.minute, "second": event.second, "replay": True})
         return existing
+
+    def narrative_payload(self, narrative: FanNarrative, replay: bool) -> dict[str, Any]:
+        done = self.processed[narrative.moment_id]
+        event = self.events[done.moment.window[1] - 1]
+        return {**narrative.model_dump(), "minute": event.minute, "second": event.second, "replay": replay}
 
     async def _ingest_loop(self) -> None:
         assert self.clock is not None
@@ -328,7 +338,7 @@ class MatchRun:
             "narratives": [n.model_dump() for n in done.narratives], "minute": event.minute, "second": event.second,
         })
         for narrative in done.narratives:
-            self.broadcast.publish(f"fan:{narrative.profile_key}", "narrative", {**narrative.model_dump(), "minute": event.minute, "second": event.second, "replay": False})
+            self.broadcast.publish(f"fan:{narrative.profile_key}", "narrative", self.narrative_payload(narrative, replay=False))
 
     def _event_payload(self, event: MatchEvent) -> dict[str, Any]:
         return {"seq": event.seq, "minute": event.minute, "second": event.second, "type": event.type, "team_id": event.team_id,

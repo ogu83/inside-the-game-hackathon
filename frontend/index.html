@@ -4,97 +4,169 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Matchday Companion</title>
-<style>
-  :root { --bg: #0e1116; --panel: #171c24; --text: #e8edf3; --muted: #8a94a3; --accent: #5ad17a; --warn: #f0a848; --bad: #e35d6a; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
-  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid #2a313c; }
-  header h1 { font-size: 18px; margin: 0 16px 0 0; }
-  header label { color: var(--muted); font-size: 13px; }
-  header input { width: 64px; margin-left: 4px; background: var(--panel); color: var(--text); border: 1px solid #2a313c; border-radius: 4px; padding: 4px 6px; }
-  button { background: var(--accent); color: #06220f; border: 0; border-radius: 6px; padding: 6px 14px; font-weight: 600; cursor: pointer; }
-  button.secondary { background: #2a313c; color: var(--text); }
-  .badge { background: #2a313c; color: var(--text); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
-  .badge.delay { background: #2f3a2f; color: var(--accent); }
-  main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; }
-  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
-  section { background: var(--panel); border-radius: 10px; padding: 12px 14px; min-height: 240px; }
-  section h2 { font-size: 14px; color: var(--muted); margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; }
-  .ticker { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.5; }
-  .ticker div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cue { border-left: 4px solid var(--accent); background: #1d2430; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
-  .cue .time { color: var(--muted); font-size: 12px; }
-  .cue .headline { font-size: 18px; font-weight: 700; margin: 2px 0; }
-  .cue .metric { color: var(--accent); font-size: 13px; }
-  .cue .narrative { color: #c8d0da; font-size: 13px; margin-top: 4px; }
-  .cue.dropped { border-left-color: var(--bad); opacity: .8; }
-  .voicebar { display: flex; gap: 16px; padding: 6px 16px; font-size: 13px; color: var(--muted); border-bottom: 1px solid #2a313c; }
-  .voicebar .audit { margin-left: auto; color: var(--accent); }
-  .metrics { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; color: var(--muted); }
-  .metrics b { color: var(--text); }
-  .clock { font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 700; }
-</style>
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <div id="app">
   <header>
     <h1>Matchday Companion</h1>
     <label>seed <input type="number" v-model.number="form.seed"></label>
-    <label>speed <input type="number" step="0.5" v-model.number="form.speed"></label>
-    <label>delay s <input type="number" v-model.number="form.delay_s"></label>
+    <label>speed <input type="number" step="0.5" min="0.5" v-model.number="form.speed"></label>
+    <label>delay s <input type="number" min="0" v-model.number="form.delay_s"></label>
     <button @click="start" :disabled="starting">{{ starting ? 'starting' : 'start match' }}</button>
     <button class="secondary" @click="stop" v-if="running">stop</button>
     <button class="secondary" @click="toggleVoice">{{ voice ? 'voice on' : 'voice off' }}</button>
     <span class="badge delay" v-if="clock">broadcast delay {{ clock.delay_s }} s</span>
-    <span class="badge" v-if="mode">{{ mode }} mode</span>
+    <span class="badge" v-if="mode">{{ mode }} playback</span>
+    <span class="badge" :class="{ warn: agentMode === 'template' && fallbackReason }" v-if="agentMode" :title="fallbackReason || ''">{{ agentMode === 'foundry' ? 'Foundry agents' : 'offline agents' }}<span v-if="fallbackReason">: {{ fallbackReason }}</span></span>
     <span class="clock" v-if="clock">{{ playbackClock }}</span>
   </header>
   <div class="voicebar" v-if="voice">
     <span v-if="voiceStatus">{{ voiceStatus }}</span>
-    <span v-else-if="speaking">speaking: {{ speaking }}</span>
+    <span v-else-if="speaking">speaking ({{ profile.language }}): {{ speaking }}</span>
     <span v-else>voice ready, waiting for the next verified line</span>
     <span class="audit">speech audit {{ speechChecks - speechMismatches }}/{{ speechChecks }} exact</span>
   </div>
   <main>
     <section>
-      <h2>Broadcast feed (delayed)</h2>
+      <h2>Broadcast <span class="right">{{ teams.home }} attack left to right, {{ teams.away }} right to left</span></h2>
+      <div class="pitchwrap">
+        <svg class="pitch" viewBox="0 0 105 68" aria-label="pitch">
+          <rect class="mark" x="0.5" y="0.5" width="104" height="67"/>
+          <line class="mark" x1="52.5" y1="0.5" x2="52.5" y2="67.5"/>
+          <circle class="mark" cx="52.5" cy="34" r="9.15"/>
+          <rect class="mark" x="0.5" y="13.84" width="16.5" height="40.32"/>
+          <rect class="mark" x="88" y="13.84" width="16.5" height="40.32"/>
+          <rect class="mark" x="0.5" y="24.84" width="5.5" height="18.32"/>
+          <rect class="mark" x="99" y="24.84" width="5.5" height="18.32"/>
+          <text class="teamname" x="2" y="66">{{ teams.home }}</text>
+          <text class="teamname" x="103" y="66" text-anchor="end">{{ teams.away }}</text>
+          <polyline class="trail" v-if="trail.length > 1" :points="trail.map(p => p.join(',')).join(' ')"/>
+          <circle class="ball" v-if="ball" :cx="ball.x" :cy="ball.y" r="1.1" :fill="ball.home ? 'var(--home)' : 'var(--away)'"/>
+          <text class="label" v-if="ball" :x="Math.min(Math.max(ball.x, 8), 97)" :y="Math.min(ball.y + 4.2, 66)" text-anchor="middle">{{ ball.label }}</text>
+        </svg>
+        <div class="cuebanner" :class="{ away: !banner.home }" v-if="banner" :style="{ opacity: banner.visible ? 1 : 0 }">
+          <div>
+            <div class="headline">{{ banner.headline }}</div>
+            <div class="verified">verified by {{ banner.layer }} layer, attempt {{ banner.attempt }} &middot; {{ banner.time }}</div>
+          </div>
+          <div class="metric" v-if="banner.metric_value"><b>{{ banner.metric_value }}</b><span>{{ banner.metric_label }}</span></div>
+        </div>
+      </div>
       <div class="ticker">
         <div v-for="e in ticker" :key="e.seq">{{ e.text }}</div>
-        <div v-if="!ticker.length" style="color: var(--muted)">Start a match to see the feed.</div>
+        <div v-if="!ticker.length" class="empty">Start a match to see the feed. Seed 30 is the demo seed.</div>
       </div>
     </section>
     <section>
-      <h2>Overlay cues (verified)</h2>
-      <div v-for="c in cues" :key="c.key" :class="['cue', c.dropped ? 'dropped' : '']">
-        <div class="time">{{ c.time }} <span v-if="c.dropped">dropped: {{ c.reason }}</span><span v-else>{{ c.verdict }}</span></div>
-        <div class="headline" v-if="!c.dropped">{{ c.headline }}</div>
-        <div class="metric" v-if="c.metric_value">{{ c.metric_label }}: {{ c.metric_value }}</div>
-        <div class="narrative" v-for="n in c.narratives" :key="n.profile_key">{{ n.text }}</div>
+      <h2>Your co-commentator <span class="right" v-if="profileKey">{{ profileKey }}</span></h2>
+      <div class="profile">
+        <label>club
+          <select v-model="profile.club_id"><option :value="null">no club</option><option v-for="c in league.clubs" :key="c.id" :value="c.id">{{ c.short }}</option></select>
+        </label>
+        <label>player
+          <select v-model="profile.player_id"><option :value="null">no player</option><option v-for="p in players" :key="p.id" :value="p.id">{{ p.number }} {{ p.name }}</option></select>
+        </label>
+        <label>depth
+          <select v-model="profile.depth"><option value="casual">casual</option><option value="analyst">analyst</option></select>
+        </label>
+        <label>language
+          <select v-model="profile.language"><option value="en">English</option><option value="tr">Türkçe</option></select>
+        </label>
+        <button @click="follow" :disabled="!running">{{ profileKey ? 'switch profile' : 'follow the match for me' }}</button>
       </div>
-      <div class="metrics" v-if="metrics">
-        <span v-for="(v, k) in metrics" :key="k">{{ k }} <b>{{ v }}</b></span>
+      <div class="speaking" v-if="voice && speaking">speaking: {{ speaking }}</div>
+      <div v-for="n in narratives" :key="n.key" :class="['narrative', n.replay ? 'replay' : '']">
+        <div class="meta"><span>{{ n.time }}</span><span v-if="n.replay">latest moment, re-rendered for this profile</span></div>
+        <div class="text">{{ n.text }}</div>
       </div>
+      <div v-if="!narratives.length" class="empty">Pick your club, player, depth and language, then follow. The latest moment is re-rendered for you at once.</div>
     </section>
   </main>
+  <div class="drawer">
+    <h2 style="font-size:13px;color:var(--muted);margin:0 0 8px;text-transform:uppercase;letter-spacing:.04em;display:flex;gap:8px;align-items:center">
+      Agent timeline
+      <span class="right" style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400">{{ filtered.length }} of {{ timeline.length }} moments</span>
+      <button class="secondary" @click="drawerOpen = !drawerOpen">{{ drawerOpen ? 'hide' : 'show' }}</button>
+    </h2>
+    <div class="metrics" v-if="metrics">
+      <span v-for="k in metricKeys" :key="k">{{ k.replaceAll('_', ' ') }} <b>{{ metrics[k] }}</b></span>
+      <span v-if="speechChecks">speech audit <b>{{ speechChecks - speechMismatches }}/{{ speechChecks }}</b></span>
+    </div>
+    <template v-if="drawerOpen">
+      <div class="chips">
+        <span v-for="f in filters" :key="f" :class="['chip', filter === f ? 'on' : '']" @click="filter = f">{{ f }}</span>
+      </div>
+      <div class="row" v-for="m in filtered" :key="m.moment_id">
+        <div class="when">{{ String(m.minute).padStart(2, '0') }}' <br><span class="mono">{{ m.kind.replaceAll('_', ' ') }}</span><br>{{ teamName(m.team_id) }}</div>
+        <div>
+          <div class="step"><span class="who">Analyst</span>
+            <span :class="['tag', m.decision.say ? 'ok' : 'skip']">{{ m.decision.say ? 'say' : 'stay quiet' }}</span>
+            <span class="tag" v-if="m.decision.angle">angle: {{ m.decision.angle }}</span>
+            <span class="reason">{{ m.decision.reason }}</span></div>
+          <div class="step" v-for="(a, i) in m.attempts" :key="i"><span class="who">Commentator {{ i + 1 }}</span><span class="reason">{{ a.claim }}</span></div>
+          <div class="step" v-if="m.verdict"><span class="who">Fact-Checker</span>
+            <span :class="['tag', m.verdict.status === 'rejected' ? 'bad' : 'ok']">{{ m.verdict.status }}</span>
+            <span class="tag">{{ m.verdict.layer }} layer, attempt {{ m.verdict.attempt }}</span>
+            <span class="reason" v-if="m.verdict.reasons.length">{{ m.verdict.reasons.join('; ') }}</span></div>
+          <div class="step" v-for="(c, i) in m.checks.filter(c => !c.ok)" :key="'c' + i"><span class="who">{{ c.gate }} gate</span>
+            <span class="tag bad">failed</span><span class="reason mono">{{ c.mismatches.join('; ') }}</span></div>
+          <div class="step" v-if="m.verdict && m.verdict.status !== 'rejected'"><span class="who">Producer</span>
+            <span :class="['tag', m.cue ? 'ok' : 'bad']">{{ m.cue ? 'cue: ' + m.cue.headline : 'cue dropped' }}</span>
+            <span class="tag ok" v-for="n in m.narratives" :key="n.profile_key" :title="n.text">{{ n.profile_key }}</span>
+            <span class="tag bad" v-for="p in m.dropped_profiles" :key="'d' + p">dropped {{ p }}</span></div>
+          <div class="step"><span class="who">Air</span>
+            <span :class="['tag', m.displayed === 'shown' ? 'ok' : m.displayed === 'late' ? 'late' : m.displayed === 'skipped' ? 'skip' : m.displayed ? 'bad' : '']">{{ m.displayed || 'pending' }}</span>
+            <span class="tag warn" v-if="m.fallback">offline agents</span>
+            <span class="reason mono">{{ evidenceLine(m.evidence) }}</span></div>
+        </div>
+      </div>
+      <div v-if="!timeline.length" class="empty">Moments appear here as the agents work on them: the director's call, each Commentator attempt, the Fact-Checker verdict, every failed number check and what reached air.</div>
+    </template>
+  </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.5.13/vue.global.prod.min.js"></script>
 <script>
-const { createApp, reactive, computed, toRefs } = Vue;
+const { createApp, reactive, computed, toRefs, watch } = Vue;
+// Pure helpers (also exercised by tests/frontend): events are in the acting team's frame; the away team is mirrored.
+const toPitch = (ev, homeId) => {
+  const home = ev.team_id === homeId;
+  const x = home ? ev.x : 100 - ev.x, y = home ? ev.y : 100 - ev.y;
+  return { x: x * 1.05, y: y * 0.68, home };
+};
+const profileKeyOf = p => `${p.club_id || '-'}|${p.player_id || '-'}|${p.depth}|${p.language}`;
+const pad = n => String(n).padStart(2, '0');
+const clockText = t => `${pad(Math.floor(Math.max(0, t) / 60))}:${pad(Math.floor(Math.max(0, t) % 60))}`;
+if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clockText };
+
 createApp({
   setup() {
     const state = reactive({
-      form: { seed: 7, speed: 1, delay_s: 20 }, starting: false, running: false, clock: null, mode: null,
-      ticker: [], cues: [], metrics: null, sources: [], startedAt: null,
+      form: { seed: 30, speed: 1, delay_s: 20 }, starting: false, running: false, clock: null, mode: null, agentMode: null, fallbackReason: null,
+      teams: { home: 'Home', away: 'Away', homeId: 'kby' }, league: { clubs: [] }, playerNames: {},
+      ticker: [], ball: null, trail: [], banner: null, narratives: [], metrics: null, timeline: [], drawerOpen: true, filter: 'all',
+      profile: { club_id: null, player_id: null, depth: 'casual', language: 'en' }, profileKey: null,
+      sources: [], fanSource: null, startedAt: null,
       voice: false, voiceStatus: '', speaking: '', speechChecks: 0, speechMismatches: 0,
     });
-    const pad = n => String(n).padStart(2, '0');
-    const playbackClock = computed(() => {
-      if (!state.clock) return '';
-      const t = Math.max(0, state.clock.playback_t);
-      return `${pad(Math.floor(t / 60))}:${pad(Math.floor(t % 60))}`;
-    });
-    const closeSources = () => { state.sources.forEach(s => s.close()); state.sources = []; };
-    // Voice: pcm16 mono 24 kHz chunks from /api/voice, scheduled back to back on one AudioContext.
+    const filters = ['all', 'said', 'skipped', 'rejected', 'late', 'failed checks'];
+    const metricKeys = ['cues_shown', 'moments_skipped', 'cues_rejected', 'cues_dropped_late', 'number_checks', 'number_checks_failed', 'narratives_dropped', 'producer_regenerated', 'speech_checks', 'speech_mismatches'];
+    const playbackClock = computed(() => state.clock ? clockText(state.clock.playback_t) : '');
+    const players = computed(() => { const c = state.league.clubs.find(c => c.id === state.profile.club_id); return c ? c.players : []; });
+    const filtered = computed(() => state.timeline.filter(m => {
+      if (state.filter === 'said') return m.decision.say;
+      if (state.filter === 'skipped') return !m.decision.say;
+      if (state.filter === 'rejected') return m.verdict && m.verdict.status === 'rejected';
+      if (state.filter === 'late') return m.displayed === 'late';
+      if (state.filter === 'failed checks') return m.checks.some(c => !c.ok);
+      return true;
+    }));
+    const teamName = id => { const c = state.league.clubs.find(c => c.id === id); return c ? c.short : id; };
+    const evidenceLine = e => Object.entries(e || {}).map(([k, v]) => `${k}=${v}`).join('  ');
+    watch(() => state.profile.club_id, () => { state.profile.player_id = null; });
+
+    const closeSources = () => { state.sources.forEach(s => s.close()); state.sources = []; if (state.fanSource) { state.fanSource.close(); state.fanSource = null; } };
+    // Voice: pcm16 mono 24 kHz chunks from /api/voice, scheduled back to back on one AudioContext. Speaks only approved text.
     let audioCtx = null, playHead = 0, voiceWs = null, carry = null;
     const playPcm = (buffer) => {
       let bytes = new Uint8Array(buffer);
@@ -114,7 +186,7 @@ createApp({
     const closeVoice = () => { if (voiceWs) { voiceWs.close(); voiceWs = null; } state.speaking = ''; };
     const connectVoice = () => {
       closeVoice(); state.voiceStatus = '';
-      voiceWs = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/voice?lang=en`);
+      voiceWs = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/voice?lang=${state.profile.language}`);
       voiceWs.binaryType = 'arraybuffer';
       voiceWs.onmessage = (m) => {
         if (m.data instanceof ArrayBuffer) return playPcm(m.data);
@@ -131,27 +203,81 @@ createApp({
       await audioCtx.resume();
       if (state.running) connectVoice();
     };
+
     const listen = (path, handlers) => {
       const es = new EventSource(path);
       Object.entries(handlers).forEach(([event, fn]) => es.addEventListener(event, e => fn(JSON.parse(e.data))));
       es.addEventListener('match_end', e => { state.metrics = JSON.parse(e.data).metrics; state.running = false; es.close(); });
       state.sources.push(es);
+      return es;
+    };
+    const upsertTimeline = (m) => {
+      const i = state.timeline.findIndex(t => t.moment_id === m.moment_id);
+      if (i >= 0) state.timeline.splice(i, 1, { ...state.timeline[i], ...m }); else state.timeline.unshift(m);
+    };
+    const markDisplayed = (momentId, displayed) => { const t = state.timeline.find(t => t.moment_id === momentId); if (t) t.displayed = displayed; };
+    let bannerTimer = null;
+    const showBanner = (c) => {
+      const team = c.cue.moment_id.split('-')[0];
+      state.banner = { headline: c.cue.headline, metric_label: c.cue.metric_label, metric_value: c.cue.metric_value, layer: c.verdict.layer, attempt: c.verdict.attempt,
+        time: `${pad(c.minute)}:${pad(c.second)}`, home: timelineTeam(c.cue.moment_id) === state.teams.homeId, visible: true };
+      clearTimeout(bannerTimer);
+      bannerTimer = setTimeout(() => { if (state.banner) state.banner.visible = false; }, (c.cue.duration_s || 8) * 1000);
+      void team;
+    };
+    const timelineTeam = id => { const t = state.timeline.find(t => t.moment_id === id); return t ? t.team_id : state.teams.homeId; };
+    const onEvent = (e) => {
+      state.ticker.unshift(e); state.ticker.splice(8);
+      if (e.type === 'half_time' || e.type === 'full_time' || e.type === 'substitution') return;
+      const p = toPitch(e, state.teams.homeId);
+      state.ball = { ...p, label: e.player_id ? (state.playerNames[e.player_id] || '') : '' };
+      state.trail.push([p.x.toFixed(1), p.y.toFixed(1)]); if (state.trail.length > 8) state.trail.shift();
+      if (e.type === 'kickoff' || e.type === 'possession_change') state.trail = [[p.x.toFixed(1), p.y.toFixed(1)]];
+    };
+    const loadLeague = async () => {
+      const data = await (await fetch('/api/profiles')).json();
+      state.league = data;
+      state.playerNames = Object.fromEntries(data.clubs.flatMap(c => c.players.map(p => [p.id, p.name])));
     };
     const start = async () => {
       state.starting = true; closeSources();
-      state.ticker = []; state.cues = []; state.metrics = null;
+      state.ticker = []; state.ball = null; state.trail = []; state.banner = null; state.narratives = []; state.metrics = null; state.timeline = [];
+      state.speechChecks = 0; state.speechMismatches = 0; state.profileKey = null;
+      if (!state.league.clubs.length) await loadLeague();
       const res = await fetch('/api/match/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.form) });
       const info = await res.json();
-      state.clock = info.clock; state.mode = info.mode; state.running = true; state.starting = false;
+      const [homeId, awayId] = info.match_id.split('-');
+      state.teams = { homeId, home: teamName(homeId), away: teamName(awayId) };
+      state.clock = info.clock; state.mode = info.mode; state.agentMode = info.agent_mode; state.fallbackReason = info.fallback_reason;
+      state.running = true; state.starting = false;
       state.startedAt = performance.now() / 1000 - info.clock.event_t / info.clock.speed;
-      state.speechChecks = 0; state.speechMismatches = 0;
+      const existing = await (await fetch('/api/match/moments')).json();
+      state.timeline = (existing.moments || []).slice().reverse();
       if (state.voice) connectVoice();
-      listen('/api/stream/events', { event: e => { state.ticker.unshift(e); state.ticker.splice(18); } });
+      listen('/api/stream/events', { event: onEvent });
       listen('/api/stream/cues', {
-        cue: c => state.cues.unshift({ key: c.cue.moment_id, time: `${pad(c.minute)}:${pad(c.second)}`, headline: c.cue.headline, metric_label: c.cue.metric_label,
-          metric_value: c.cue.metric_value, narratives: c.narratives, verdict: `${c.verdict.status} by ${c.verdict.layer} layer, attempt ${c.verdict.attempt}` }),
-        dropped: d => state.cues.unshift({ key: d.moment_id, time: `seq ${d.seq}`, dropped: true, reason: d.reason + (d.reasons ? ': ' + d.reasons.join('; ') : ''), narratives: [] }),
+        cue: c => { showBanner(c); markDisplayed(c.cue.moment_id, 'shown'); },
+        dropped: d => markDisplayed(d.moment_id, d.reason === 'late' ? 'late' : 'rejected'),
+        skipped: d => markDisplayed(d.moment_id, 'skipped'),
+        fallback: f => { state.agentMode = 'template'; state.fallbackReason = f.reason; },
       });
+      listen('/api/stream/verdicts', { verdict: upsertTimeline, skipped: upsertTimeline, fallback: f => { state.agentMode = 'template'; state.fallbackReason = f.reason; } });
+      await follow();
+    };
+    const follow = async () => {
+      if (!state.running) return;
+      const key = profileKeyOf(state.profile);
+      if (state.fanSource) { state.fanSource.close(); state.fanSource = null; }
+      state.narratives = []; state.profileKey = key;
+      const es = new EventSource(`/api/stream/fan?profile=${encodeURIComponent(key)}`);
+      es.addEventListener('narrative', e => {
+        const n = JSON.parse(e.data);
+        state.narratives.unshift({ key: n.moment_id + n.profile_key + (n.replay ? 'r' : ''), text: n.text, replay: n.replay, time: `${pad(n.minute)}:${pad(n.second)}` });
+        state.narratives.splice(12);
+      });
+      es.addEventListener('match_end', () => es.close());
+      state.fanSource = es;
+      if (state.voice) connectVoice();
     };
     const stop = async () => { await fetch('/api/match/stop', { method: 'POST' }); state.running = false; closeSources(); closeVoice(); };
     setInterval(() => {
@@ -159,7 +285,12 @@ createApp({
       const eventT = (performance.now() / 1000 - state.startedAt) * state.clock.speed;
       state.clock = { ...state.clock, event_t: eventT, playback_t: eventT - state.clock.delay_s };
     }, 250);
-    return { ...toRefs(state), playbackClock, start, stop, toggleVoice };
+    setInterval(async () => {
+      if (!state.running) return;
+      try { const s = await (await fetch('/api/match/state')).json(); if (s.metrics) state.metrics = s.metrics; } catch (e) { /* offline between polls */ }
+    }, 2000);
+    loadLeague();
+    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, start, stop, follow, toggleVoice };
   },
 }).mount('#app');
 </script>
