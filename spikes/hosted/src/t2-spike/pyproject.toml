@@ -1,10 +1,12 @@
 [project]
 name = "t2-spike"
 version = "0.1.0"
-description = "A Microsoft Foundry hosted agent built with Microsoft Agent Framework."
+description = "T2 spike: Commentator to Fact-Checker workflow hosted on Microsoft Foundry."
 requires-python = ">=3.13"
 dependencies = [
-    "agent-framework-foundry",
-    "agent-framework-foundry-hosting>=1.0.0b260813",
+    "agent-framework-core==1.21.0",
+    "agent-framework-foundry==1.14.1",
+    "agent-framework-foundry-hosting==1.0.0b261008",
+    "python-dotenv",
     "debugpy",
 ]

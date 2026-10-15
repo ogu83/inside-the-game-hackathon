@@ -12,7 +12,6 @@ import os
 import sys
 from pathlib import Path
 
-from agent_framework import Message
 from agent_framework_foundry import FoundryChatClient
 from azure.identity.aio import DefaultAzureCredential
 from dotenv import load_dotenv
@@ -47,7 +46,7 @@ async def main(inject_false: bool, trace: bool) -> None:
             client("SMALL_MODEL_DEPLOYMENT").as_agent(name="fact_checker", instructions=FACT_CHECKER_INSTRUCTIONS),
         )
         request = "inject-false" if inject_false else "comment on this moment"
-        result = await workflow.run([Message(role="user", contents=[request])])
+        result = await workflow.run(request)
         for output in result.get_outputs():
             print(f"FINAL: {output}")
 

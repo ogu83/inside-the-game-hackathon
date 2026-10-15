@@ -21,7 +21,7 @@ services:
             resources:
                 cpu: "0.5"
                 memory: 1Gi
-        description: T2 spike: Commentator to Fact-Checker workflow with a conditional reject edge.
+        description: "T2 spike, Commentator to Fact-Checker workflow with a conditional reject edge."
         kind: hosted
         metadata:
             tags:

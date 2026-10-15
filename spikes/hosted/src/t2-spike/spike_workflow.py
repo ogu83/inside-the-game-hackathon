@@ -1,16 +1,18 @@
 """T2 spike workflow: Commentator -> Fact-Checker with a conditional reject edge.
 
 Shared by the local runner (spikes/two_agents.py) and the Foundry Hosted Agent (main.py).
-The start executor takes list[Message] so the workflow can be exposed with `.as_agent()`.
-A user message containing JSON is used as the evidence dict; otherwise EVIDENCE is used.
-A message containing "inject-false" replaces the first draft with a contradicted claim.
+The start executor takes the request text. JSON inside it is used as the evidence dict,
+otherwise EVIDENCE is used. Text containing "inject-false" replaces the first draft with a
+contradicted claim, to prove the reject edge fires.
+
+Messages between executors are plain JSON dicts: hosted checkpoint storage only
+deserializes allow-listed types, so custom dataclasses fail the run there.
 """
 
 import json
-from dataclasses import dataclass, field
 from typing import Literal
 
-from agent_framework import Agent, Executor, Message, Workflow, WorkflowBuilder, WorkflowContext, handler
+from agent_framework import Agent, Executor, Workflow, WorkflowBuilder, WorkflowContext, handler
 from pydantic import BaseModel
 
 EVIDENCE = {
@@ -42,27 +44,7 @@ class Check(BaseModel):
     reasons: list[str]
 
 
-@dataclass
-class Draft:
-    evidence: dict
-    insight: Insight
-    attempt: int
-
-
-@dataclass
-class Verdict:
-    evidence: dict
-    status: str
-    insight: Insight
-    attempt: int
-    reasons: list[str] = field(default_factory=list)
-
-    def summary(self) -> str:
-        return f"{self.status} after {self.attempt} attempt(s): {self.insight.claim}"
-
-
-def parse_request(messages: list[Message]) -> tuple[dict, bool]:
-    text = messages[-1].text if messages else ""
+def parse_request(text: str) -> tuple[dict, bool]:
     inject_false = "inject-false" in text
     start, end = text.find("{"), text.rfind("}")
     if start != -1 and end > start:
@@ -73,27 +55,28 @@ def parse_request(messages: list[Message]) -> tuple[dict, bool]:
     return EVIDENCE, inject_false
 
 
+def is_rejected(message: dict) -> bool:
+    return message.get("status") == "rejected"
+
+
 class Commentator(Executor):
     def __init__(self, agent: Agent) -> None:
         super().__init__(id="commentator")
         self.agent = agent
 
     @handler
-    async def start(self, messages: list[Message], ctx: WorkflowContext[Draft]) -> None:
-        evidence, inject_false = parse_request(messages)
+    async def start(self, text: str, ctx: WorkflowContext[dict]) -> None:
+        evidence, inject_false = parse_request(text)
         if inject_false:
             insight = Insight(claim=FALSE_CLAIM, evidence_refs=["away_shots_last_10min"])
         else:
             insight = await self._write(evidence, [])
-        print(f"[commentator] attempt 1: {insight.claim}  refs={insight.evidence_refs}")
-        await ctx.send_message(Draft(evidence, insight, attempt=1))
+        await self._send(ctx, evidence, insight, attempt=1)
 
     @handler
-    async def retry(self, verdict: Verdict, ctx: WorkflowContext[Draft]) -> None:
-        insight = await self._write(verdict.evidence, verdict.reasons)
-        attempt = verdict.attempt + 1
-        print(f"[commentator] attempt {attempt}: {insight.claim}  refs={insight.evidence_refs}")
-        await ctx.send_message(Draft(verdict.evidence, insight, attempt))
+    async def retry(self, verdict: dict, ctx: WorkflowContext[dict]) -> None:
+        insight = await self._write(verdict["evidence"], verdict["reasons"])
+        await self._send(ctx, verdict["evidence"], insight, attempt=verdict["attempt"] + 1)
 
     async def _write(self, evidence: dict, feedback: list[str]) -> Insight:
         prompt = f"Evidence: {json.dumps(evidence)}"
@@ -102,6 +85,10 @@ class Commentator(Executor):
         response = await self.agent.run(prompt, options={"response_format": Insight})
         return response.value
 
+    async def _send(self, ctx: WorkflowContext[dict], evidence: dict, insight: Insight, attempt: int) -> None:
+        print(f"[commentator] attempt {attempt}: {insight.claim}  refs={insight.evidence_refs}")
+        await ctx.send_message({"evidence": evidence, "insight": insight.model_dump(), "attempt": attempt})
+
 
 class FactChecker(Executor):
     def __init__(self, agent: Agent) -> None:
@@ -109,16 +96,15 @@ class FactChecker(Executor):
         self.agent = agent
 
     @handler
-    async def check(self, draft: Draft, ctx: WorkflowContext[Verdict, str]) -> None:
-        prompt = f"Evidence: {json.dumps(draft.evidence)}\nClaim: {draft.insight.model_dump_json()}"
+    async def check(self, draft: dict, ctx: WorkflowContext[dict, str]) -> None:
+        prompt = f"Evidence: {json.dumps(draft['evidence'])}\nClaim: {json.dumps(draft['insight'])}"
         response = await self.agent.run(prompt, options={"response_format": Check})
         check: Check = response.value
-        verdict = Verdict(draft.evidence, check.status, draft.insight, draft.attempt, check.reasons)
-        print(f"[fact_checker] attempt {draft.attempt}: {check.status}  {check.reasons}")
-        if check.status == "rejected" and draft.attempt <= MAX_RETRIES:
-            await ctx.send_message(verdict)
+        print(f"[fact_checker] attempt {draft['attempt']}: {check.status}  {check.reasons}")
+        if check.status == "rejected" and draft["attempt"] <= MAX_RETRIES:
+            await ctx.send_message({**draft, "status": check.status, "reasons": check.reasons})
         else:
-            await ctx.yield_output(verdict.summary())
+            await ctx.yield_output(f"{check.status} after {draft['attempt']} attempt(s): {draft['insight']['claim']}")
 
 
 def build_workflow(commentator_agent: Agent, fact_checker_agent: Agent) -> Workflow:
@@ -127,6 +113,6 @@ def build_workflow(commentator_agent: Agent, fact_checker_agent: Agent) -> Workf
     return (
         WorkflowBuilder(name="t2_spike", start_executor=commentator, output_from=[fact_checker])
         .add_edge(commentator, fact_checker)
-        .add_edge(fact_checker, commentator, condition=lambda v: isinstance(v, Verdict) and v.status == "rejected")
+        .add_edge(fact_checker, commentator, condition=is_rejected)
         .build()
     )
