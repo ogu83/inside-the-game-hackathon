@@ -325,7 +325,7 @@ def test_a_new_press_supersedes_a_slow_transcription() -> None:
 
     def make_speaker():
         speaker = FakeSpeaker()
-        speaker.transcribe_delay = 0.4
+        speaker.transcribe_delay = 0.25
         speaker_holder["s"] = speaker
         return speaker
 

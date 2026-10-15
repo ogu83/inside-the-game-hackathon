@@ -16,8 +16,8 @@ from app.voice.session import MIN_UTTERANCE_BYTES, SAMPLE_RATE, NothingHeard, Sp
 def quick_waits(monkeypatch):
     monkeypatch.setattr(session, "COMMIT_WAIT_S", 0.05)
     monkeypatch.setattr(session, "SESSION_UPDATE_TIMEOUT_S", 0.5)
-    monkeypatch.setattr(session, "SPEAK_IDLE_TIMEOUT_S", 0.3)
-    monkeypatch.setattr(session, "TRANSCRIBE_TIMEOUT_S", 0.5)
+    monkeypatch.setattr(session, "SPEAK_IDLE_TIMEOUT_S", 0.15)
+    monkeypatch.setattr(session, "TRANSCRIBE_TIMEOUT_S", 0.25)
 
 
 def ev(kind: str, **fields):
