@@ -33,8 +33,16 @@ def _flatten(prefix: str, data: dict[str, Any], out: dict[str, float]) -> None:
 
 
 def players_named(transcript: str) -> list[str]:
+    """Players whose full name or surname appears, allowing a near miss on the surname (Callaway for Calloway)."""
     lowered = transcript.casefold()
-    return [p.id for p in PLAYERS.values() if p.name.casefold() in lowered or p.name.split()[-1].casefold() in lowered.split()]
+    words = re.findall(r"[^\W\d_]+", transcript, re.UNICODE)
+    found = []
+    for p in PLAYERS.values():
+        surname = _fold(p.name.split()[-1])
+        near = any(len(w) >= 5 and _fold(w)[0] == surname[0] and _edits(_fold(w), surname) <= 1 for w in words)  # Callaway, not Skorne/Thorne
+        if p.name.casefold() in lowered or near:
+            found.append(p.id)
+    return found
 
 
 def qa_evidence(tools: LedgerTools, profile: FanProfile, transcript: str) -> tuple[dict[str, float], list[str]]:
@@ -67,16 +75,71 @@ def _pct(value: float, lang: str) -> str:
     return f"%{text}" if lang == "tr" else f"{text}%"
 
 
+# Intent vocabulary, matched tolerantly: transcripts are misrecognised speech ("Skorne." for "Skor ne?").
+INTENTS: dict[str, list[str]] = {
+    "player": ["my player", "player", "oyuncu", "oyuncum", "favourite", "favorite", "how is he", "nasıl oynuyor"],
+    "why": ["why", "matter", "neden", "niye", "önemli"],
+    "score": ["score", "skor", "durum", "winning", "kim önde", "kaç kaç"],
+    "team": ["possession", "topa", "top", "shots", "shot", "şut", "pass", "pas", "press", "baskı", "xg", "how are", "nasıl", "goal", "gol", "kaç"],
+}
+_TR_FOLD = str.maketrans("çğıöşüâîû", "cgiosuaiu")
+
+
+def _fold(word: str) -> str:
+    """Case, Turkish diacritics and a light phonetic fold (c/q/ck as k, ph as f) so Scarne and Skorne meet skor."""
+    folded = word.casefold().translate(_TR_FOLD)
+    return re.sub(r"ck|c(?=[aoukr\b])|q", "k", folded).replace("ph", "f")
+
+
+def _close(word: str, target: str) -> bool:
+    """A transcript word matches an intent word on a stem or a near miss: skorne/skor, scarne/skor, oyuncum/oyuncu.
+    Misrecognition mostly garbles the end of a word, so the word's prefix of the target's length is compared too."""
+    w, t = _fold(word), _fold(target)
+    if not w or not t:
+        return False
+    if w == t or (len(t) >= 3 and (w.startswith(t) or (t.startswith(w) and len(w) >= max(3, len(t) - 1)))):
+        return True
+    if len(t) >= 4 and len(w) >= len(t) - 1 and _edits(w[: len(t)], t) <= 1:
+        return True
+    return len(t) >= 6 and len(w) >= 4 and _edits(w, t) <= 2
+
+
+def _edits(a: str, b: str) -> int:
+    previous = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        current = [i]
+        for j, cb in enumerate(b, 1):
+            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (ca != cb)))
+        previous = current
+    return previous[-1]
+
+
+def intents_of(transcript: str) -> set[str]:
+    """Which intents the (possibly garbled) transcript carries."""
+    words = re.findall(r"[^\W\d_]+", transcript, re.UNICODE)
+    folded = _fold(transcript)
+    found: set[str] = set()
+    for intent, vocabulary in INTENTS.items():
+        for target in vocabulary:
+            if " " in target:
+                if _fold(target) in folded:
+                    found.add(intent)
+            elif any(_close(w, target) for w in words):
+                found.add(intent)
+    return found
+
+
 class RuleQaAgent:
-    """Offline Q&A: keyword rules in English and Turkish over the same ledger tools the MCP server exposes."""
+    """Offline Q&A: tolerant keyword rules in English and Turkish over the same ledger tools the MCP server exposes."""
 
     async def draft(self, question: Question, profile: FanProfile, labels: dict[str, str], tools: LedgerTools, feedback: list[str]) -> QaDraft:
         lang = profile.language
         text = question.transcript.casefold()
         calls: list[str] = []
+        intents = intents_of(question.transcript)
         has = lambda *words: any(w in text for w in words)  # noqa: E731
         named = players_named(question.transcript)
-        player_id = named[0] if named else profile.player_id if has("my player", "oyuncum", "favourite", "favorite", "how is he", "nasıl oynuyor") else None
+        player_id = named[0] if named else profile.player_id if "player" in intents else None
         if player_id:
             calls.append("player_stats")
             stats = tools.player_stats(player_id)
@@ -89,7 +152,7 @@ class RuleQaAgent:
                 shots = f"{_n(stats['shots'])} shot" + ("" if stats["shots"] == 1 else "s")
                 body = f"{name} has attempted {_n(stats['passes'])} passes at {_pct(stats['pass_accuracy_pct'], lang)} accuracy, with {shots}."
             return QaDraft(text=body, tool_calls=calls, language=lang)
-        if has("why", "neden", "niye", "matter", "önemli"):
+        if "why" in intents:
             calls.append("recent_moments")
             moments = tools.recent_moments(1)["moments"]
             if not moments:
@@ -101,7 +164,7 @@ class RuleQaAgent:
                 body = f"{m['claim']} {m['why_it_matters']}"
             return QaDraft(text=body, tool_calls=calls, language=lang)
         team_id = next((cid for cid, c in CLUBS.items() if c.short.casefold() in text or cid in text), profile.club_id)
-        if has("score", "skor", "durum", "winning", "kim önde"):
+        if "score" in intents:
             calls.append("score")
             score = tools.score()
             if "error" in score:
@@ -110,7 +173,7 @@ class RuleQaAgent:
             body = (f"Skor {CLUBS[home].short} {_n(score[f'{home}_goals'])}, {CLUBS[away].short} {_n(score[f'{away}_goals'])}, {_n(score['minute'])}. dakika."
                     if lang == "tr" else f"It is {CLUBS[home].short} {_n(score[f'{home}_goals'])}, {CLUBS[away].short} {_n(score[f'{away}_goals'])} after {_n(score['minute'])} minutes.")
             return QaDraft(text=body, tool_calls=calls, language=lang)
-        if team_id and has("possession", "top", "topa", "shots", "şut", "pass", "pas", "press", "baskı", "xg", "how are", "nasıl"):
+        if team_id and "team" in intents:
             calls.append("team_stats")
             stats = tools.team_stats(team_id, 10)
             if "error" in stats:
@@ -135,7 +198,10 @@ class FoundryQaAgent:
         language = "English" if profile.language == "en" else "Turkish"
         prompt = (
             f"Fan profile: club {labels.get('fan_club', 'none')}, favourite player {labels.get('fan_player', 'none')} "
-            f"(id {profile.player_id or 'none'}), depth {profile.depth}. Answer in {language}.\nQuestion: {question.transcript}"
+            f"(id {profile.player_id or 'none'}), depth {profile.depth}. Answer in {language}.\n"
+            "The question below is speech transcribed by a machine and may be misrecognised (for example 'Skorne' for "
+            "'Skor ne?', 'Callaway' for 'Calloway'); read it for its most likely football meaning before deciding you have no data.\n"
+            f"Question: {question.transcript}"
         )
         if feedback:
             prompt += f"\nYour previous answer failed the number check: {feedback}. Use only numbers from the tools."

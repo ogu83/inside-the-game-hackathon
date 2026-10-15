@@ -6,7 +6,7 @@ from app.agents.fact_checker import FactChecker
 from app.agents.fakes import AlwaysVerifies
 from app.agents.models import FanProfile, QaDraft
 from app.api.streams import MatchRun
-from app.voice.qa import NO_DATA, QaPipeline, RuleQaAgent, new_question, players_named, qa_evidence
+from app.voice.qa import NO_DATA, QaPipeline, RuleQaAgent, intents_of, new_question, players_named, qa_evidence
 
 
 @pytest.fixture(scope="module")
@@ -105,3 +105,23 @@ async def test_no_match_shown_yet_gives_no_data() -> None:
         assert answer.text == NO_DATA["en"]
     finally:
         await run.stop()
+
+
+def test_intents_tolerate_misrecognised_speech() -> None:
+    assert intents_of("Scarne.") == {"score"} and intents_of("Skorne.") == {"score"} and intents_of("Skagne.") == set()
+    assert intents_of("skor ne") == {"score"} and intents_of("what's the score") == {"score"}
+    assert intents_of("oyuncum nasıl") >= {"player"} and intents_of("how is my player doing") >= {"player"}
+    assert intents_of("gol var mı") == {"team"} and intents_of("any goals") == {"team"}
+    assert intents_of("how is the weather") == set() and intents_of("hava nasıl") == {"team"}, "nasıl alone is a team question; the rule agent still needs a club"
+    assert players_named("how is Callaway doing") == ["iva-07"] and players_named("Remi Tallis") == ["iva-06"]
+    assert players_named("Skorne.") == [] and players_named("Scarne.") == [], "a garbled 'skor ne' is not a surname (Thorne)"
+
+
+@pytest.mark.parametrize(("transcript", "answered"), [("Scarne.", True), ("Skorne.", True), ("Skagne.", False)])
+async def test_oguz_three_skor_ne_transcripts(finished_run: MatchRun, transcript: str, answered: bool) -> None:
+    profile = FanProfile(club_id="iva", player_id="iva-07", language="tr")
+    answer = await pipeline(finished_run).answer(new_question(profile.key(), transcript), profile)
+    if answered:
+        assert answer.text.startswith("Skor Kestrel Bay") and answer.verdict.status == "verified", transcript
+    else:
+        assert answer.text == NO_DATA["tr"], "a transcript with no recognisable intent still gets the no-data reply"
