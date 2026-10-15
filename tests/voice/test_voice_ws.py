@@ -30,7 +30,11 @@ class FakeSpeaker:
         self.cancelled = getattr(self, "cancelled", 0) + 1
 
     async def transcribe(self, pcm16: bytes, lang: str) -> str:
+        from app.voice.session import MIN_UTTERANCE_BYTES, NothingHeard
+
         self.transcribed = getattr(self, "transcribed", []) + [len(pcm16)]
+        if len(pcm16) < MIN_UTTERANCE_BYTES or getattr(self, "hears_nothing", False):
+            raise NothingHeard("input_audio_buffer_commit_empty")
         return "how is my player doing?" if lang == "en" else "oyuncum nasıl oynuyor?"
 
     async def close(self) -> None:
@@ -237,8 +241,32 @@ def test_too_short_push_to_talk_is_reported_not_answered() -> None:
                 if m.get("text"):
                     msg = json.loads(m["text"])
                     if msg["type"] == "question":
-                        assert msg["question"] is None and msg["reason"] == "no speech captured"
+                        assert msg["question"] is None and msg["reason"] == "I did not catch that, try again"
                         break
+        assert app.state.run.metrics["nothing_heard"] == 1
+
+
+def test_commit_empty_from_voice_live_is_reported_at_once() -> None:
+    speaker = FakeSpeaker()
+    speaker.hears_nothing = True
+    with TestClient(app) as client:
+        async def factory():
+            return speaker
+
+        app.state.speaker_factory = factory
+        app.state.workflow_factory = template_workflow
+        client.post("/api/match/start", json={"seed": 7, "speed": 1500, "delay_s": 120, "minutes": 4})
+        with client.websocket_connect("/api/voice?profile=-|-|casual|tr") as ws:
+            ws.send_text(json.dumps({"type": "talk_start"}))
+            ws.send_bytes(b"\x00\x01" * 24000)
+            ws.send_text(json.dumps({"type": "talk_end"}))
+            while True:
+                m = ws.receive()
+                if m.get("text") and json.loads(m["text"]).get("type") == "question":
+                    msg = json.loads(m["text"])
+                    assert msg["question"] is None and msg["reason"] == "Anlayamadım, tekrar dener misin"
+                    break
+        assert speaker.transcribed == [48000] and app.state.run.metrics["nothing_heard"] == 1
 
 
 def test_repeated_press_and_release_frames_make_exactly_one_question() -> None:
@@ -275,4 +303,4 @@ def test_talk_start_cancels_the_speaker_at_once() -> None:
                 if m.get("text") and json.loads(m["text"]).get("type") == "question":
                     break
             assert speaker.cancelled == before + 1
-            assert not getattr(speaker, "transcribed", []), "nothing was transcribed, yet the line was cancelled"
+            assert getattr(speaker, "transcribed", []) in ([], [0]), "nothing was transcribed, yet the line was cancelled"

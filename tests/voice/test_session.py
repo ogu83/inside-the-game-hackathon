@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 import app.voice.session as session
-from app.voice.session import SAMPLE_RATE, SpeechError, TranscriptionError, VoiceLiveSpeaker, listening_session_update, speaking_session_update
+from app.voice.session import MIN_UTTERANCE_BYTES, SAMPLE_RATE, NothingHeard, SpeechError, TranscriptionError, VoiceLiveSpeaker, listening_session_update, speaking_session_update
 
 
 @pytest.fixture(autouse=True)
@@ -141,7 +141,7 @@ async def test_vad_commit_is_used_when_it_arrives_first(monkeypatch) -> None:
     fakes = Fakes()
     fakes.listening.on_send["input_audio_buffer.append"] = lambda p: [ev("input_audio_buffer.speech_stopped"), ev("input_audio_buffer.committed", item_id="i2"), ev("conversation.item.input_audio_transcription.completed", item_id="i2", content_index=0, transcript="skor ne")]
     speaker = await opened(fakes)
-    assert await speaker.transcribe(b"\x00\x01" * 100, "tr") == "skor ne"
+    assert await speaker.transcribe(b"\x00\x01" * MIN_UTTERANCE_BYTES, "tr") == "skor ne"
     assert fakes.listening.sent[0]["session"]["turn_detection"]["type"] == "azure_semantic_vad_multilingual", "the env override for Turkish is honoured"
     assert "input_audio_buffer.commit" not in fakes.listening.sent_types(), "no manual commit when the VAD already committed"
     await speaker.close()
@@ -152,21 +152,21 @@ async def test_transcription_errors_are_isolated_from_speaking() -> None:
     fakes.listening.on_send["input_audio_buffer.commit"] = lambda p: [ev("error", error={"message": "bad audio", "type": "invalid_request_error", "code": "x"})]
     speaker = await opened(fakes)
     with pytest.raises(TranscriptionError, match="bad audio"):
-        await speaker.transcribe(b"\x00\x01" * 1000, "en")
+        await speaker.transcribe(b"\x00\x01" * MIN_UTTERANCE_BYTES, "en")
     assert await speaker.speak("Still speaking.", "en", no_audio) == "Still speaking."
 
     fakes2 = Fakes()
     fakes2.listening.on_send["session.update"] = lambda p: [ev("error", error={"message": "Cannot disable turn detection during session", "code": "turn_detection_type_change_not_allowed"})]
     speaker2 = await opened(fakes2)
     with pytest.raises(TranscriptionError, match="turn_detection_type_change_not_allowed"):
-        await speaker2.transcribe(b"\x00\x01" * 1000, "en")
+        await speaker2.transcribe(b"\x00\x01" * MIN_UTTERANCE_BYTES, "en")
     assert await speaker2.speak("Voice unaffected.", "en", no_audio) == "Voice unaffected.", "a rejected listening update never breaks speak()"
 
     fakes3 = Fakes()
     fakes3.listening.on_send["input_audio_buffer.commit"] = lambda p: [ev("conversation.item.input_audio_transcription.failed", item_id="i", content_index=0, error={"message": "no speech"})]
     speaker3 = await opened(fakes3)
     with pytest.raises(TranscriptionError, match="no speech"):
-        await speaker3.transcribe(b"\x00\x01" * 1000, "en")
+        await speaker3.transcribe(b"\x00\x01" * MIN_UTTERANCE_BYTES, "en")
     for s in (speaker, speaker2, speaker3):
         await s.close()
 
@@ -177,7 +177,7 @@ async def test_speaking_errors_raise_speech_error_and_do_not_leak_into_transcrip
     speaker = await opened(fakes)
     with pytest.raises(SpeechError, match="invalid voice"):
         await speaker.speak("x", "en", no_audio)
-    assert await speaker.transcribe(b"\x00\x01" * 1000, "en") == "how is my player doing"
+    assert await speaker.transcribe(b"\x00\x01" * MIN_UTTERANCE_BYTES, "en") == "how is my player doing"
     await speaker.close()
 
 
@@ -215,7 +215,7 @@ async def test_socket_loss_surfaces_as_an_error_not_a_hang() -> None:
         await speaker.speak("x", "en", no_audio)
     fakes.listening.on_send["input_audio_buffer.commit"] = lambda p: [ConnectionError("socket closed")]
     with pytest.raises(TranscriptionError, match="socket closed"):
-        await speaker.transcribe(b"\x00\x01" * 1000, "en")
+        await speaker.transcribe(b"\x00\x01" * MIN_UTTERANCE_BYTES, "en")
     await speaker.close()
 
 
@@ -227,7 +227,24 @@ async def test_silent_socket_times_out_instead_of_waiting_forever() -> None:
         await speaker.speak("x", "en", no_audio)
     fakes.listening.on_send["input_audio_buffer.commit"] = lambda p: [ev("input_audio_buffer.committed", item_id="i")]  # committed, no transcript
     with pytest.raises(TranscriptionError, match="in time"):
-        await speaker.transcribe(b"\x00\x01" * 1000, "en")
+        await speaker.transcribe(b"\x00\x01" * MIN_UTTERANCE_BYTES, "en")
     fakes.speaking.on_send["response.create"] = speaking_replies
     assert await speaker.speak("Back.", "en", no_audio) == "Back.", "a timed-out line does not poison the next one"
+    await speaker.close()
+
+
+async def test_empty_utterances_fail_at_once_not_by_timeout() -> None:
+    fakes = Fakes()
+    speaker = await opened(fakes)
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    with pytest.raises(NothingHeard, match="shorter than"):
+        await speaker.transcribe(b"\x00\x01" * 100, "en")
+    assert fakes.listening.sent == [], "nothing is sent for a too-short utterance"
+    fakes.listening.on_send["input_audio_buffer.commit"] = lambda p: [ev("error", error={"message": "Error committing input audio buffer: buffer too small", "type": "invalid_request_error", "code": "input_audio_buffer_commit_empty"})]
+    with pytest.raises(NothingHeard, match="input_audio_buffer_commit_empty"):
+        await speaker.transcribe(b"\x00\x01" * MIN_UTTERANCE_BYTES, "en")
+    assert loop.time() - started < 0.4, "the commit-empty error ends the utterance immediately"
+    assert isinstance(NothingHeard("x"), TranscriptionError)
+    assert await speaker.speak("Still fine.", "en", no_audio) == "Still fine."
     await speaker.close()

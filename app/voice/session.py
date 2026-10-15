@@ -43,6 +43,13 @@ class TranscriptionError(RuntimeError):
     """Voice Live could not transcribe a push-to-talk utterance; the voice itself keeps working."""
 
 
+class NothingHeard(TranscriptionError):
+    """The utterance was empty or too short (Voice Live: input_audio_buffer_commit_empty). Fails at once, never by timeout."""
+
+
+MIN_UTTERANCE_BYTES = SAMPLE_RATE * 2 // 5  # 0.2 s of pcm16 at 24 kHz
+
+
 class Speaker(Protocol):
     async def speak(self, text: str, lang: Lang, on_audio: OnAudio) -> str:
         """Speak `text` verbatim, stream pcm16 chunks to `on_audio`, return the transcript of what was spoken."""
@@ -254,6 +261,8 @@ class VoiceLiveSpeaker:
         return self._listening
 
     async def transcribe(self, pcm16: bytes, lang: Lang) -> str:
+        if len(pcm16) < MIN_UTTERANCE_BYTES:
+            raise NothingHeard("the utterance was shorter than 0.2 s")
         channel = await self._listener(lang)
         channel.active = True
         channel.drain()
@@ -285,8 +294,8 @@ class VoiceLiveSpeaker:
                     raise TranscriptionError(f"Voice Live transcription failed: {_error_of(event)}")
                 elif kind in ("error", "closed"):
                     error = _error_of(event)
-                    if committed and "empty" in str(error).casefold():
-                        continue  # our manual commit raced the VAD's own commit; the transcript is still coming
+                    if "commit_empty" in str(error) or "too small" in str(error).casefold():
+                        raise NothingHeard(f"Voice Live heard nothing: {error}")  # terminal for this utterance, at once
                     raise TranscriptionError(f"Voice Live error while listening: {error}")
         finally:
             channel.active = False

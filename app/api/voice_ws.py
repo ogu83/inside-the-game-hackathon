@@ -19,11 +19,12 @@ from app.agents.fact_check_rules import check_speech, cited_evidence
 from app.agents.models import Answer, FanProfile, SpeechAudit
 from app.api.streams import MatchRun
 from app.voice.qa import new_question
-from app.voice.session import Lang, Speaker, SpeechError, TranscriptionError
+from app.voice.session import Lang, NothingHeard, Speaker, SpeechError, TranscriptionError
 
 router = APIRouter()
 log = logging.getLogger(__name__)
 DONE = object()
+NOTHING_HEARD = {"en": "I did not catch that, try again", "tr": "Anlayamadım, tekrar dener misin"}
 
 
 def narrative_for(cue: dict[str, Any], lang: str) -> dict[str, Any] | None:
@@ -132,11 +133,12 @@ async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asynci
                 await speaker.cancel()
             elif kind == "talk_end" and talking:
                 talking = False
-                if len(pcm) < 4800:  # under 0.1 s of audio
-                    await ws.send_json({"type": "question", "question": None, "reason": "no speech captured"})
-                    continue
                 try:
                     transcript = await speaker.transcribe(bytes(pcm), fan.language)
+                except NothingHeard:  # empty or too short: fails at once, with a human reason
+                    run.metrics["nothing_heard"] += 1
+                    await ws.send_json({"type": "question", "question": None, "reason": NOTHING_HEARD[fan.language]})
+                    continue
                 except (TranscriptionError, RuntimeError) as exc:  # reported to the page; the voice keeps working
                     log.warning("transcription failed: %s", exc)
                     run.metrics["transcription_errors"] += 1
@@ -145,7 +147,8 @@ async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asynci
                 if transcript.strip():
                     await _ask(run, ws, fan, transcript, waiting, speaker, state)
                 else:
-                    await ws.send_json({"type": "question", "question": None, "reason": "nothing understood"})
+                    run.metrics["nothing_heard"] += 1
+                    await ws.send_json({"type": "question", "question": None, "reason": NOTHING_HEARD[fan.language]})
     except WebSocketDisconnect:
         return
 
