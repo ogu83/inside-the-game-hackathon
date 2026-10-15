@@ -8,3 +8,4 @@ class CandidateMoment(BaseModel):
     team_id: str                  # team the moment is about
     minute: int                   # match minute when the moment ended
     evidence: dict[str, float]    # ledger numbers the claim may cite
+    top_player_id: str | None = None  # most involved player; evidence carries top_player_* numbers about them

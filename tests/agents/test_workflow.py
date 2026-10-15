@@ -53,6 +53,8 @@ async def test_workflow_output_is_json_safe_and_revalidates() -> None:
 def test_labels_name_teams_not_ids() -> None:
     labels = moment_labels(MOMENT)
     assert labels["team"] == "Kestrel Bay" and labels["opponent"] == "Ironvale"
+    assert "top_player" not in labels
+    assert moment_labels(MOMENT.model_copy(update={"top_player_id": "kby-02"}))["top_player"] == "Tomas Vire"
 
 
 def test_template_producer_renders_cue_and_narratives(moments) -> None:

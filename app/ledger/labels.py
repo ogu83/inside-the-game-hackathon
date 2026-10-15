@@ -1,7 +1,7 @@
 """Human-readable names for a moment, so agents can write text without ever seeing ids."""
 
 from app.ledger.models import CandidateMoment
-from app.simulator.league import CLUBS, LEAGUE_NAME
+from app.simulator.league import CLUBS, LEAGUE_NAME, PLAYERS
 
 
 def match_teams(moment: CandidateMoment) -> tuple[str, str] | None:
@@ -17,10 +17,13 @@ def moment_labels(moment: CandidateMoment, teams: tuple[str, str] | None = None)
     team = CLUBS.get(moment.team_id)
     opponent_id = next((t for t in (teams or ()) if t != moment.team_id), None)
     opponent = CLUBS.get(opponent_id) if opponent_id else None
-    return {
+    labels = {
         "league": LEAGUE_NAME,
         "team": team.short if team else moment.team_id,
         "team_full": team.name if team else moment.team_id,
         "opponent": opponent.short if opponent else "the opposition",
         "kind": moment.kind.replace("_", " "),
     }
+    if moment.top_player_id and moment.top_player_id in PLAYERS:
+        labels["top_player"] = PLAYERS[moment.top_player_id].name
+    return labels

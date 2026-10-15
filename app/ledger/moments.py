@@ -1,5 +1,6 @@
 """Candidate-moment detectors. Each detector sees every event and may return a moment."""
 
+from collections import Counter
 from dataclasses import dataclass, field
 
 from app.ledger.metrics import in_window, possession_pct, progress_m
@@ -34,17 +35,20 @@ class PassStreakDetector:
         first, last = self._passes[0], self._passes[-1]
         team = self._team or end.team_id
         recent = in_window(history, last.t, POSSESSION_WINDOW_S)
-        players = {p.player_id for p in self._passes}
+        counts = Counter(p.player_id for p in self._passes if p.player_id)
+        top_player_id, top_passes = counts.most_common(1)[0] if counts else (None, 0)
         return CandidateMoment(
             moment_id=f"{first.match_id}-{last.seq}-pass_streak",
             window=(first.seq, last.seq),
             kind="pass_streak",
             team_id=team,
             minute=last.minute,
+            top_player_id=top_player_id,
             evidence={
                 "pass_streak_passes": float(len(self._passes)),
                 "pass_streak_duration_s": float(last.t - first.t),
-                "pass_streak_players": float(len(players)),
+                "pass_streak_players": float(len(counts)),
+                "top_player_passes": float(top_passes),
                 "pass_streak_progress_m": progress_m(first.x, last.end_x if last.end_x is not None else last.x),
                 "pass_streak_ended_in_shot": 1.0 if ended_in_shot else 0.0,
                 "team_possession_pct_window": possession_pct(recent, team),
