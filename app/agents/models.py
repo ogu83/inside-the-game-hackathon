@@ -106,3 +106,43 @@ class MomentResult(BaseModel):
     verdict: Verdict | None = None
     attempts: list[Insight] = Field(default_factory=list)
     checks: list[NumberCheck] = Field(default_factory=list)
+
+
+class Question(BaseModel):
+    """A fan's spoken or typed question, transcribed."""
+
+    question_id: str
+    profile_key: str
+    transcript: str
+    asked_at_seq: int = 0
+
+
+class QaDraft(BaseModel):
+    """What a Q&A agent returns before the gates: text plus the ledger evidence it drew on."""
+
+    text: str
+    evidence: dict[str, float] = Field(default_factory=dict)
+    tool_calls: list[str] = Field(default_factory=list)
+    language: Literal["en", "tr"] = "en"
+
+
+class Answer(BaseModel):
+    question_id: str
+    text: str                      # "I don't have data on that" when no evidence supports an answer
+    evidence_refs: list[str]
+    tool_calls: list[str]
+    verdict: Verdict | None = None
+    evidence: dict[str, float] = Field(default_factory=dict)  # the cited values, so the speech gate can re-check the spoken answer
+
+
+class SpeechAudit(BaseModel):
+    """One per spoken response (narration or answer): was the approved text what came out?"""
+
+    moment_id: str | None = None
+    question_id: str | None = None
+    profile_key: str
+    approved_text: str
+    transcript: str
+    ok: bool
+    mismatches: list[str]
+    interrupted: bool = False      # the fan barged in; a cut-off transcript is expected and not counted as a mismatch

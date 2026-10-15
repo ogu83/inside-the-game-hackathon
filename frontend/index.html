@@ -75,6 +75,20 @@
         </label>
         <button @click="follow" :disabled="!running">{{ profileKey ? 'switch profile' : 'follow the match for me' }}</button>
       </div>
+      <div class="ask">
+        <button class="talk" :class="{ held: talking }" :disabled="!running" @mousedown.prevent="startTalk" @mouseup.prevent="stopTalk" @mouseleave="stopTalk" @touchstart.prevent="startTalk" @touchend.prevent="stopTalk">{{ talking ? 'listening, release to ask' : 'hold to talk' }}</button>
+        <input type="text" v-model="askText" :disabled="!running" placeholder="or type a question: why does that matter? how is my player doing?" @keyup.enter="askTyped">
+      </div>
+      <div v-for="q in qa" :key="q.key" class="qa">
+        <div class="meta"><span>you asked</span><span>{{ q.transcript }}</span></div>
+        <div class="text" v-if="q.answer">{{ q.answer.text }}</div>
+        <div class="text empty" v-else>thinking...</div>
+        <div class="meta" v-if="q.answer">
+          <span class="tag" :class="q.answer.verdict && q.answer.verdict.status !== 'rejected' ? 'ok' : 'bad'">{{ q.answer.verdict ? q.answer.verdict.status : 'no data' }}</span>
+          <span>via {{ q.answer.tool_calls.join(', ') }}</span>
+          <span class="tag" :class="q.audit.ok ? 'ok' : 'bad'" v-if="q.audit">spoken {{ q.audit.ok ? 'verbatim' : 'mismatch' }}</span>
+        </div>
+      </div>
       <div class="speaking" v-if="voice && speaking">speaking: {{ speaking }}</div>
       <div v-for="n in narratives" :key="n.key" :class="['narrative', n.replay ? 'replay' : '']">
         <div class="meta"><span>{{ n.time }}</span><span v-if="n.replay">latest moment, re-rendered for this profile</span></div>
@@ -153,6 +167,7 @@ createApp({
       teams: { home: 'Home', away: 'Away', homeId: 'kby' }, league: { clubs: [] }, playerNames: {},
       ticker: [], ball: null, trail: [], banner: null, narratives: [], metrics: null, timeline: [], drawerOpen: true, filter: 'all',
       profile: { club_id: null, player_id: null, depth: 'casual', language: 'en' }, profileKey: null,
+      askText: '', talking: false, qa: [],
       sources: [], fanSource: null, startedAt: null,
       voice: false, voiceStatus: '', speaking: '', speechChecks: 0, speechMismatches: 0,
     });
@@ -174,7 +189,8 @@ createApp({
 
     const closeSources = () => { state.sources.forEach(s => s.close()); state.sources = []; if (state.fanSource) { state.fanSource.close(); state.fanSource = null; } };
     // Voice: pcm16 mono 24 kHz chunks from /api/voice, scheduled back to back on one AudioContext. Speaks only approved text.
-    let audioCtx = null, playHead = 0, voiceWs = null, carry = null;
+    let audioCtx = null, playHead = 0, voiceWs = null, carry = null, scheduled = [];
+    const dropPlayback = () => { scheduled.forEach(src => { try { src.stop(); } catch (e) { /* already ended */ } }); scheduled = []; playHead = 0; };
     const playPcm = (buffer) => {
       let bytes = new Uint8Array(buffer);
       if (carry) { const joined = new Uint8Array(carry.length + bytes.length); joined.set(carry); joined.set(bytes, carry.length); bytes = joined; carry = null; }
@@ -189,6 +205,7 @@ createApp({
       source.buffer = clip; source.connect(audioCtx.destination);
       playHead = Math.max(playHead, audioCtx.currentTime + 0.05);
       source.start(playHead); playHead += clip.duration;
+      scheduled.push(source); if (scheduled.length > 200) scheduled.shift();
     };
     const closeVoice = () => { if (voiceWs) { voiceWs.close(); voiceWs = null; } state.speaking = ''; };
     const connectVoice = () => {
@@ -200,7 +217,17 @@ createApp({
         if (m.data instanceof ArrayBuffer) return playPcm(m.data);
         const msg = JSON.parse(m.data);
         if (msg.type === 'speaking') { state.speaking = msg.text; playHead = 0; }
-        if (msg.type === 'spoken') { state.speechChecks++; if (!msg.check.ok) state.speechMismatches++; }
+        if (msg.type === 'spoken') {
+          state.speechChecks++; if (!msg.audit.ok) state.speechMismatches++;
+          if (msg.audit.question_id) { const q = state.qa.find(q => q.answer && q.answer.question_id === msg.audit.question_id); if (q) q.audit = msg.audit; }
+        }
+        if (msg.type === 'question') {
+          dropPlayback(); state.speaking = '';
+          if (msg.question) state.qa.unshift({ key: msg.question.question_id, transcript: msg.question.transcript, answer: null, audit: null });
+          else state.voiceStatus = msg.reason;
+        }
+        if (msg.type === 'answer') { const q = state.qa.find(q => q.key === msg.answer.question_id); if (q) q.answer = msg.answer; }
+        if (msg.type === 'match_end') state.voiceStatus = 'match over, you can still ask questions';
         if (msg.type === 'unavailable') state.voiceStatus = 'voice unavailable: ' + msg.reason;
       };
     };
@@ -212,6 +239,55 @@ createApp({
       if (state.running) connectVoice();
     };
 
+    // Q&A: typed questions go over the voice socket when it is open (answer is spoken), else to /api/qa (text only).
+    const askTyped = async () => {
+      const transcript = state.askText.trim(); if (!transcript) return;
+      state.askText = '';
+      if (voiceWs && voiceWs.readyState === 1) return voiceWs.send(JSON.stringify({ type: 'ask', transcript }));
+      const entry = { key: 't' + Date.now(), transcript, answer: null, audit: null };
+      state.qa.unshift(entry);
+      const res = await fetch('/api/qa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcript, profile_key: state.profileKey || profileKeyOf(state.profile) }) });
+      entry.answer = (await res.json()).answer;
+    };
+    // Push-to-talk: with the voice on, mic audio (pcm16 mono 24 kHz) streams to the socket between talk_start and talk_end
+    // and Voice Live transcribes it; with the voice off, the browser's own speech recognition supplies the transcript.
+    let mic = null, micCtx = null, micNode = null, recognition = null;
+    const startTalk = async () => {
+      if (!state.running || state.talking) return;
+      state.talking = true;
+      if (voiceWs && voiceWs.readyState === 1) {
+        voiceWs.send(JSON.stringify({ type: 'talk_start' }));
+        try {
+          mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+          micCtx = new AudioContext({ sampleRate: 24000 });
+          const source = micCtx.createMediaStreamSource(mic);
+          micNode = micCtx.createScriptProcessor(4096, 1, 1);
+          micNode.onaudioprocess = (e) => {
+            if (!state.talking || !voiceWs || voiceWs.readyState !== 1) return;
+            const f = e.inputBuffer.getChannelData(0); const pcm = new Int16Array(f.length);
+            for (let i = 0; i < f.length; i++) pcm[i] = Math.max(-1, Math.min(1, f[i])) * 32767;
+            voiceWs.send(pcm.buffer);
+          };
+          source.connect(micNode); micNode.connect(micCtx.destination);
+        } catch (e) { state.voiceStatus = 'microphone unavailable: ' + e.message; stopTalk(); }
+        return;
+      }
+      const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!Rec) { state.voiceStatus = 'no speech recognition in this browser; type your question'; state.talking = false; return; }
+      recognition = new Rec(); recognition.lang = state.profile.language === 'tr' ? 'tr-TR' : 'en-GB'; recognition.interimResults = false;
+      recognition.onresult = (e) => { state.askText = e.results[0][0].transcript; askTyped(); };
+      recognition.onerror = (e) => { state.voiceStatus = 'speech recognition: ' + e.error; };
+      recognition.start();
+    };
+    const stopTalk = () => {
+      if (!state.talking) return;
+      state.talking = false;
+      if (micNode) { micNode.disconnect(); micNode = null; }
+      if (micCtx) { micCtx.close(); micCtx = null; }
+      if (mic) { mic.getTracks().forEach(t => t.stop()); mic = null; }
+      if (recognition) { recognition.stop(); recognition = null; return; }
+      if (voiceWs && voiceWs.readyState === 1) setTimeout(() => voiceWs && voiceWs.send(JSON.stringify({ type: 'talk_end' })), 150);
+    };
     const listen = (path, handlers) => {
       const es = new EventSource(path);
       Object.entries(handlers).forEach(([event, fn]) => es.addEventListener(event, e => fn(JSON.parse(e.data))));
@@ -249,7 +325,7 @@ createApp({
     };
     const start = async () => {
       state.starting = true; closeSources();
-      state.ticker = []; state.ball = null; state.trail = []; state.banner = null; state.narratives = []; state.metrics = null; state.timeline = [];
+      state.ticker = []; state.ball = null; state.trail = []; state.banner = null; state.narratives = []; state.metrics = null; state.timeline = []; state.qa = [];
       state.speechChecks = 0; state.speechMismatches = 0; state.profileKey = null;
       if (!state.league.clubs.length) await loadLeague();
       const res = await fetch('/api/match/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.form) });
@@ -298,7 +374,7 @@ createApp({
       try { const s = await (await fetch('/api/match/state')).json(); if (s.metrics) state.metrics = s.metrics; } catch (e) { /* offline between polls */ }
     }, 2000);
     loadLeague();
-    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, start, stop, follow, toggleVoice };
+    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, start, stop, follow, toggleVoice, askTyped, startTalk, stopTalk };
   },
 }).mount('#app');
 </script>

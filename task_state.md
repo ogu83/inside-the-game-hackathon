@@ -5,7 +5,7 @@
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
 ## Current task
-Phase B on cloud branch `claude/gracious-goldberg-9u16ny` (merged with main at fd2f5fe, S5 included): T3 to T9, T11 and T12 done in the cloud; T10, T10b, T12b, T13 to T16 remain (local), T6, T7, T8, T9, T11, T12 with offline agents. T10, T10b, T12b, T13 stay local.
+Phase B on cloud branch `claude/gracious-goldberg-9u16ny` (merged with main at bff5f9a): T3 to T9, T11, T12 and T12b done with offline agents; post-review items 1 to 6 applied (SPEC proposals, planted live test on 12 moments, descriptive Commentator prompt, voice speaks the re-rendered line on profile switch, small pitch label, phone width). T10, T10b, T13 to T16 remain (local).
 
 ## Done
 - [x] Registered for the hackathon (2026-10-14), confirmation email received
@@ -35,9 +35,10 @@ Phase B on cloud branch `claude/gracious-goldberg-9u16ny` (merged with main at f
 - [x] 2026-10-15 (cloud session): T9 async Producer (parallel per profile, regenerate once, FoundryRenderer, TemplateRenderer). 146 tests, 4 live.
 - [x] 2026-10-15 (cloud session): T11 API full (profiles, fan stream with immediate re-render, moment timelines, live-run limit, offline fallback). 153 tests, 4 live.
 - [x] 2026-10-15 (cloud session): T12 frontend (SVG pitch, cue banner, fan panel with immediate re-render, agent timeline drawer, voice kept). 157 tests, 4 live. Browser check pending locally.
+- [x] 2026-10-15 (cloud session): post-review items: SPEC proposals applied, planted live test limited to 12 moments with a full report, descriptive Commentator prompt with code wording hints and a first-attempt-rate live test, voice follows the profile and speaks the re-rendered line first, small clamped pitch label, phone-width CSS. T12b: ledger MCP server, text-first Q&A with gates, push-to-talk, SpeechAudit records. 184 tests in about 14 s, 7 live.
 
 ## Next step
-Locally: merge `claude/gracious-goldberg-9u16ny` into `main`; run the live tests (`python -m pytest tests/agents -q -m live`: commentator, director, producer 2x2, planted run reaching 0) and `python -m app.agents.run_match --seed 30 --plant 6 --live`; open http://localhost:8010 with seed 30 at speed 1 and speed 4, check the pitch, the profile switch (en to tr re-renders at once), the drawer and the voice at 1440x900 and phone width; then T10 (workflow tracing + recap + hosted, timeboxed), T10b (eval from `run_match --live --jsonl`), T12b (MCP server + text Q&A first), T13 to T16. Decide on the proposals in docs/reviews/2026-10-15-phase-b-notes.md. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
+Locally: merge the branch; run `python -m pytest tests/agents -q -m live` (commentator, director, producer, planted 12 moments, first-attempt verified rate, Q&A over MCP against a running app, Voice Live transcribe), then the manual checks in the session summary (profile switch heard at once, hold-to-talk, phone width); T10 (tracing + recap + hosted, timeboxed), T10b (eval), T13 to T16. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
 
 ## Working in a cloud session (claude.ai/code)
 Cloud sessions are useful for reviews and Azure-free implementation. They have no Azure login, no `.env`, no `azd`, and run Linux.

@@ -12,8 +12,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
+from app.agents.fact_checker import FactChecker
+from app.agents.fakes import AlwaysVerifies
 from app.agents.models import FanProfile
 from app.api.limits import RunLimiter, live_runs_per_day
+from mcp.server.transport_security import TransportSecuritySettings
+
+from app.ledger.mcp_server import LedgerTools, build_mcp_server
+from app.voice.qa import QaPipeline, RuleQaAgent, new_question
 from app.api.streams import MatchRun, producer_from_env, template_producer, template_workflow, workflow_factory_from_env
 from app.api.voice_ws import router as voice_router
 from app.simulator.league import CLUBS
@@ -32,9 +38,38 @@ class StartRequest(BaseModel):
     away: str = "iva"
 
 
+class _AppView:
+    """LedgerView over whatever match the app is showing right now."""
+
+    def __init__(self, app: FastAPI) -> None:
+        self.app = app
+
+    def events(self):
+        run = self.app.state.run
+        return run.displayed_events() if run else []
+
+    def shown_moments(self):
+        run = self.app.state.run
+        return run.shown_moments() if run else []
+
+
+def qa_pipeline_from_env(app: FastAPI) -> QaPipeline:
+    tools = LedgerTools(_AppView(app))
+    if os.environ.get("AGENT_MODE", "template").lower() == "foundry":
+        from app.agents.fact_checker import FoundryWordingJudge
+        from app.agents.prompts import FACT_CHECKER_INSTRUCTIONS
+        from app.agents.run_match import live_agent, live_qa_agent
+
+        base = os.environ.get("PUBLIC_BASE_URL", f"http://localhost:{os.environ.get('APP_PORT', '8010')}")
+        return QaPipeline(live_qa_agent(f"{base}/mcp"), FactChecker(FoundryWordingJudge(live_agent("SMALL_MODEL_DEPLOYMENT", "fact_checker", FACT_CHECKER_INSTRUCTIONS))), tools)
+    return QaPipeline(RuleQaAgent(), FactChecker(AlwaysVerifies()), tools)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.run = None
+    if not getattr(app.state, "qa", None):
+        app.state.qa = qa_pipeline_from_env(app)
     app.state.workflow_factory = getattr(app.state, "workflow_factory", None) or workflow_factory_from_env()
     if not hasattr(app.state, "producer") or app.state.producer is None:
         app.state.producer = producer_from_env()
@@ -42,14 +77,44 @@ async def lifespan(app: FastAPI):
         app.state.limiter = RunLimiter(live_runs_per_day())
     if not hasattr(app.state, "speaker_factory"):
         app.state.speaker_factory = speaker_factory_from_env()
-    yield
-    if app.state.run is not None:
-        await app.state.run.stop()
+    # The MCP transport is built per lifespan (a session manager runs once) and one task owns its cancel scope.
+    server = build_mcp_server(LedgerTools(_AppView(app)))
+    # Read-only data, reached through the public hostname by the live Q&A agent: Host checking would refuse it.
+    security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    app.state.mcp_asgi = server.streamable_http_app(streamable_http_path="/", stateless_http=True, json_response=True, transport_security=security)
+    stop, started = asyncio.Event(), asyncio.Event()
+
+    async def run_mcp_sessions() -> None:
+        async with server.session_manager.run():
+            started.set()
+            await stop.wait()
+
+    mcp_task = asyncio.create_task(run_mcp_sessions())
+    waiter = asyncio.create_task(started.wait())
+    await asyncio.wait({mcp_task, waiter}, return_when=asyncio.FIRST_COMPLETED)
+    if mcp_task.done():
+        waiter.cancel()
+        mcp_task.result()  # raises the startup error instead of hanging
+    try:
+        yield
+    finally:
+        if app.state.run is not None:
+            await app.state.run.stop()
+        stop.set()
+        await mcp_task
 
 
 app = FastAPI(title="Matchday Companion", lifespan=lifespan)
 app.include_router(voice_router)
 app.mount("/static", StaticFiles(directory=FRONTEND.parent), name="static")
+
+
+async def mcp_mount(scope, receive, send) -> None:
+    """Forwards to the MCP ASGI app built in the current lifespan."""
+    await app.state.mcp_asgi(scope, receive, send)
+
+
+app.mount("/mcp", mcp_mount, name="mcp")
 
 
 def default_delay() -> float:
@@ -123,6 +188,32 @@ async def set_profile(profile: FanProfile) -> dict:
     run.add_profile(profile)
     latest = await run.render_latest(profile)
     return {"profile_key": profile.key(), "latest": latest.model_dump() if latest else None}
+
+
+class AskRequest(BaseModel):
+    transcript: str = Field(min_length=1, max_length=500)
+    profile_key: str = "-|-|casual|en"
+
+
+@app.post("/api/qa")
+async def ask(request: AskRequest) -> dict:
+    """Text-first Q&A: the same path the voice uses, without the speech. Answers only from the ledger tools."""
+    run = app.state.run
+    if run is None:
+        raise HTTPException(status_code=404, detail="no match running")
+    profile = parse_profile_key(request.profile_key)
+    seq = len(run.displayed_events())
+    question = new_question(profile.key(), request.transcript, seq)
+    answer = await app.state.qa.answer(question, profile)
+    run.metrics["questions_answered"] += 1
+    run.metrics["questions_without_data"] += int(answer.text in ("I don't have data on that.", "Bu konuda elimde veri yok."))
+    return {"question": question.model_dump(), "answer": answer.model_dump()}
+
+
+@app.get("/api/match/audits")
+async def audits() -> dict:
+    run = app.state.run
+    return {"audits": [a.model_dump() for a in run.audits] if run else [], "exact": sum(a.ok for a in run.audits) if run else 0}
 
 
 @app.get("/api/match/moments")

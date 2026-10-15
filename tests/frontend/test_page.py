@@ -17,7 +17,8 @@ SCRIPT = re.findall(r"<script>(.*?)</script>", HTML, re.S)[0]
 
 
 def test_page_has_the_t12_panels_and_keeps_the_voice_controls() -> None:
-    for needle in ("<svg class=\"pitch\"", "cuebanner", "Agent timeline", "follow", "toggleVoice", "speech audit", "/api/stream/fan", "/api/match/moments", "/api/voice?profile="):
+    for needle in ("<svg class=\"pitch\"", "cuebanner", "Agent timeline", "follow", "toggleVoice", "speech audit", "/api/stream/fan", "/api/match/moments", "/api/voice?profile=",
+                   "hold to talk", "talk_start", "talk_end", "/api/qa", "getUserMedia", "webkitSpeechRecognition", "dropPlayback"):
         assert needle in HTML, needle
     assert "\u2014" not in HTML
     assert "font-size: 2.2px" in (ROOT / "frontend" / "style.css").read_text(encoding="utf-8"), "player label stays small"

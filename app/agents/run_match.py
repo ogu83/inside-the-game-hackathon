@@ -114,6 +114,27 @@ def offline_producer(tamper=None) -> Producer:
     return Producer(TemplateRenderer(), tamper=tamper)
 
 
+def live_qa_agent(mcp_url: str):
+    """Q&A agent over the ledger MCP server (live only). The MCP tool-call span is what the trace shows."""
+    from agent_framework import MCPStreamableHTTPTool
+
+    from app.agents.prompts import QA_INSTRUCTIONS
+    from app.voice.qa import FoundryQaAgent
+
+    client = live_agent("SMALL_MODEL_DEPLOYMENT", "qa", QA_INSTRUCTIONS)
+    client.default_options = getattr(client, "default_options", None)
+    tool = MCPStreamableHTTPTool(name="ledger", url=mcp_url)
+    return FoundryQaAgent(_ToolBoundAgent(client, tool))
+
+
+class _ToolBoundAgent:
+    def __init__(self, agent, tool) -> None:
+        self.agent, self.tool = agent, tool
+
+    async def run(self, prompt: str, options=None):
+        return await self.agent.run(prompt, tools=[self.tool], options=options)
+
+
 def live_workflow():
     import os
 

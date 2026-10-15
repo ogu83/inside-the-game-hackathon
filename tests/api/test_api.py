@@ -233,3 +233,17 @@ async def test_live_run_limit_falls_back_to_offline_mode(client: httpx.AsyncClie
     other = (await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "minutes": 4}, headers={"x-forwarded-for": "203.0.113.9"})).json()
     assert other["agent_mode"] == "foundry"
     assert RunLimiter(per_day=0).allow("anyone") and RunLimiter(per_day=0).remaining("anyone") is None
+
+
+async def test_qa_endpoint_answers_text_first(client: httpx.AsyncClient) -> None:
+    await client.post("/api/match/start", json={"seed": 30, "speed": FAST, "delay_s": 10, "minutes": 12})
+    await read_sse(client, "/api/stream/cues")
+    body = (await client.post("/api/qa", json={"transcript": "what is the score?", "profile_key": "iva|iva-06|casual|en"})).json()
+    assert body["question"]["profile_key"] == "iva|iva-06|casual|en" and body["answer"]["text"].startswith("It is Kestrel Bay")
+    assert body["answer"]["verdict"]["status"] == "verified" and "score" in body["answer"]["tool_calls"]
+    nothing = (await client.post("/api/qa", json={"transcript": "who will win the league?"})).json()
+    assert nothing["answer"]["text"] == "I don't have data on that."
+    state = (await client.get("/api/match/state")).json()["metrics"]
+    assert state["questions_answered"] == 2 and state["questions_without_data"] == 1
+    assert (await client.post("/api/qa", json={"transcript": "x", "profile_key": "bad"})).status_code == 422
+    assert (await client.get("/api/match/audits")).json() == {"audits": [], "exact": 0}

@@ -44,6 +44,13 @@ section h2 .right { margin-left: auto; font-weight: 400; text-transform: none; l
 .narrative .text { margin-top: 3px; font-size: 15px; line-height: 1.35; }
 .narrative.replay { border: 1px dashed var(--info); }
 .speaking { color: var(--accent); font-size: 13px; margin-bottom: 8px; min-height: 18px; }
+.ask { display: flex; gap: 8px; margin-bottom: 10px; }
+.ask input { flex: 1; min-width: 0; }
+.ask .talk { white-space: nowrap; user-select: none; -webkit-user-select: none; touch-action: none; }
+.ask .talk.held { background: var(--away); color: #211; }
+.qa { background: var(--panel2); border: 1px solid var(--info); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+.qa .meta { font-size: 11px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.qa .text { margin: 3px 0; font-size: 15px; line-height: 1.35; }
 .drawer { margin: 0 16px 16px; background: var(--panel); border-radius: 10px; padding: 12px 14px; }
 .drawer .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .chip { background: var(--line); color: var(--text); border-radius: 999px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
@@ -86,6 +93,7 @@ section h2 .right { margin-left: auto; font-weight: 400; text-transform: none; l
   .pitch .label { display: none; }
   .ticker { font-size: 11px; max-height: 90px; }
   .profile { grid-template-columns: 1fr; }
+  .ask { flex-direction: column; }
   .narrative .text { font-size: 14px; }
   .drawer { margin: 0 10px 10px; padding: 10px; }
   .drawer h2 { flex-wrap: wrap; }

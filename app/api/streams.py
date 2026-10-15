@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from collections import defaultdict
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
@@ -22,13 +23,15 @@ from agent_framework import Workflow
 from app.agents.analyst import PacingTracker, RuleDirector
 from app.agents.fact_checker import FactChecker
 from app.agents.fakes import AlwaysVerifies, TemplateCommentator, TemplateRenderer
-from app.agents.models import FanNarrative, FanProfile, MomentResult, OverlayCue
+from app.agents.models import FanNarrative, FanProfile, MomentResult, OverlayCue, SpeechAudit
 from app.agents.producer import Producer
 from app.agents.run_match import close_t
 from app.agents.workflow import build_workflow, run_moment
 from app.api.clock import BroadcastClock
 from app.ledger.labels import moment_labels
+from app.ledger.mcp_server import LedgerTools
 from app.ledger.models import CandidateMoment
+from app.simulator.league import CLUBS
 from app.ledger.state import Ledger
 from app.simulator.engine import simulate
 from app.simulator.models import MatchEvent
@@ -154,6 +157,7 @@ class MatchRun:
     profiles: list[FanProfile] = field(default_factory=lambda: list(DEFAULT_PROFILES))
     agent_mode: str = "template"
     fallback_reason: str | None = None
+    audits: list[SpeechAudit] = field(default_factory=list, init=False)
 
     events: list[MatchEvent] = field(default_factory=list, init=False)
     clock: BroadcastClock | None = field(default=None, init=False)
@@ -209,6 +213,36 @@ class MatchRun:
 
     def timelines(self) -> list[dict[str, Any]]:
         return [p.timeline() for p in sorted(self.processed.values(), key=lambda p: p.moment.window[1])]
+
+    # LedgerView for the MCP tools and the Q&A agent: only what the broadcast has shown.
+    def displayed_events(self) -> list[MatchEvent]:
+        if self.clock is None:
+            return []
+        if self.finished.is_set():
+            return list(self.events)
+        playback = self.clock.playback_t(time.monotonic())  # the loop clock is time.monotonic(); this also works from sync code
+        return [e for e in self.events if e.t <= playback]
+
+    def shown_moments(self) -> list[dict[str, Any]]:
+        shown = sorted((p for p in self.processed.values() if p.displayed == "shown" and p.result.verdict and p.result.verdict.insight), key=lambda p: p.moment.window[1])
+        rows = []
+        for p in shown:
+            insight = p.result.verdict.insight
+            tr = next((n.text for n in p.narratives if n.profile_key.endswith("|tr")), None)
+            rows.append({"moment_id": p.moment.moment_id, "minute": float(p.moment.minute), "kind": p.moment.kind, "team_id": p.moment.team_id,
+                         "team": CLUBS[p.moment.team_id].short if p.moment.team_id in CLUBS else p.moment.team_id,
+                         "claim": insight.claim, "why_it_matters": insight.why_it_matters, "narrative_tr": tr, "evidence": p.moment.evidence})
+        return rows
+
+    def tools(self) -> LedgerTools:
+        return LedgerTools(_RunView(self))
+
+    def record_audit(self, audit: SpeechAudit) -> None:
+        self.audits.append(audit)
+        self.metrics["speech_checks"] += 1
+        self.metrics["speech_mismatches"] += int(not audit.ok)
+        if audit.question_id:
+            self.metrics["answers_spoken"] += 1
 
     def _fall_back(self, reason: str) -> None:
         """Switch to offline agents for the rest of the match (design rule 7) and tell every listener once."""
@@ -361,3 +395,16 @@ class MatchRun:
     def _event_payload(self, event: MatchEvent) -> dict[str, Any]:
         return {"seq": event.seq, "minute": event.minute, "second": event.second, "type": event.type, "team_id": event.team_id,
                 "player_id": event.player_id, "x": event.x, "y": event.y, "text": describe(event)}
+
+
+class _RunView:
+    """LedgerView adapter: `events` is the dataclass field on MatchRun, so the view maps the protocol names."""
+
+    def __init__(self, run: MatchRun) -> None:
+        self.run = run
+
+    def events(self) -> list[MatchEvent]:
+        return self.run.displayed_events()
+
+    def shown_moments(self) -> list[dict[str, Any]]:
+        return self.run.shown_moments()

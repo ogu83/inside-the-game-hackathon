@@ -107,3 +107,59 @@ async def test_live_first_attempt_verified_rate() -> None:
     rate = first_attempt_verified / said if said else 0.0
     assert said >= 5, lines
     assert rate >= 0.7, f"first-attempt verified rate {rate:.0%} ({first_attempt_verified}/{said})\n" + "\n".join(lines)
+
+
+async def test_live_qa_agent_answers_through_the_ledger_mcp_server() -> None:
+    """Needs the app running with a shown match: `AGENT_MODE=template python -m uvicorn app.api.main:app --port 8010`,
+    a started match that has aired at least one cue, and QA_MCP_URL (default http://localhost:8010/mcp)."""
+    import os
+
+    import httpx
+
+    from app.agents.fact_checker import FactChecker
+    from app.agents.fakes import AlwaysVerifies
+    from app.agents.models import FanProfile
+    from app.agents.run_match import live_qa_agent
+    from app.ledger.mcp_server import LedgerTools
+    from app.voice.qa import NO_DATA, QaPipeline, new_question
+
+    base = os.environ.get("QA_MCP_URL", "http://localhost:8010/mcp").rsplit("/mcp", 1)[0]
+    moments = httpx.get(f"{base}/api/match/moments", timeout=10).json()["moments"]
+    assert any(m["displayed"] == "shown" for m in moments), "start a match and let a cue air first"
+
+    class RemoteView:
+        def events(self):
+            return []
+
+        def shown_moments(self):
+            return [{**m, "team": m["team_id"], "claim": m["verdict"]["insight"]["claim"], "why_it_matters": m["verdict"]["insight"]["why_it_matters"], "narrative_tr": None} for m in moments if m["displayed"] == "shown" and m["verdict"]]
+
+    agent = live_qa_agent(f"{base}/mcp")
+    pipeline = QaPipeline(agent, FactChecker(AlwaysVerifies()), LedgerTools(RemoteView()))
+    profile = FanProfile(club_id="iva", player_id="iva-06", language="en")
+    answer = await pipeline.answer(new_question(profile.key(), "How is Remy Tallis doing so far?"), profile)
+    assert answer.tool_calls, "the agent must call a ledger tool over MCP (the tool-call span in the trace)"
+    assert answer.text and answer.verdict is not None
+    nothing = await pipeline.answer(new_question(profile.key(), "Who will win the league this season?"), profile)
+    assert nothing.text == NO_DATA["en"] or "data" in nothing.text.casefold()
+
+
+async def test_live_voice_live_transcribes_its_own_speech() -> None:
+    """Speak a line verbatim, feed the audio back as a push-to-talk utterance, expect the same words."""
+    from app.voice.session import open_voice_live_speaker
+
+    speaker = await open_voice_live_speaker()
+    try:
+        pcm = bytearray()
+
+        async def collect(chunk: bytes) -> None:
+            pcm.extend(chunk)
+
+        line = "How is my player doing in this match?"
+        spoken = await speaker.speak(line, "en", collect)
+        assert spoken.casefold().startswith("how is my player")
+        heard = await speaker.transcribe(bytes(pcm), "en")
+        assert "player" in heard.casefold(), heard
+        await speaker.cancel()
+    finally:
+        await speaker.close()

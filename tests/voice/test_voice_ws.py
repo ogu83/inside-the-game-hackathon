@@ -26,6 +26,13 @@ class FakeSpeaker:
         await on_audio(CHUNK)
         return re.sub(r"\d+", "99", text, count=1) if self.mangle else text
 
+    async def cancel(self) -> None:
+        self.cancelled = getattr(self, "cancelled", 0) + 1
+
+    async def transcribe(self, pcm16: bytes, lang: str) -> str:
+        self.transcribed = getattr(self, "transcribed", []) + [len(pcm16)]
+        return "how is my player doing?" if lang == "en" else "oyuncum nasıl oynuyor?"
+
     async def close(self) -> None:
         self.closed = True
 
@@ -59,6 +66,8 @@ def run_voice(speaker: FakeSpeaker | None, lang: str = "en", profile: str | None
                     audio_bytes += len(message["bytes"])
                 elif message.get("text") is not None:
                     messages.append(json.loads(message["text"]))
+                    if messages[-1]["type"] in ("match_end", "unavailable"):
+                        break
         metrics = app.state.run.report()
     return messages, audio_bytes, metrics
 
@@ -75,6 +84,7 @@ def test_verified_lines_are_spoken_verbatim_and_audited() -> None:
     assert speaking == [text for text, _ in speaker.spoken]
     assert metrics["speech_checks"] == len(spoken) and metrics.get("speech_mismatches", 0) == 0
     assert speaker.closed
+    assert messages[-1]["type"] == "match_end", "the socket stays open after the match for questions"
 
 
 def test_a_voice_that_changes_a_number_is_caught_by_the_speech_gate() -> None:
@@ -143,3 +153,89 @@ def test_bad_profile_key_is_reported() -> None:
         client.post("/api/match/start", json={"seed": 7, "speed": 600, "delay_s": 120, "minutes": 4})
         with client.websocket_connect("/api/voice?profile=nonsense") as ws:
             assert ws.receive_json()["type"] == "unavailable"
+
+
+def ask_over_voice(profile: str, actions) -> tuple[list[dict], FakeSpeaker, dict, list[dict]]:
+    """Finished match, voice connected for `profile`; `actions(ws)` sends the fan's frames; returns messages, speaker, metrics, audits."""
+    speaker = FakeSpeaker()
+    messages: list[dict] = []
+    with TestClient(app) as client:
+        async def factory():
+            return speaker
+
+        app.state.speaker_factory = factory
+        app.state.workflow_factory = template_workflow
+        client.post("/api/match/start", json={"seed": 30, "speed": 1500, "delay_s": 10, "minutes": 12})
+        with client.stream("GET", "/api/stream/cues") as stream:
+            for line in stream.iter_lines():
+                if line.startswith("event: match_end"):
+                    break
+        with client.websocket_connect(f"/api/voice?profile={profile}") as ws:
+            # the replay line is spoken first and the socket stays open after match_end; then act
+            while True:
+                m = ws.receive()
+                if m.get("text") and json.loads(m["text"])["type"] == "match_end":
+                    break
+            actions(ws)
+            answers = 0
+            while answers < 1:
+                m = ws.receive()
+                if m.get("text"):
+                    msg = json.loads(m["text"])
+                    messages.append(msg)
+                    if msg["type"] == "spoken" and msg["audit"]["question_id"]:
+                        answers += 1
+        metrics = app.state.run.report()
+        audits = client.get("/api/match/audits").json()["audits"]
+    return messages, speaker, metrics, audits
+
+
+def test_typed_question_is_answered_from_the_ledger_and_spoken_verbatim() -> None:
+    messages, speaker, metrics, audits = ask_over_voice("iva|iva-06|casual|en", lambda ws: ws.send_text(json.dumps({"type": "ask", "transcript": "how is my player doing?"})))
+    kinds = [m["type"] for m in messages]
+    assert kinds[:3] == ["question", "answer", "speaking"] and kinds[-1] == "spoken"
+    answer = messages[1]["answer"]
+    assert "Remy Tallis" in answer["text"] and answer["verdict"]["status"] == "verified" and "player_stats" in answer["tool_calls"]
+    assert speaker.spoken[-1] == (answer["text"], "en") and speaker.cancelled >= 1, "barge-in stops the current line before the answer"
+    audit = messages[-1]["audit"]
+    assert audit["ok"] and audit["question_id"] == answer["question_id"] and audit["approved_text"] == answer["text"]
+    assert metrics["questions_answered"] == 1 and metrics["answers_spoken"] == 1
+    assert any(a["question_id"] == answer["question_id"] for a in audits) and any(a["moment_id"] for a in audits)
+
+
+def test_push_to_talk_transcribes_then_answers_in_the_profile_language() -> None:
+    def talk(ws):
+        ws.send_text(json.dumps({"type": "talk_start"}))
+        ws.send_bytes(b"\x00\x01" * 12000)
+        ws.send_bytes(b"\x00\x01" * 12000)
+        ws.send_text(json.dumps({"type": "talk_end"}))
+
+    messages, speaker, _, _ = ask_over_voice("kby|kby-07|analyst|tr", talk)
+    assert speaker.transcribed == [48000]
+    question = next(m for m in messages if m["type"] == "question")["question"]
+    assert question["transcript"] == "oyuncum nasıl oynuyor?" and question["profile_key"] == "kby|kby-07|analyst|tr"
+    answer = next(m for m in messages if m["type"] == "answer")["answer"]
+    assert "Luca Brightwater" in answer["text"] and "pas" in answer["text"]
+    assert speaker.spoken[-1][1] == "tr"
+
+
+def test_too_short_push_to_talk_is_reported_not_answered() -> None:
+    speaker = FakeSpeaker()
+    with TestClient(app) as client:
+        async def factory():
+            return speaker
+
+        app.state.speaker_factory = factory
+        app.state.workflow_factory = template_workflow
+        client.post("/api/match/start", json={"seed": 7, "speed": 1500, "delay_s": 120, "minutes": 4})
+        with client.websocket_connect("/api/voice?profile=-|-|casual|en") as ws:
+            ws.send_text(json.dumps({"type": "talk_start"}))
+            ws.send_bytes(b"\x00" * 100)
+            ws.send_text(json.dumps({"type": "talk_end"}))
+            while True:
+                m = ws.receive()
+                if m.get("text"):
+                    msg = json.loads(m["text"])
+                    if msg["type"] == "question":
+                        assert msg["question"] is None and msg["reason"] == "no speech captured"
+                        break

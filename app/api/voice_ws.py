@@ -16,8 +16,9 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.agents.fact_check_rules import check_speech, cited_evidence
-from app.agents.models import FanProfile
+from app.agents.models import Answer, FanProfile, SpeechAudit
 from app.api.streams import MatchRun
+from app.voice.qa import new_question
 from app.voice.session import Lang, Speaker
 
 router = APIRouter()
@@ -30,7 +31,7 @@ def narrative_for(cue: dict[str, Any], lang: str) -> dict[str, Any] | None:
     return next((n for n in cue["narratives"] if n["profile_key"].rsplit("|", 1)[-1] == lang), None)
 
 
-async def _feed(run: MatchRun, fan: FanProfile, waiting: asyncio.Queue, ws: WebSocket) -> None:
+async def _feed(run: MatchRun, fan: FanProfile, waiting: asyncio.Queue, ws: WebSocket, state: dict) -> None:
     channel = f"fan:{fan.key()}"
     queue = run.broadcast.open(channel)  # register before rendering, so nothing published meanwhile is lost
     latest = await run.render_latest(fan)
@@ -42,32 +43,96 @@ async def _feed(run: MatchRun, fan: FanProfile, waiting: asyncio.Queue, ws: WebS
         narrative = json.loads(item["data"])
         while not waiting.empty():
             stale = waiting.get_nowait()
+            if isinstance(stale, Answer):
+                waiting.put_nowait(stale)  # an answer is never stale
+                break
             run.metrics["speech_skipped_stale"] += 1
             await ws.send_json({"type": "skipped", "moment_id": stale["moment_id"], "reason": "newer line waiting"})
         waiting.put_nowait(narrative)
-    waiting.put_nowait(DONE)
+    # The match is over: say so once the last line is out, but stay connected so the fan can still ask questions.
+    while not waiting.empty() or state["busy"]:
+        await asyncio.sleep(0.02)
+    await ws.send_json({"type": "match_end"})
 
 
-async def _speak_loop(run: MatchRun, speaker: Speaker, lang: Lang, waiting: asyncio.Queue, ws: WebSocket) -> None:
-    while (narrative := await waiting.get()) is not DONE:
-        processed = run.processed[narrative["moment_id"]]
-        insight = processed.result.verdict.insight
-        cited, _ = cited_evidence(insight, processed.moment)
-        await ws.send_json({"type": "speaking", "moment_id": narrative["moment_id"], "text": narrative["text"], "replay": narrative.get("replay", False), "lang": lang})
-        transcript = await speaker.speak(narrative["text"], lang, ws.send_bytes)
-        check = check_speech(narrative["text"], transcript, cited, moment_id=narrative["moment_id"],
-                             profile_key=narrative["profile_key"], lang=lang)
-        run.metrics["speech_checks"] += 1
-        run.metrics["speech_mismatches"] += int(not check.ok)
-        await ws.send_json({"type": "spoken", "check": check.model_dump()})
+async def _speak_loop(run: MatchRun, speaker: Speaker, fan: FanProfile, waiting: asyncio.Queue, ws: WebSocket, state: dict) -> None:
+    lang = fan.language
+    while (item := await waiting.get()) is not DONE:
+        state["busy"] = True
+        if isinstance(item, Answer):
+            text, cited, moment_id, question_id = item.text, item.evidence, None, item.question_id
+            await ws.send_json({"type": "speaking", "question_id": question_id, "text": text, "lang": lang})
+        else:
+            processed = run.processed[item["moment_id"]]
+            cited, _ = cited_evidence(processed.result.verdict.insight, processed.moment)
+            text, moment_id, question_id = item["text"], item["moment_id"], None
+            await ws.send_json({"type": "speaking", "moment_id": moment_id, "text": text, "replay": item.get("replay", False), "lang": lang})
+        state["interrupted"] = False
+        transcript = await speaker.speak(text, lang, ws.send_bytes)
+        check = check_speech(text, transcript, cited, moment_id=moment_id or f"qa-{question_id}", profile_key=fan.key(), lang=lang)
+        interrupted = state["interrupted"]
+        ok = check.ok or (interrupted and not [m for m in check.mismatches if "transcript differs" not in m])
+        audit = SpeechAudit(moment_id=moment_id, question_id=question_id, profile_key=fan.key(), approved_text=text, transcript=transcript,
+                            ok=ok, mismatches=[] if ok else check.mismatches, interrupted=interrupted)
+        run.record_audit(audit)
+        await ws.send_json({"type": "spoken", "check": check.model_dump(), "audit": audit.model_dump()})
+        state["busy"] = False
 
 
-async def _until_disconnect(ws: WebSocket) -> None:
+async def _ask(run: MatchRun, ws: WebSocket, fan: FanProfile, transcript: str, waiting: asyncio.Queue, speaker: Speaker, state: dict) -> None:
+    """Barge-in: stop the current line, drop stale lines, answer text first, then speak the answer verbatim."""
+    state["interrupted"] = True
+    await speaker.cancel()
+    while not waiting.empty():
+        stale = waiting.get_nowait()
+        if isinstance(stale, Answer):
+            waiting.put_nowait(stale)
+            break
+        run.metrics["speech_skipped_stale"] += 1
+    question = new_question(fan.key(), transcript, len(run.displayed_events()))
+    await ws.send_json({"type": "question", "question": question.model_dump()})
+    answer = await ws.app.state.qa.answer(question, fan)
+    run.metrics["questions_answered"] += 1
+    await ws.send_json({"type": "answer", "answer": answer.model_dump()})
+    waiting.put_nowait(answer)
+
+
+async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asyncio.Queue, speaker: Speaker, state: dict) -> None:
+    """Text frames: ask / talk_start / talk_end. Binary frames between talk_start and talk_end are pcm16 mic audio."""
+    pcm = bytearray()
+    talking = False
     try:
         while True:
-            await ws.receive_text()
+            message = await ws.receive()
+            if message["type"] == "websocket.disconnect":
+                return
+            if message.get("bytes") is not None:
+                if talking:
+                    pcm.extend(message["bytes"])
+                continue
+            try:
+                data = json.loads(message.get("text") or "{}")
+            except json.JSONDecodeError:
+                continue
+            kind = data.get("type")
+            if kind == "ask" and data.get("transcript", "").strip():
+                await _ask(run, ws, fan, data["transcript"], waiting, speaker, state)
+            elif kind == "talk_start":
+                talking, pcm = True, bytearray()
+                state["interrupted"] = True
+                await speaker.cancel()
+            elif kind == "talk_end" and talking:
+                talking = False
+                if len(pcm) < 4800:  # under 0.1 s of audio
+                    await ws.send_json({"type": "question", "question": None, "reason": "no speech captured"})
+                    continue
+                transcript = await speaker.transcribe(bytes(pcm), fan.language)
+                if transcript.strip():
+                    await _ask(run, ws, fan, transcript, waiting, speaker, state)
+                else:
+                    await ws.send_json({"type": "question", "question": None, "reason": "nothing understood"})
     except WebSocketDisconnect:
-        pass
+        return
 
 
 @router.websocket("/api/voice")
@@ -89,10 +154,11 @@ async def voice(ws: WebSocket, lang: Lang = "en", profile: str | None = None) ->
     run.add_profile(fan)
     speaker = await factory()
     waiting: asyncio.Queue = asyncio.Queue()
+    state = {"interrupted": False, "busy": False}
     tasks = [
-        asyncio.create_task(_feed(run, fan, waiting, ws)),
-        asyncio.create_task(_speak_loop(run, speaker, fan.language, waiting, ws)),
-        asyncio.create_task(_until_disconnect(ws)),
+        asyncio.create_task(_feed(run, fan, waiting, ws, state)),
+        asyncio.create_task(_speak_loop(run, speaker, fan, waiting, ws, state)),
+        asyncio.create_task(_listen(run, ws, fan, waiting, speaker, state)),
     ]
     try:
         await asyncio.wait(tasks[1:], return_when=asyncio.FIRST_COMPLETED)

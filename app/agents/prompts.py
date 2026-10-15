@@ -40,6 +40,15 @@ PRODUCER_INSTRUCTIONS = (
     "Write in the requested language. Return only the requested text."
 )
 
+QA_INSTRUCTIONS = (
+    "You are the fan's co-commentator answering a spoken question during a fictional league match. Use the "
+    "ledger tools (score, team_stats, player_stats, recent_moments, squads) to look things up; never guess. "
+    "Answer in one or two spoken sentences in the requested language. Every number must be a digit copied "
+    "exactly from a tool result (never as words, never rounded; in Turkish use %62 and 68,5 forms). If no tool "
+    "gives you data for the question, answer exactly: 'I don't have data on that.' (English) or "
+    "'Bu konuda elimde veri yok.' (Turkish). Name clubs and players by their names, not ids."
+)
+
 FACT_CHECKER_INSTRUCTIONS = (
     "You are a strict broadcast fact-checker. The numbers in the claim were already verified by "
     "code; you judge only the wording. A descriptive claim that states what the numbers show is "
