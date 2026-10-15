@@ -5,7 +5,7 @@
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
 ## Current task
-Phase B on cloud branch `claude/gracious-goldberg-9u16ny` (merged with main at fd2f5fe, S5 included): T3 done; working T4, T5, T6, T7, T8, T9, T11, T12 with offline agents. T10, T10b, T12b, T13 stay local.
+Phase B on cloud branch `claude/gracious-goldberg-9u16ny` (merged with main at fd2f5fe, S5 included): T3, T4 done; working T5, T6, T7, T8, T9, T11, T12 with offline agents. T10, T10b, T12b, T13 stay local.
 
 ## Done
 - [x] Registered for the hackathon (2026-10-14), confirmation email received
@@ -27,6 +27,7 @@ Phase B on cloud branch `claude/gracious-goldberg-9u16ny` (merged with main at f
 - [x] 2026-10-15 (cloud session): decisions applied: SPEC.md revision (director per moment with `DirectorDecision`, 20 s delay with live/precomputed modes, public Container App as Must with managed identity, `PUBLIC_LIVE_RUNS_PER_DAY` limit and offline fallback, docker compose offline mode, `Question`/`Answer`/`SpeechAudit`, `profile_key`, `top_player_*`, rounding and digits-only rules, Linux commands, criteria 1/3/6 revised and 11 added); plan.md scope table and phases; todo.md T3, T6, T7, T10, T12b, T13, T14, T15; demo script (3x to 4x recording, English captions, agent timeline in scene 2, immediate re-render in scene 3, impact sentence in scene 1, pre-recorded portal clips). Code: integral evidence shown as integers in prompts (fixes "14.0 passes"); pass_streak carries `top_player_id` and `top_player_passes`. 97 tests pass.
 
 - [x] 2026-10-15 (cloud session): T3 simulator v1 (pressing trait, substitutions, free-kick restarts, S1 code notes, DEMO_SEED 30). 113 tests.
+- [x] 2026-10-15 (cloud session): T4 dataset export, 3 samples in data/, README.md with the schema. 116 tests.
 
 ## Next step
 Locally (T3 and later not started): `python -m pytest tests/agents -q -m live`, `python -m app.agents.run_match --seed 7 --live --jsonl runs/7.jsonl`, merge `claude/gracious-goldberg-9u16ny` into `main`; S5 (thin voice) by Oct 19; then Phase B in todo.md order (T3 with the cut scope, T10b can start from the S3 run log as soon as the live run log exists). Then deepen T3 to T12b. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.

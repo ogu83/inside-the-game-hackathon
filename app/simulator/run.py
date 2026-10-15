@@ -2,12 +2,15 @@
 
     python -m app.simulator.run --seed 7 --speed 20     # 20x real time
     python -m app.simulator.run --seed 7 --speed 0      # instant
+    python -m app.simulator.run --seed 7 --speed 0 --export data/match_7.jsonl
 """
 
 import argparse
 import time
+from pathlib import Path
 
 from app.simulator.engine import simulate
+from app.simulator.export import export_match
 from app.simulator.league import CLUBS, PLAYERS
 from app.simulator.models import MatchEvent
 
@@ -52,9 +55,12 @@ def main() -> None:
     parser.add_argument("--minutes", type=int, default=90)
     parser.add_argument("--home", default="kby")
     parser.add_argument("--away", default="iva")
+    parser.add_argument("--export", type=Path, default=None, help="also write the match as JSONL")
     args = parser.parse_args()
 
     events = simulate(args.seed, args.home, args.away, args.minutes)
+    if args.export:
+        print(f"exported {len(events)} events to {export_match(events, args.export)}")
     previous = 0
     for event in events:
         if args.speed > 0:

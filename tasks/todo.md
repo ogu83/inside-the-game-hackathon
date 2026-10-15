@@ -72,10 +72,11 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Files: app/simulator/*, tests/simulator/test_simulator.py
   - Result: `Club.pressing` trait (Ironvale 1.3, Kestrel Bay 0.85) multiplies the press chance; 2 like-for-like substitutions per club between minutes 58 and 82 (`substitution` events with player_on/player_off); fouls set a `free_kick` restart taken by the fouled team; `half_seconds` naming, redundant phase line, `zip(strict=True)`, clamped end coordinates; `DEMO_SEED = 30` (3 moments in the first 5 minutes, one ending in a shot); run.py prints subs and free kicks. 8 new tests, 113 pass.
 
-- [ ] T4: Dataset export
+- [x] T4: Dataset export (done 2026-10-15 in a cloud session)
   - Acceptance: `--export data/match_<seed>.jsonl`; 3 sample matches committed; README section describing the schema
   - Verify: export then re-load and validate every line
   - Files: app/simulator/export.py, data/, tests/simulator/test_export.py
+  - Result: `app/simulator/export.py` (`export_match`, `load_match`, CLI), `--export` on run.py, samples `data/match_{7,30,42}.jsonl` (a test fails if they go stale against the engine), README.md started with the schema section and the frame convention. 116 tests.
 
 - [ ] T5: Ledger metrics
   - Acceptance: pass accuracy, pass difficulty, shot speed, player distance/speed thresholds added to S2's calculators; each unit-tested on hand-built sequences
