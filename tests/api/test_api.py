@@ -263,9 +263,11 @@ async def test_qa_endpoint_answers_text_first(client: httpx.AsyncClient) -> None
     body = (await client.post("/api/qa", json={"transcript": "what is the score?", "profile_key": "iva|iva-06|casual|en"})).json()
     assert body["question"]["profile_key"] == "iva|iva-06|casual|en" and body["answer"]["text"].startswith("It is Kestrel Bay")
     assert body["answer"]["verdict"]["status"] == "verified" and "score" in body["answer"]["tool_calls"]
+    assert body["answer"]["timing"]["answered_at"] >= body["answer"]["timing"]["pressed_at"]
     nothing = (await client.post("/api/qa", json={"transcript": "who will win the league?"})).json()
     assert nothing["answer"]["text"] == "I don't have data on that."
     state = (await client.get("/api/match/state")).json()["metrics"]
     assert state["questions_answered"] == 2 and state["questions_without_data"] == 1
+    assert state["qa_answer_p50_ms"] >= 0 and "qa_speech_p50_ms" not in state, "text-only questions are never spoken"
     assert (await client.post("/api/qa", json={"transcript": "x", "profile_key": "bad"})).status_code == 422
     assert (await client.get("/api/match/audits")).json() == {"audits": [], "exact": 0}

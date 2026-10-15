@@ -11,12 +11,13 @@ only the newest waiting line is kept (a stale line is worse than a skipped one).
 import asyncio
 import json
 import logging
+import time
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.agents.fact_check_rules import check_speech, cited_evidence
-from app.agents.models import Answer, FanProfile, SpeechAudit
+from app.agents.models import Answer, FanProfile, QaTiming, SpeechAudit
 from app.api.streams import MatchRun
 from app.voice.qa import new_question
 from app.voice.session import Lang, NothingHeard, Speaker, SpeechError, TranscriptionError
@@ -62,7 +63,10 @@ async def _speak_loop(run: MatchRun, speaker: Speaker, fan: FanProfile, waiting:
         state["busy"] = True
         if isinstance(item, Answer):
             text, cited, moment_id, question_id = item.text, item.evidence, None, item.question_id
-            await ws.send_json({"type": "speaking", "question_id": question_id, "text": text, "lang": lang})
+            if item.timing is not None:
+                item.timing.speech_started_at = time.time()
+                run.record_timing(item.timing)
+            await ws.send_json({"type": "speaking", "question_id": question_id, "text": text, "lang": lang, "timing": item.timing.summary() if item.timing else None})
         else:
             processed = run.processed[item["moment_id"]]
             cited, _ = cited_evidence(processed.result.verdict.insight, processed.moment)
@@ -98,8 +102,10 @@ async def _barge_in(run: MatchRun, ws: WebSocket, speaker: Speaker, state: dict,
             await ws.send_json({"type": "audit_updated", "audit": audit.model_dump()})
 
 
-async def _ask(run: MatchRun, ws: WebSocket, fan: FanProfile, transcript: str, waiting: asyncio.Queue, speaker: Speaker, state: dict, interrupting: str | None = None) -> None:
+async def _ask(run: MatchRun, ws: WebSocket, fan: FanProfile, transcript: str, waiting: asyncio.Queue, speaker: Speaker, state: dict,
+               interrupting: str | None = None, timing: QaTiming | None = None) -> None:
     """Barge-in: stop the current line, drop stale lines, answer text first, then speak the answer verbatim."""
+    timing = timing or QaTiming(pressed_at=time.time())
     await _barge_in(run, ws, speaker, state, interrupting)
     while not waiting.empty():
         stale = waiting.get_nowait()
@@ -110,15 +116,20 @@ async def _ask(run: MatchRun, ws: WebSocket, fan: FanProfile, transcript: str, w
     question = new_question(fan.key(), transcript, len(run.displayed_events()))
     await ws.send_json({"type": "question", "question": question.model_dump()})
     answer = await ws.app.state.qa.answer(question, fan)
+    timing.answered_at = time.time()
+    answer.timing = timing
+    run.record_timing(timing)
     run.metrics["questions_answered"] += 1
-    await ws.send_json({"type": "answer", "answer": answer.model_dump()})
+    await ws.send_json({"type": "answer", "answer": answer.model_dump(), "timing": timing.summary()})
     waiting.put_nowait(answer)
 
 
-async def _transcribe_then_ask(run: MatchRun, ws: WebSocket, fan: FanProfile, pcm: bytes, waiting: asyncio.Queue, speaker: Speaker, state: dict) -> None:
+async def _transcribe_then_ask(run: MatchRun, ws: WebSocket, fan: FanProfile, pcm: bytes, waiting: asyncio.Queue, speaker: Speaker, state: dict, pressed_at: float) -> None:
     """One utterance, in its own task: a slow or failed transcription never blocks the next press."""
+    timing = QaTiming(pressed_at=pressed_at)
     try:
         transcript = await speaker.transcribe(pcm, fan.language)
+        timing.transcribed_at = time.time()
     except asyncio.CancelledError:
         raise
     except NothingHeard:  # empty or too short: fails at once, with a human reason
@@ -131,7 +142,7 @@ async def _transcribe_then_ask(run: MatchRun, ws: WebSocket, fan: FanProfile, pc
         await ws.send_json({"type": "question", "question": None, "reason": f"could not transcribe: {exc}"})
         return
     if transcript.strip():
-        await _ask(run, ws, fan, transcript, waiting, speaker, state)
+        await _ask(run, ws, fan, transcript, waiting, speaker, state, timing=timing)
     else:
         run.metrics["nothing_heard"] += 1
         await ws.send_json({"type": "question", "question": None, "reason": NOTHING_HEARD[fan.language]})
@@ -143,6 +154,7 @@ async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asynci
     pcm = bytearray()
     talking = False
     pending: asyncio.Task | None = None
+    pressed_at = 0.0
     try:
         while True:
             message = await ws.receive()
@@ -165,11 +177,11 @@ async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asynci
                 if pending is not None and not pending.done():
                     pending.cancel()  # the fan moved on: the earlier utterance is dropped
                     run.metrics["transcriptions_superseded"] += 1
-                talking, pcm = True, bytearray()
+                talking, pcm, pressed_at = True, bytearray(), time.time()
                 await _barge_in(run, ws, speaker, state, data.get("interrupting"))
             elif kind == "talk_end" and talking:
                 talking = False
-                pending = asyncio.create_task(_transcribe_then_ask(run, ws, fan, bytes(pcm), waiting, speaker, state))
+                pending = asyncio.create_task(_transcribe_then_ask(run, ws, fan, bytes(pcm), waiting, speaker, state, pressed_at))
     except WebSocketDisconnect:
         return
     finally:

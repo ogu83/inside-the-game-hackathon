@@ -46,4 +46,8 @@ def test_every_answer_is_spoken_and_audited_during_the_match() -> None:
         assert [a for a in stored["audits"] if a["question_id"]] and stored["exact"] >= 2
         metrics = client.get("/api/match/state").json()["metrics"]
         assert metrics["answers_spoken"] == metrics["questions_answered"] == 2
+        for answer in answered:
+            t = answer["timing"]
+            assert t["pressed_at"] <= t["answered_at"] and t["transcribed_at"] is None, "typed questions have no transcription mark"
+        assert 0 <= metrics["qa_answer_p50_ms"] <= metrics["qa_speech_p50_ms"] < 10000, "pressed to answer and pressed to speech are measured (p50)"
         client.post("/api/match/stop")

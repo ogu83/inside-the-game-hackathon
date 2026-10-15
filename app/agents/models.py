@@ -127,6 +127,27 @@ class QaDraft(BaseModel):
     language: Literal["en", "tr"] = "en"
 
 
+class QaTiming(BaseModel):
+    """Wall-clock marks (epoch seconds, server side) for one question; criterion 9 measures pressed to spoken."""
+
+    pressed_at: float | None = None        # talk_start received (or the typed question received)
+    transcribed_at: float | None = None    # transcript available (push-to-talk only)
+    answered_at: float | None = None       # approved answer text ready
+    speech_started_at: float | None = None # first audio of the spoken answer sent to the page
+
+    def answer_ms(self) -> int | None:
+        return round((self.answered_at - self.pressed_at) * 1000) if self.pressed_at and self.answered_at else None
+
+    def speech_ms(self) -> int | None:
+        return round((self.speech_started_at - self.pressed_at) * 1000) if self.pressed_at and self.speech_started_at else None
+
+    def transcription_ms(self) -> int | None:
+        return round((self.transcribed_at - self.pressed_at) * 1000) if self.pressed_at and self.transcribed_at else None
+
+    def summary(self) -> dict[str, int | None]:
+        return {"transcription_ms": self.transcription_ms(), "answer_ms": self.answer_ms(), "speech_ms": self.speech_ms()}
+
+
 class Answer(BaseModel):
     question_id: str
     text: str                      # "I don't have data on that" when no evidence supports an answer
@@ -134,6 +155,7 @@ class Answer(BaseModel):
     tool_calls: list[str]
     verdict: Verdict | None = None
     evidence: dict[str, float] = Field(default_factory=dict)  # the cited values, so the speech gate can re-check the spoken answer
+    timing: QaTiming | None = None
 
 
 class SpeechAudit(BaseModel):

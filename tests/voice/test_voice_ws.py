@@ -217,8 +217,12 @@ def test_push_to_talk_transcribes_then_answers_in_the_profile_language() -> None
         ws.send_bytes(b"\x00\x01" * 12000)
         ws.send_text(json.dumps({"type": "talk_end"}))
 
-    messages, speaker, _, _ = ask_over_voice("kby|kby-07|analyst|tr", talk)
+    messages, speaker, metrics, _ = ask_over_voice("kby|kby-07|analyst|tr", talk)
     assert speaker.transcribed == [48000]
+    timing = next(m for m in messages if m["type"] == "answer")["timing"]
+    assert timing["transcription_ms"] is not None and 0 <= timing["transcription_ms"] <= timing["answer_ms"], "push-to-talk marks pressed, transcribed and answered"
+    speaking = next(m for m in messages if m["type"] == "speaking" and m.get("question_id"))
+    assert speaking["timing"]["speech_ms"] >= timing["answer_ms"] and metrics["qa_speech_p50_ms"] == speaking["timing"]["speech_ms"]
     question = next(m for m in messages if m["type"] == "question")["question"]
     assert question["transcript"] == "oyuncum nasıl oynuyor?" and question["profile_key"] == "kby|kby-07|analyst|tr"
     answer = next(m for m in messages if m["type"] == "answer")["answer"]

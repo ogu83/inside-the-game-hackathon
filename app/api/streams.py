@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import os
+import statistics
 import time
 from collections import defaultdict
 from collections.abc import AsyncIterator, Callable
@@ -23,7 +24,7 @@ from agent_framework import Workflow
 from app.agents.analyst import PacingTracker, RuleDirector
 from app.agents.fact_checker import FactChecker
 from app.agents.fakes import AlwaysVerifies, TemplateCommentator, TemplateRenderer
-from app.agents.models import FanNarrative, FanProfile, MomentResult, OverlayCue, SpeechAudit
+from app.agents.models import FanNarrative, FanProfile, MomentResult, OverlayCue, QaTiming, SpeechAudit
 from app.agents.producer import Producer
 from app.agents.run_match import close_t
 from app.agents.workflow import build_workflow, run_moment
@@ -158,6 +159,7 @@ class MatchRun:
     agent_mode: str = "template"
     fallback_reason: str | None = None
     audits: list[SpeechAudit] = field(default_factory=list, init=False)
+    timings: list[QaTiming] = field(default_factory=list, init=False)
 
     events: list[MatchEvent] = field(default_factory=list, init=False)
     clock: BroadcastClock | None = field(default=None, init=False)
@@ -210,7 +212,22 @@ class MatchRun:
             self.broadcast.close("match_end", {"metrics": self.report()})
 
     def report(self) -> dict[str, Any]:
-        return {**dict(self.metrics), "mode": self.mode, "match_id": self.match_id, "agent_mode": self.agent_mode, "fallback_reason": self.fallback_reason}
+        return {**dict(self.metrics), **self.latency_summary(), "mode": self.mode, "match_id": self.match_id, "agent_mode": self.agent_mode, "fallback_reason": self.fallback_reason}
+
+    def record_timing(self, timing: QaTiming) -> None:
+        if timing not in self.timings:
+            self.timings.append(timing)
+
+    def latency_summary(self) -> dict[str, int]:
+        """p50 of pressed-to-answer and pressed-to-speech over this match (criterion 9 asks for about 3 s median)."""
+        answers = [t.answer_ms() for t in self.timings if t.answer_ms() is not None]
+        speech = [t.speech_ms() for t in self.timings if t.speech_ms() is not None]
+        out: dict[str, int] = {}
+        if answers:
+            out["qa_answer_p50_ms"] = round(statistics.median(answers))
+        if speech:
+            out["qa_speech_p50_ms"] = round(statistics.median(speech))
+        return out
 
     def timelines(self) -> list[dict[str, Any]]:
         return [p.timeline() for p in sorted(self.processed.values(), key=lambda p: p.moment.window[1])]

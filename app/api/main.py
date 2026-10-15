@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -14,7 +15,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.agents.fact_checker import FactChecker
 from app.agents.fakes import AlwaysVerifies
-from app.agents.models import FanProfile
+from app.agents.models import FanProfile, QaTiming
 from app.api.limits import RunLimiter, live_runs_per_day
 from app.ledger.mcp_server import LedgerTools, build_mcp_server
 from app.voice.qa import QaPipeline, RuleQaAgent, new_question
@@ -200,7 +201,11 @@ async def ask(request: AskRequest) -> dict:
     profile = parse_profile_key(request.profile_key)
     seq = len(run.displayed_events())
     question = new_question(profile.key(), request.transcript, seq)
+    timing = QaTiming(pressed_at=time.time())
     answer = await app.state.qa.answer(question, profile)
+    timing.answered_at = time.time()
+    answer.timing = timing
+    run.record_timing(timing)
     run.metrics["questions_answered"] += 1
     run.metrics["questions_without_data"] += int(answer.text in ("I don't have data on that.", "Bu konuda elimde veri yok."))
     return {"question": question.model_dump(), "answer": answer.model_dump()}
