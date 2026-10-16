@@ -74,8 +74,23 @@ Goal: one command shows a moving match whose verified cues are displayed and spo
 
 **Checkpoint B:** Must column of the scope table works locally; eval numbers exist.
 
-### Phase E: Ship (Oct 23-26)
-- T13 docker compose offline mode from a clean clone (Must) and Container App public URL with managed identity, run limit and offline fallback, kept up through 2026-11-10 (Must). T14 README + diagram + impact paragraph + judge section. T15 Record video from a local in-process run at 3x to 4x with English captions, hosted agent warmed up. T16 Pre-publish pass and submit by Oct 26.
+### Revised order from 2026-10-16
+Phases S and B are on `main` (D1 to T12b, T10b code). Implementation now runs through prompts in `docs/prompts/`: this session writes a prompt per task, another agent on Oguz's machine (with `az` login) implements it, this session reviews and merges. Order, risk first:
+1. T10b run the Foundry evaluation (Oct 16).
+2. T13 deploy, the riskiest Must: Dockerfile, docker compose offline mode, per-visitor match sessions, Azure Container App with managed identity (Oct 17-18).
+3. Phase P polish (Oct 18-20), below.
+4. T10 hosted agent, timeboxed to half a day (Oct 20-21).
+5. T14 README, T15 video, T16 publish and submit (Oct 22-26).
+
+### Phase P: Polish (Oct 18-20)
+UX and presentation and technical implementation are 20% of the score each; judges see the video and read the code.
+- P1 Design review with Claude Design: review the page as a broadcast product, produce a mockup and a short style guide (palette, type, spacing, states).
+- P2 Original assets from an image generator: fictional club crests (Kestrel Bay: kestrel; Ironvale: anvil or iron motif), a hero image for README, Innovation Studio and the YouTube thumbnail. No real clubs, crests or trademarks; the generator's terms must allow commercial use (Microsoft takes a commercial licence).
+- P3 UI implementation from P1 and P2: pitch texture in SVG/CSS (mowing stripes, grass gradient, ball glow) rather than a raster image, an open-source icon set (Lucide, MIT) instead of text buttons, crests in the cue banner and fan panel, no regressions in the voice and push-to-talk flows.
+- P4 Code review against a checklist built from `professional-programming/antipatterns` and best practices: small safe fixes only, no restructuring; architecture decision records in `docs/adr/` (broadcast delay, numbers checked by code, voice speaks only approved text, ledger over MCP, per-visitor sessions, hosted vs in-container).
+
+### Phase E: Ship (Oct 22-26)
+- T13 moved ahead of Phase P (see the revised order). T14 README + diagram + impact paragraph + judge section + ADR links. T15 Record video from a local in-process run at 3x to 4x with English captions, hosted agent warmed up. T16 Pre-publish pass and submit by Oct 26.
 
 ## Parallelism
 

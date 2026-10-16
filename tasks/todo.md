@@ -138,9 +138,16 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Files: app/ledger/mcp_server.py, app/voice/{session.py,qa.py}, app/api/voice_ws.py, frontend/index.html, tests/voice/
   - Result: `app/ledger/mcp_server.py` (`LedgerTools`: score, team_stats, player_stats, recent_moments, squads over a display-clock-bounded `LedgerView`; `MCPServer` from the `mcp` 2.x package, streamable HTTP mounted at `/mcp`, stateless, per-lifespan session manager); `app/voice/qa.py` (`qa_evidence` gathers every number the fan may be told, `RuleQaAgent` en/tr offline, `FoundryQaAgent` over `MCPStreamableHTTPTool`, `QaPipeline` runs both Fact-Checker layers with one retry and falls back to "I don't have data on that." / "Bu konuda elimde veri yok."); `Question`, `Answer`, `SpeechAudit` models; `/api/voice` takes `ask`, `talk_start`/pcm16/`talk_end` frames, cancels the current line (barge-in), answers text first, speaks the answer verbatim and records a `SpeechAudit` (also for every narration), stays open after `match_end`; `POST /api/qa`, `GET /api/match/audits`; page: hold-to-talk (mic to Voice Live when the voice is on, browser speech recognition otherwise), typed questions, Q&A list with verdict, tools and audit; Speaker gains `cancel` and `transcribe` (Voice Live path untested). 27 new tests, 2 live.
 
-## Phase E: Ship (Oct 23-26)
+## Phase P: Polish (Oct 18-20, after T13; see tasks/plan.md "Revised order from 2026-10-16")
 
-- [ ] T13: Deploy (both paths Must since 2026-10-15)
+- [ ] P1: Design review with Claude Design (mockup + short style guide for the page as a broadcast product)
+- [ ] P2: Original assets: fictional club crests and a hero image (README, Innovation Studio, YouTube thumbnail); no trademarks; generator terms allow commercial use
+- [ ] P3: UI implementation from P1 + P2: SVG/CSS pitch texture, Lucide icons, crests in banner and fan panel; voice and push-to-talk flows unchanged and re-verified
+- [ ] P4: Code review against a checklist from professional-programming/antipatterns; small safe fixes; ADRs in docs/adr/
+
+## Phase E: Ship (Oct 22-26; T13 runs first, Oct 17-18)
+
+- [ ] T13: Deploy (both paths Must since 2026-10-15; prompt: docs/prompts/T13-deploy.md)
   - Must: `docker compose up --build` from a clean clone runs the full demo in offline mode (`AGENT_MODE=template`, no Azure, no `.env`); with `.env` and an Azure login it runs live agents
   - Must: API + UI on one Azure Container App with a public HTTPS URL (needed for mic in remote browsers), system-assigned managed identity with Foundry User on the project, `PUBLIC_LIVE_RUNS_PER_DAY` limit per visitor with offline fallback after the limit and on Foundry errors, scale-to-zero off and kept running until 2026-11-10; README judge section states the URL, the limit and the fallback
   - Files: Dockerfile, docker-compose.yml, docs/deploy.md

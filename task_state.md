@@ -4,8 +4,18 @@
      Update it after every significant step so the state survives compaction.
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
-## Current task
-Phase B on cloud branch `claude/gracious-goldberg-9u16ny` (main merged up to 6ec9db1): T3 to T9, T11, T12 and T12b done with offline agents; post-review items 1 to 6 applied (SPEC proposals, planted live test on 12 moments, descriptive Commentator prompt, voice speaks the re-rendered line on profile switch, small pitch label, phone width). T10, T10b, T13 to T16 remain (local).
+## Current task (2026-10-16)
+Phases S and B are on `main` (fad5e35, incl. T10b code). Next: run `docs/prompts/T10b-fixes.md`, then `docs/prompts/T13-deploy.md`, then Phase P (polish), T10, T14 to T16. Order and dates in tasks/plan.md "Revised order from 2026-10-16".
+
+## Workflow from 2026-10-16
+- The Fable cloud session's usage credits are used up; it is no longer used for development (maybe a final cross-check review at the end).
+- This Claude Code session writes one prompt per task into `docs/prompts/` (self-contained: context, tasks, rules, done-when). Oguz runs it with another agent on this machine (it has the `az` login and `.env`, so it can run live Foundry, Voice Live and azd steps). This session then reviews: pull the branch, suite, live tests, browser checks, merge into `main`.
+- Prompts are in the repo and become public at T16: keep them free of secrets; include `docs/prompts/` in the T16 leak scan.
+
+## T10b first live evaluation (2026-10-16, seeds 7, 30, 42, 12 moments each)
+- Foundry Groundedness (judge gpt-5.4-mini): checker on 4.56 (100% pass, 33 items), off 4.63 (100%, 35); planted on 4.55 (100%, 11), planted off 3.75 (75%, 12). Planted errors on air: 0 of 3 on, 4 of 4 off. Planted export: 26 planted, 26 caught, 0 reached air.
+- The generated headline said "rose from 4.63 to 4.56" (wrong; template assumed improvement). Generated file kept at `runs/eval/eval-results.generated.md`; committed `docs/eval-results.md` still says "not run yet" until T10b-fixes re-runs it.
+- 9 of 35 checker-off first drafts failed layer 1, but none had a wrong fact: 6 were actor-check false positives (opponent named as place or object, e.g. "in Ironvale territory"), 3 were uncited minute numbers ("at minute 24"). Fixed by the T10b-fixes prompt. Honest story: in normal play first drafts were already accurate; the Fact-Checker proves itself on planted errors.
 
 ## Done
 - [x] Registered for the hackathon (2026-10-14), confirmation email received
