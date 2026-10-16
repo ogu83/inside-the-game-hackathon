@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Matchday Companion, live match</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Barlow:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B1220}
+a{color:#7AB4FF}a:hover{color:#A9CEFF}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; background: #0B1220; color: #EEF2F7; font-family: Barlow, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <header style="height: 64px; box-sizing: border-box; padding: 0 24px; display: flex; align-items: center; gap: 20px; border-bottom: 1px solid #26324A; background: #0E1626">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <img src="/_blob/4b3baec0096a0917999234595cb05160" alt="" style="width: 34px; height: 34px">
+      <div style="display: flex; flex-direction: column; line-height: 1">
+        <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 24px; letter-spacing: 0.5px">Matchday Companion</span>
+        <span style="font-size: 12px; color: #9AA7BB; margin-top: 3px">Meridian League · demo seed 30</span>
+      </div>
+    </div>
+
+    <div style="margin-left: 24px; display: flex; align-items: center; gap: 12px; background: #121B2E; border: 1px solid #26324A; border-radius: 12px; padding: 6px 14px">
+      <img src="/_blob/009037de2021ddd326eedf2b35636c49" alt="Kestrel Bay crest" style="width: 28px; height: 28px">
+      <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 20px">Kestrel Bay</span>
+      <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 24px; background: #0B1220; border-radius: 8px; padding: 2px 10px">0 : 0</span>
+      <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 20px">Ironvale</span>
+      <img src="/_blob/b9edfdb29d5fcf7ea89e3baef6b00ff1" alt="Ironvale crest" style="width: 28px; height: 28px">
+      <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 24px; color: #E0B04F; margin-left: 6px">01:47</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px">
+      <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #CFD8E6; background: #182339; border-radius: 999px; padding: 6px 12px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7AB4FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+        Broadcast delay 20 s
+      </span>
+      <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #CFD8E6; background: #182339; border-radius: 999px; padding: 6px 12px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3DD68C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg>
+        Foundry agents live
+      </span>
+    </div>
+
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 10px">
+      <div role="group" aria-label="Playback speed" style="display: flex; background: #121B2E; border: 1px solid #26324A; border-radius: 10px; padding: 3px">
+        <button type="button" style="border: 0; background: transparent; color: #9AA7BB; font: 600 14px Barlow, sans-serif; padding: 8px 12px; border-radius: 8px">1x</button>
+        <button type="button" aria-pressed="true" style="border: 0; background: #26324A; color: #EEF2F7; font: 600 14px Barlow, sans-serif; padding: 8px 12px; border-radius: 8px">4x</button>
+      </div>
+      <button type="button" aria-label="Stop match" style="width: 44px; height: 44px; border-radius: 10px; border: 1px solid #26324A; background: #121B2E; display: grid; place-items: center">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EEF2F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
+      </button>
+      <button type="button" aria-pressed="true" style="height: 44px; border-radius: 10px; border: 0; background: #2F8FD8; color: #071422; font: 600 15px Barlow, sans-serif; padding: 0 16px; display: inline-flex; align-items: center; gap: 8px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#071422" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4z"></path><path d="M15.5 8.5a5 5 0 010 7"></path><path d="M18.5 5.5a9 9 0 010 13"></path></svg>
+        Voice on
+      </button>
+    </div>
+  </header>
+
+  <div style="height: 44px; box-sizing: border-box; padding: 0 24px; display: flex; align-items: center; gap: 14px; background: #101A2C; border-bottom: 1px solid #26324A">
+    <svg width="44" height="20" viewBox="0 0 44 20" aria-hidden="true"><g fill="#2F8FD8"><rect x="0" y="8" width="3" height="4" rx="1.5"></rect><rect x="6" y="5" width="3" height="10" rx="1.5"></rect><rect x="12" y="2" width="3" height="16" rx="1.5"></rect><rect x="18" y="6" width="3" height="8" rx="1.5"></rect><rect x="24" y="3" width="3" height="14" rx="1.5"></rect><rect x="30" y="7" width="3" height="6" rx="1.5"></rect><rect x="36" y="5" width="3" height="10" rx="1.5"></rect></g></svg>
+    <span style="font-size: 13px; color: #9AA7BB; text-transform: uppercase; letter-spacing: 1px; font-weight: 600">Speaking, en</span>
+    <span style="font-size: 16px; color: #EEF2F7">Ironvale have strung together 22 passes through 10 players in 85 seconds.</span>
+    <span style="margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: #3DD68C; font-weight: 600">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3DD68C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg>
+      Speech audit 13 of 13 exact
+    </span>
+    <span style="font-size: 14px; color: #9AA7BB">6 interrupted</span>
+  </div>
+
+  <main style="flex: 1; min-height: 0; box-sizing: border-box; padding: 20px 24px; display: grid; grid-template-columns: 900px minmax(0, 1fr); gap: 24px">
+
+    <section aria-label="Broadcast" style="display: flex; flex-direction: column; gap: 12px; min-height: 0">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <h2 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 18px; letter-spacing: 1.5px; text-transform: uppercase; color: #9AA7BB">Broadcast</h2>
+        <span style="margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #CFD8E6"><span style="width: 10px; height: 10px; border-radius: 50%; background: #2F8FD8"></span>Kestrel Bay attack right</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #CFD8E6"><span style="width: 10px; height: 10px; border-radius: 50%; background: #E8833A"></span>Ironvale attack left</span>
+      </div>
+
+      <div style="position: relative; width: 900px; height: 530px; border-radius: 14px; overflow: hidden; box-shadow: 0 0 0 1px #26324A">
+        <svg width="900" height="530" viewBox="0 0 105 61.8" preserveAspectRatio="none" role="img" aria-label="Pitch with the ball near the Kestrel Bay penalty area">
+          <defs>
+            <pattern id="mow" width="10.5" height="61.8" patternUnits="userSpaceOnUse"><rect width="5.25" height="61.8" fill="#1F6E3D"></rect><rect x="5.25" width="5.25" height="61.8" fill="#237A44"></rect></pattern>
+            <radialGradient id="vig" cx="50%" cy="45%" r="75%"><stop offset="60%" stop-color="#000" stop-opacity="0"></stop><stop offset="100%" stop-color="#000" stop-opacity="0.45"></stop></radialGradient>
+            <radialGradient id="glow"><stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9"></stop><stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"></stop></radialGradient>
+          </defs>
+          <rect width="105" height="61.8" fill="url(#mow)"></rect>
+          <g fill="none" stroke="#FFFFFF" stroke-opacity="0.82" stroke-width="0.3">
+            <rect x="2" y="2" width="101" height="57.8"></rect>
+            <line x1="52.5" y1="2" x2="52.5" y2="59.8"></line>
+            <circle cx="52.5" cy="30.9" r="8.2"></circle>
+            <rect x="2" y="15.2" width="15.5" height="31.4"></rect>
+            <rect x="2" y="23.4" width="5.2" height="15"></rect>
+            <rect x="87.5" y="15.2" width="15.5" height="31.4"></rect>
+            <rect x="97.8" y="23.4" width="5.2" height="15"></rect>
+            <path d="M17.5 24.5a8 8 0 010 12.8"></path>
+            <path d="M87.5 24.5a8 8 0 000 12.8"></path>
+          </g>
+          <circle cx="52.5" cy="30.9" r="0.45" fill="#FFFFFF" fill-opacity="0.85"></circle>
+          <polyline points="38,40 47,34 58,37 66,29 74,31 79,26" fill="none" stroke="#E8833A" stroke-opacity="0.75" stroke-width="0.45" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="0.1 1.1"></polyline>
+          <circle cx="79" cy="26" r="3.2" fill="url(#glow)"></circle>
+          <circle cx="79" cy="26" r="1.05" fill="#FFFFFF" stroke="#E8833A" stroke-width="0.35"></circle>
+          <rect width="105" height="61.8" fill="url(#vig)"></rect>
+        </svg>
+
+        <div style="position: absolute; left: 668px; top: 182px; background: rgba(11,18,32,0.82); border: 1px solid rgba(232,131,58,0.7); border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; color: #EEF2F7">Jory Calloway</div>
+
+        <div style="position: absolute; left: 20px; right: 20px; bottom: 20px; display: flex; align-items: stretch; background: rgba(11,18,32,0.92); border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.45)">
+          <div style="width: 92px; background: #E8833A; display: grid; place-items: center">
+            <img src="/_blob/b9edfdb29d5fcf7ea89e3baef6b00ff1" alt="Ironvale crest" style="width: 64px; height: 64px">
+          </div>
+          <div style="flex: 1; padding: 14px 18px; display: flex; flex-direction: column; gap: 6px">
+            <div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 32px; line-height: 1">Ironvale: 22-pass move</div>
+            <div style="font-size: 15px; color: #CFD8E6">10 players involved, 85 seconds, ended in a shot</div>
+            <div style="display: flex; gap: 8px; margin-top: 2px">
+              <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #0B1220; background: #3DD68C; border-radius: 999px; padding: 3px 10px">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+                Verified
+              </span>
+              <span style="font-size: 13px; color: #9AA7BB; padding: 3px 0">numbers by code, wording by model, attempt 1</span>
+            </div>
+          </div>
+          <div style="width: 150px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-left: 1px solid #26324A">
+            <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 60px; line-height: 0.9; color: #E8833A">22</span>
+            <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 2px; color: #9AA7BB">PASSES</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+        <div style="background: #121B2E; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: #CFD8E6"><span style="color: #E0B04F; font-weight: 600">01:44</span> Ironvale, Jory Calloway shoots, 11.1 m out, xG 0.20</div>
+        <div style="background: #121B2E; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: #CFD8E6"><span style="color: #E0B04F; font-weight: 600">01:38</span> Ironvale, Malik Orrin plays it 17.7 m</div>
+        <div style="background: #121B2E; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: #CFD8E6"><span style="color: #E0B04F; font-weight: 600">01:31</span> Kestrel Bay, Caden Holloway presses</div>
+      </div>
+    </section>
+
+    <section aria-label="Your co-commentator" style="display: flex; flex-direction: column; gap: 14px; min-height: 0">
+      <h2 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 18px; letter-spacing: 1.5px; text-transform: uppercase; color: #9AA7BB">Your co-commentator</h2>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+        <label style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #9AA7BB">Club
+          <span style="display: flex; align-items: center; gap: 8px; height: 44px; box-sizing: border-box; background: #121B2E; border: 1px solid #26324A; border-radius: 10px; padding: 0 12px; font-size: 15px; color: #EEF2F7"><img src="/_blob/b9edfdb29d5fcf7ea89e3baef6b00ff1" alt="" style="width: 22px; height: 22px">Ironvale</span>
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #9AA7BB">Player
+          <span style="display: flex; align-items: center; gap: 8px; height: 44px; box-sizing: border-box; background: #121B2E; border: 1px solid #26324A; border-radius: 10px; padding: 0 12px; font-size: 15px; color: #EEF2F7"><span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; color: #E8833A">7</span>Jory Calloway</span>
+        </label>
+        <div role="group" aria-label="Depth" style="display: flex; background: #121B2E; border: 1px solid #26324A; border-radius: 10px; padding: 3px">
+          <button type="button" aria-pressed="true" style="flex: 1; height: 38px; border: 0; border-radius: 8px; background: #26324A; color: #EEF2F7; font: 600 14px Barlow, sans-serif">Casual</button>
+          <button type="button" style="flex: 1; height: 38px; border: 0; border-radius: 8px; background: transparent; color: #9AA7BB; font: 600 14px Barlow, sans-serif">Analyst</button>
+        </div>
+        <div role="group" aria-label="Language" style="display: flex; background: #121B2E; border: 1px solid #26324A; border-radius: 10px; padding: 3px">
+          <button type="button" aria-pressed="true" style="flex: 1; height: 38px; border: 0; border-radius: 8px; background: #26324A; color: #EEF2F7; font: 600 14px Barlow, sans-serif">English</button>
+          <button type="button" style="flex: 1; height: 38px; border: 0; border-radius: 8px; background: transparent; color: #9AA7BB; font: 600 14px Barlow, sans-serif">Türkçe</button>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; align-items: center">
+        <button type="button" style="height: 56px; flex: 0 0 auto; border: 0; border-radius: 14px; background: #EEF2F7; color: #0B1220; font: 700 16px Barlow, sans-serif; padding: 0 20px; display: inline-flex; align-items: center; gap: 10px">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0"></path><path d="M12 18v3"></path></svg>
+          Hold to talk
+        </button>
+        <label style="flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #9AA7BB">Or type a question
+          <input type="text" placeholder="Why does that matter?" style="height: 40px; box-sizing: border-box; background: #121B2E; border: 1px solid #26324A; border-radius: 10px; padding: 0 12px; color: #EEF2F7; font: 15px Barlow, sans-serif">
+        </label>
+      </div>
+
+      <article style="background: #121B2E; border: 1px solid #26324A; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+        <div style="font-size: 13px; color: #9AA7BB">You asked: <span style="color: #CFD8E6">How is my player doing?</span></div>
+        <div style="font-size: 19px; line-height: 1.35; color: #EEF2F7">Jory Calloway has attempted 8 passes at 100% accuracy, with 1 shot.</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+          <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #0B1220; background: #3DD68C; border-radius: 999px; padding: 3px 10px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Verified</span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #CFD8E6; background: #182339; border-radius: 999px; padding: 3px 10px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7AB4FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4z"></path><path d="M15.5 8.5a5 5 0 010 7"></path></svg>Spoken verbatim</span>
+          <span style="font-size: 13px; color: #9AA7BB">answered in 2.4 s</span>
+        </div>
+        <div style="font-size: 12px; color: #9AA7BB">Ledger tools over MCP: player_stats, score, team_stats</div>
+      </article>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; min-height: 0">
+        <div style="display: flex; gap: 10px; background: #0E1626; border-radius: 10px; padding: 10px 12px"><span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; color: #E0B04F">01:30</span><span style="font-size: 14px; color: #CFD8E6">Ironvale have strung together 22 passes through 10 players in 85 seconds.</span></div>
+        <div style="display: flex; gap: 10px; background: #0E1626; border-radius: 10px; padding: 10px 12px"><span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; color: #E0B04F">00:55</span><span style="font-size: 14px; color: #CFD8E6">Kestrel Bay have strung together 12 passes through 8 players in 69 seconds.</span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer style="height: 56px; box-sizing: border-box; padding: 0 24px; display: flex; align-items: center; gap: 22px; border-top: 1px solid #26324A; background: #0E1626; font-size: 14px; color: #9AA7BB">
+    <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; color: #CFD8E6">Agent timeline</span>
+    <span><b style="color: #EEF2F7">6</b> cues aired</span>
+    <span><b style="color: #EEF2F7">1</b> skipped by director</span>
+    <span><b style="color: #FF5D6C">1</b> rejected</span>
+    <span><b style="color: #EEF2F7">116</b> number checks, <b style="color: #3DD68C">0</b> failed</span>
+    <span>answer p50 <b style="color: #EEF2F7">3.7 s</b></span>
+    <button type="button" style="margin-left: auto; height: 40px; border-radius: 10px; border: 1px solid #26324A; background: #121B2E; color: #EEF2F7; font: 600 14px Barlow, sans-serif; padding: 0 14px; display: inline-flex; align-items: center; gap: 8px">Open timeline
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EEF2F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"></path></svg>
+    </button>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

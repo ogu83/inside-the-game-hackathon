@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Style guide</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Barlow:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B1220}
+.h{margin:0 0 14px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;letter-spacing:1.5px;text-transform:uppercase;color:#9AA7BB}
+.card{background:#121B2E;border:1px solid #26324A;border-radius:14px;padding:20px}
+.sw{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#9AA7BB}
+.sw i{display:block;height:52px;border-radius:10px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.08)}
+.sw b{font-weight:600;color:#EEF2F7;font-size:13px}
+.mono{font-family:Consolas,'Cascadia Mono',monospace;font-size:12px;color:#9AA7BB}
+.row{display:flex;align-items:center;gap:12px;font-size:13px;color:#CFD8E6}
+.ic{width:36px;height:36px;border-radius:10px;background:#182339;display:grid;place-items:center;flex:0 0 auto}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1180px; box-sizing: border-box; background: #0B1220; color: #EEF2F7; font-family: Barlow, sans-serif; padding: 32px; display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: auto auto auto; gap: 20px; align-content: start">
+
+  <div style="grid-column: 1 / -1; display: flex; align-items: center; gap: 16px">
+    <img src="/_blob/4b3baec0096a0917999234595cb05160" alt="" style="width: 44px; height: 44px">
+    <div>
+      <div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 34px; line-height: 1">Floodlight broadcast</div>
+      <div style="font-size: 14px; color: #9AA7BB; margin-top: 4px">Night match under lights: dark navy chrome, the pitch is the only big colour, club colours mark who did what, status colours mean the same thing everywhere.</div>
+    </div>
+  </div>
+
+  <section class="card" style="grid-column: 1 / 3">
+    <h3 class="h">Colour tokens</h3>
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px">
+      <div class="sw"><i style="background: #0B1220"></i><b>--bg</b>#0B1220</div>
+      <div class="sw"><i style="background: #0E1626"></i><b>--chrome</b>#0E1626 header, footer</div>
+      <div class="sw"><i style="background: #121B2E"></i><b>--panel</b>#121B2E</div>
+      <div class="sw"><i style="background: #182339"></i><b>--chip</b>#182339</div>
+      <div class="sw"><i style="background: #26324A"></i><b>--line</b>#26324A</div>
+      <div class="sw"><i style="background: #E0B04F"></i><b>--clock</b>#E0B04F match time</div>
+      <div class="sw"><i style="background: #EEF2F7"></i><b>--text</b>#EEF2F7</div>
+      <div class="sw"><i style="background: #CFD8E6"></i><b>--text-2</b>#CFD8E6</div>
+      <div class="sw"><i style="background: #9AA7BB"></i><b>--muted</b>#9AA7BB</div>
+      <div class="sw"><i style="background: #2F8FD8"></i><b>--kby</b>#2F8FD8 Kestrel Bay</div>
+      <div class="sw"><i style="background: #E8833A"></i><b>--iva</b>#E8833A Ironvale</div>
+      <div class="sw"><i style="background: #7AB4FF"></i><b>--info</b>#7AB4FF links, info</div>
+      <div class="sw"><i style="background: #3DD68C"></i><b>--verified</b>#3DD68C</div>
+      <div class="sw"><i style="background: #F2B33D"></i><b>--rewritten</b>#F2B33D also warnings</div>
+      <div class="sw"><i style="background: #FF5D6C"></i><b>--rejected</b>#FF5D6C also errors</div>
+      <div class="sw"><i style="background: #1F6E3D"></i><b>--pitch-a</b>#1F6E3D</div>
+      <div class="sw"><i style="background: #237A44"></i><b>--pitch-b</b>#237A44</div>
+      <div class="sw"><i style="background: #E9D8A6"></i><b>--kby-sand</b>#E9D8A6 accent only</div>
+    </div>
+    <p style="margin: 14px 0 0; font-size: 13px; color: #9AA7BB">Contrast: --text on --bg 16.8:1, --muted on --panel 6.9:1, --bg on --verified 10.2:1. Never use club colours for status, and never green for a team (the old home green sat on a green pitch).</p>
+  </section>
+
+  <section class="card">
+    <h3 class="h">Status, always colour plus icon plus word</h3>
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <div class="row"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #0B1220; background: #3DD68C; border-radius: 999px; padding: 3px 10px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Verified</span>passed both layers</div>
+      <div class="row"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #0B1220; background: #F2B33D; border-radius: 999px; padding: 3px 10px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg>Rewritten</span>passed on attempt 2</div>
+      <div class="row"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #0B1220; background: #FF5D6C; border-radius: 999px; padding: 3px 10px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>Rejected</span>never aired</div>
+      <div class="row"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #CFD8E6; background: #26324A; border-radius: 999px; padding: 3px 10px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#CFD8E6" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"></path></svg>Skipped</span>director chose silence</div>
+      <div class="row"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #CFD8E6; background: #182339; border-radius: 999px; padding: 3px 10px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7AB4FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path></svg>No data</span>"I don't have data on that"</div>
+      <div class="row"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #CFD8E6; background: #182339; border-radius: 999px; padding: 3px 10px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 16H3z"></path><path d="M12 10v4M12 17h.01"></path></svg>Offline agents</span>live quota used, visible notice</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3 class="h">Type</h3>
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 60px; line-height: 0.9; color: #E8833A">22</span><span class="mono">stat / 60 Condensed 700</span></div>
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 32px; line-height: 1">Cue headline</span><span class="mono">32 Condensed 700</span></div>
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 24px">0 : 0 · 01:47</span><span class="mono">score, clock 24</span></div>
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; color: #9AA7BB">Section label</span><span class="mono">16 Condensed 600 caps</span></div>
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 19px">Answer text, 19 Barlow</span><span class="mono">19/1.35</span></div>
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 15px; color: #CFD8E6">Body and controls, 15 Barlow</span><span class="mono">15</span></div>
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 13px; color: #9AA7BB">Meta and chips, 13 Barlow</span><span class="mono">13, never below 12</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3 class="h">Icons (Lucide, 2 px stroke)</h3>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
+      <div class="row"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EEF2F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0"></path><path d="M12 18v3"></path></svg></span>mic: talk</div>
+      <div class="row"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EEF2F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4z"></path><path d="M15.5 8.5a5 5 0 010 7"></path></svg></span>volume-2: voice</div>
+      <div class="row"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3DD68C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span>shield-check: checked</div>
+      <div class="row"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7AB4FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>clock: delay</div>
+      <div class="row"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EEF2F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg></span>activity: agents</div>
+      <div class="row"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EEF2F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg></span>square: stop</div>
+      <div class="row"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EEF2F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8"></path><path d="M3 3v5h5"></path></svg></span>rotate-ccw: retry</div>
+      <div class="row"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EEF2F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></span>arrow-right: ask</div>
+    </div>
+    <p style="margin: 12px 0 0; font-size: 13px; color: #9AA7BB">Inline SVG, decorative ones get aria-hidden; icon-only buttons get aria-label. No emoji in UI.</p>
+  </section>
+
+  <section class="card">
+    <h3 class="h">Space, shape, touch</h3>
+    <div style="display: flex; align-items: flex-end; gap: 10px; margin-bottom: 14px">
+      <span style="width: 4px; height: 4px; background: #2F8FD8"></span>
+      <span style="width: 8px; height: 8px; background: #2F8FD8"></span>
+      <span style="width: 12px; height: 12px; background: #2F8FD8"></span>
+      <span style="width: 16px; height: 16px; background: #2F8FD8"></span>
+      <span style="width: 24px; height: 24px; background: #2F8FD8"></span>
+      <span style="width: 32px; height: 32px; background: #2F8FD8"></span>
+      <span class="mono" style="margin-left: 8px">4 8 12 16 24 32</span>
+    </div>
+    <div style="display: flex; gap: 10px; margin-bottom: 14px">
+      <span style="width: 56px; height: 40px; border-radius: 8px; background: #182339; display: grid; place-items: center" class="mono">8</span>
+      <span style="width: 56px; height: 40px; border-radius: 10px; background: #182339; display: grid; place-items: center" class="mono">10</span>
+      <span style="width: 56px; height: 40px; border-radius: 14px; background: #182339; display: grid; place-items: center" class="mono">14</span>
+      <span style="width: 56px; height: 40px; border-radius: 999px; background: #182339; display: grid; place-items: center" class="mono">pill</span>
+    </div>
+    <div style="font-size: 13px; color: #CFD8E6; line-height: 1.5">Radius 8 inner controls, 10 inputs and buttons, 14 cards and the pitch, pill for chips. Touch targets 44 px minimum, push-to-talk 56 px desktop, 64 px phone. Page gutter 24 desktop, 16 phone.</div>
+  </section>
+
+  <section class="card">
+    <h3 class="h">Pitch recipe</h3>
+    <div style="border-radius: 10px; overflow: hidden; height: 110px; margin-bottom: 12px">
+      <svg width="100%" height="110" viewBox="0 0 105 40" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs><pattern id="smow" width="10.5" height="40" patternUnits="userSpaceOnUse"><rect width="5.25" height="40" fill="#1F6E3D"></rect><rect x="5.25" width="5.25" height="40" fill="#237A44"></rect></pattern><radialGradient id="svig" cx="50%" cy="50%" r="75%"><stop offset="60%" stop-color="#000" stop-opacity="0"></stop><stop offset="100%" stop-color="#000" stop-opacity="0.45"></stop></radialGradient></defs>
+        <rect width="105" height="40" fill="url(#smow)"></rect>
+        <g fill="none" stroke="#FFF" stroke-opacity="0.82" stroke-width="0.35"><line x1="52.5" y1="0" x2="52.5" y2="40"></line><circle cx="52.5" cy="20" r="8.2"></circle></g>
+        <polyline points="30,30 40,24 52,27 60,18 70,20" fill="none" stroke="#E8833A" stroke-opacity="0.75" stroke-width="0.45" stroke-linecap="round" stroke-dasharray="0.1 1.1"></polyline>
+        <circle cx="70" cy="20" r="1.05" fill="#FFF" stroke="#E8833A" stroke-width="0.35"></circle>
+        <rect width="105" height="40" fill="url(#svig)"></rect>
+      </svg>
+    </div>
+    <div style="font-size: 13px; color: #CFD8E6; line-height: 1.5">SVG pattern, 10 mowing stripes in pitch-a and pitch-b, white lines at 0.82 opacity, radial vignette to 0.45 black. Ball: white with a 1 px stroke in the possessing club's colour, soft glow, dotted trail of the last 6 touches in that colour. No raster texture needed.</div>
+  </section>
+
+  <section class="card">
+    <h3 class="h">Motion</h3>
+    <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #CFD8E6; line-height: 1.45">
+      <div><b style="color: #EEF2F7">Cue banner</b>: slides up 16 px and fades in, 220 ms ease-out; holds for the cue duration; fades out 160 ms.</div>
+      <div><b style="color: #EEF2F7">Ball</b>: 250 ms linear tween between events, never a jump.</div>
+      <div><b style="color: #EEF2F7">Push-to-talk</b>: state change in under 50 ms; no animation that delays feedback.</div>
+      <div><b style="color: #EEF2F7">Verdict chips</b>: no motion; a rejected moment never flashes on the main view.</div>
+      <div><b style="color: #EEF2F7">prefers-reduced-motion</b>: fades only, ball steps without tween.</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3 class="h">Club identity</h3>
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <div class="row"><img src="/_blob/009037de2021ddd326eedf2b35636c49" alt="Kestrel Bay crest" style="width: 44px; height: 44px"><div><b style="color: #EEF2F7">Kestrel Bay</b> · KBY<br><span style="color: #9AA7BB">bay blue, white, sand accent</span></div></div>
+      <div class="row"><img src="/_blob/b9edfdb29d5fcf7ea89e3baef6b00ff1" alt="Ironvale crest" style="width: 44px; height: 44px"><div><b style="color: #EEF2F7">Ironvale</b> · IVA<br><span style="color: #9AA7BB">ember orange, charcoal, white</span></div></div>
+      <div class="row"><img src="/_blob/4b3baec0096a0917999234595cb05160" alt="" style="width: 44px; height: 44px"><div><b style="color: #EEF2F7">Meridian League</b><br><span style="color: #9AA7BB">header mark, favicon, video end card</span></div></div>
+    </div>
+    <p style="margin: 12px 0 0; font-size: 13px; color: #9AA7BB">Crests ship as transparent 256 px PNG next to the 2048 px originals in frontend/assets. All fictional.</p>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
