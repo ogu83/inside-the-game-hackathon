@@ -5,7 +5,7 @@
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
 ## Current task (2026-10-16)
-T13 deploy completed on `t13-deploy`. All 6 deliverables finished and committed; 246 tests pass. Next: merge `t13-deploy` into `main`, then Phase P (polish), T10, T14 to T16. Order and dates in tasks/plan.md "Revised order from 2026-10-16".
+T13 and T13b deploy & verify completed on `t13b-deploy`. Live Azure Container App operational at `https://ca-matchday.orangetree-bcef6d10.eastus2.azurecontainerapps.io` with Foundry User role and live Voice Live; all 8 checks passed; 246 tests pass. Next: Phase P (polish: P1 design review with Claude Design, P2 original assets, P3 UI implementation, P4 code review).
 
 ## Workflow from 2026-10-16
 - The Fable cloud session's usage credits are used up; it is no longer used for development (maybe a final cross-check review at the end).
@@ -59,9 +59,10 @@ T13 deploy completed on `t13-deploy`. All 6 deliverables finished and committed;
 - [x] 2026-10-16 (cloud session): T10b code: app/eval/{export_runs,run_eval,report}.py, tests/eval (12 offline, 1 live), docs/eval-results.md rendered as "not run yet"; runs/ gitignored. 231 tests, 8 live.
 - [x] 2026-10-16 (local session): T10b fixes and live Foundry evaluation (t10b-fixes branch). Fixed actor check false positives (possessive/locative opponent mentions), allowed minute citations without explicit key, honest headline derivation in report.py, live export and 4 Foundry evaluation runs completed; docs/eval-results.md populated with real numbers and honest headline. 241 tests pass.
 - [x] 2026-10-16 (local session): T13 deploy (t13-deploy branch). Per-visitor match sessions (MatchRegistry, mc_session cookie, 503 cap at 4, 600s idle reaper, MCP ContextVar routing, ADR 0001); Dockerfile (python:3.11-slim, non-root appuser, port 8010, healthcheck) and .dockerignore; docker-compose.yml offline mode (AGENT_MODE=template, VOICE_MODE=off); .github/workflows/image.yml for GHCR image build & push on main; infra/deploy.ps1 idempotent Azure Container Apps deployment in eastus2 (cae-matchday, ca-matchday, App Insights, managed identity with Cognitive Services OpenAI User and Azure AI Developer roles); docs/deploy.md guide and live deployment records. 246 tests pass.
+- [x] 2026-10-16 (local session): T13b deploy & live verification (t13b-deploy branch). Public GHCR image verified anonymously. Azure Container App ca-matchday deployed to cae-matchday in eastus2 with Foundry User role on matchday-foundry-ok. Verified 8 of 8 checks: health probe 200, live match start in 0.47s (Foundry agent supersteps 1-3 completed), Voice Live streamed 18 PCM chunks over WSS with verbatim audit match, Q&A over WSS called 4 FastMCP tools and spoke answer, visitor isolation verified, rate limit fallback to template mode verified at 2 runs, telemetry verified in Log Analytics ContainerAppConsoleLogs_CL, docker compose offline mode verified on clean clone. 246 tests pass.
 
 ## Next step
-Merge `t13-deploy` into `main`, triggering the GHCR workflow to push the image, then run `pwsh infra/deploy.ps1` to finalize the live Container App. Then Phase P (polish: P1 design review with Claude Design, P2 original assets, P3 UI implementation).
+Phase P: Polish (P1 design review with Claude Design, P2 original assets, P3 UI implementation, P4 code review), T10, T14 to T16.
 
 ## Working in a cloud session (claude.ai/code)
 Cloud sessions are useful for reviews and Azure-free implementation. They have no Azure login, no `.env`, no `azd`, and run Linux.

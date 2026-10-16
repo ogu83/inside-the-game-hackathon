@@ -33,7 +33,7 @@ param(
     [ValidateSet("foundry", "template")]
     [string]$AgentMode = "foundry",
     [ValidateSet("live", "off")]
-    [string]$VoiceMode = "off",
+    [string]$VoiceMode = "live",
     [string]$FoundryEndpoint = "https://matchday-foundry-ok.services.ai.azure.com/api/projects/matchday",
     [string]$CognitiveAccountName = "matchday-foundry-ok",
     [string]$FrontierModel = "gpt-5.4-mini",
@@ -199,7 +199,7 @@ if ($principalId) {
 
     Write-Host "Assigning 'Foundry User' role to managed identity..."
     az role assignment create `
-        --assignee $principalId `
+        --assignee-object-id $principalId `
         --role "Foundry User" `
         --scope $cogAccountId `
         --assignee-principal-type ServicePrincipal
