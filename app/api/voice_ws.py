@@ -15,6 +15,7 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 
 from app.agents.fact_check_rules import check_speech, cited_evidence
 from app.agents.models import Answer, FanProfile, QaTiming, SpeechAudit
@@ -240,10 +241,28 @@ async def voice(ws: WebSocket, lang: Lang = "en", profile: str | None = None) ->
                 await task
             except (asyncio.CancelledError, WebSocketDisconnect):
                 pass
-            except Exception:
-                log.exception("voice task failed")
+            except Exception as exc:
+                if _client_gone(ws, exc):
+                    log.debug("voice task ended with the client gone: %s", exc)  # a profile switch closes the old socket
+                else:
+                    log.exception("voice task failed")
         await speaker.close()
-        try:
-            await ws.close()
-        except RuntimeError:
-            pass
+        await _close_quietly(ws)
+
+
+def _client_gone(ws: WebSocket, exc: BaseException) -> bool:
+    """True when the failure is only the browser having left (uvicorn ClientDisconnected, a 1006 close, a send after close)."""
+    if ws.client_state == WebSocketState.DISCONNECTED or ws.application_state == WebSocketState.DISCONNECTED:
+        return True
+    name = type(exc).__name__
+    return name in ("ClientDisconnected", "ConnectionClosed", "ConnectionClosedOK", "ConnectionClosedError", "WebSocketDisconnect")
+
+
+async def _close_quietly(ws: WebSocket) -> None:
+    """Close only if both sides are still connected; a client that already left raises on close, which is not an error."""
+    if ws.client_state != WebSocketState.CONNECTED or ws.application_state != WebSocketState.CONNECTED:
+        return
+    try:
+        await ws.close()
+    except Exception as exc:  # the client raced us to the close
+        log.debug("voice socket close skipped: %s", exc)

@@ -1,9 +1,10 @@
 import json
+import logging
 import re
 
 import pytest
 from starlette.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
+from starlette.websockets import WebSocketDisconnect, WebSocketState
 
 from app.api.main import app
 from app.api.streams import template_workflow
@@ -423,3 +424,53 @@ def test_a_line_cut_off_in_the_browser_is_marked_interrupted() -> None:
         assert [a for a in audits if a["moment_id"] == spoken["moment_id"]][-1]["interrupted"] is True
         assert app.state.run.metrics["lines_interrupted"] == 1
         assert app.state.run.mark_interrupted("nonexistent") is None
+
+
+def test_a_client_that_leaves_mid_line_closes_quietly(caplog) -> None:
+    """A profile switch closes the old socket from the browser; the server must not log an error or close twice."""
+    speaker = FakeSpeaker()
+    speaker.transcribe_delay = 0.3
+    with TestClient(app) as client:
+        async def factory():
+            return speaker
+
+        app.state.speaker_factory = factory
+        app.state.workflow_factory = template_workflow
+        client.post("/api/match/start", json={"seed": 30, "speed": 150, "delay_s": 20, "minutes": 60})
+        with caplog.at_level(logging.WARNING, logger="app.api.voice_ws"):
+            with client.websocket_connect("/api/voice?profile=iva|iva-07|casual|en") as ws:
+                ws.send_text(json.dumps({"type": "talk_start"}))
+                ws.send_bytes(b"\x00\x01" * 24000)
+                ws.send_text(json.dumps({"type": "talk_end"}))
+                # leave while the transcription task, the answer and the speech are still in flight
+            import time
+
+            time.sleep(0.6)
+        client.post("/api/match/stop")
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR], [r.getMessage() for r in caplog.records]
+    assert not any("voice task failed" in r.getMessage() for r in caplog.records)
+    assert speaker.closed
+
+
+def test_client_gone_detection_and_quiet_close() -> None:
+    from types import SimpleNamespace
+
+    from app.api.voice_ws import _client_gone, _close_quietly
+
+    gone = SimpleNamespace(client_state=WebSocketState.DISCONNECTED, application_state=WebSocketState.CONNECTED)
+    here = SimpleNamespace(client_state=WebSocketState.CONNECTED, application_state=WebSocketState.CONNECTED)
+    assert _client_gone(gone, RuntimeError("x")) is True
+    assert _client_gone(here, type("ClientDisconnected", (OSError,), {})()) is True
+    assert _client_gone(here, RuntimeError("real bug")) is False
+
+    closed = []
+
+    async def close():
+        closed.append(True)
+        raise RuntimeError("already closed")
+
+    import asyncio
+
+    asyncio.run(_close_quietly(SimpleNamespace(client_state=WebSocketState.CONNECTED, application_state=WebSocketState.CONNECTED, close=close)))
+    asyncio.run(_close_quietly(SimpleNamespace(client_state=WebSocketState.DISCONNECTED, application_state=WebSocketState.CONNECTED, close=close)))
+    assert closed == [True], "close is attempted once while connected, swallowed when it races, skipped when the client is gone"
