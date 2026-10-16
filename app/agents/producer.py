@@ -41,12 +41,30 @@ class FoundryRenderer:
         self.agent = agent
 
     async def cue(self, insight: Insight, moment: CandidateMoment, labels: dict[str, str], feedback: list[str]) -> CueDraft:
-        response = await self.agent.run(cue_prompt(insight, moment, labels, feedback), options={"response_format": CueDraft})
+        response = None
+        for attempt in range(3):
+            try:
+                response = await self.agent.run(cue_prompt(insight, moment, labels, feedback), options={"response_format": CueDraft})
+                break
+            except Exception:
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(2 * (attempt + 1))
+        assert response is not None
         value = response.value
         return CueDraft.model_validate(value if isinstance(value, dict) else value.model_dump())
 
     async def narrative(self, insight: Insight, moment: CandidateMoment, labels: dict[str, str], profile: FanProfile, feedback: list[str]) -> str:
-        response = await self.agent.run(narrative_prompt(insight, moment, labels, profile, feedback))
+        response = None
+        for attempt in range(3):
+            try:
+                response = await self.agent.run(narrative_prompt(insight, moment, labels, profile, feedback))
+                break
+            except Exception:
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(2 * (attempt + 1))
+        assert response is not None
         return (response.text or "").strip()
 
 

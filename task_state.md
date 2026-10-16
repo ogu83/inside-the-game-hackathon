@@ -5,17 +5,23 @@
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
 ## Current task (2026-10-16)
-Phases S and B are on `main` (fad5e35, incl. T10b code). Next: run `docs/prompts/T10b-fixes.md`, then `docs/prompts/T13-deploy.md`, then Phase P (polish), T10, T14 to T16. Order and dates in tasks/plan.md "Revised order from 2026-10-16".
+T10b fixes and live evaluation completed on `t10b-fixes`. Next: merge `t10b-fixes` into `main`, then `docs/prompts/T13-deploy.md`, then Phase P (polish), T10, T14 to T16. Order and dates in tasks/plan.md "Revised order from 2026-10-16".
 
 ## Workflow from 2026-10-16
 - The Fable cloud session's usage credits are used up; it is no longer used for development (maybe a final cross-check review at the end).
 - This Claude Code session writes one prompt per task into `docs/prompts/` (self-contained: context, tasks, rules, done-when). Oguz runs it with another agent on this machine (it has the `az` login and `.env`, so it can run live Foundry, Voice Live and azd steps). This session then reviews: pull the branch, suite, live tests, browser checks, merge into `main`.
 - Prompts are in the repo and become public at T16: keep them free of secrets; include `docs/prompts/` in the T16 leak scan.
 
-## T10b first live evaluation (2026-10-16, seeds 7, 30, 42, 12 moments each)
-- Foundry Groundedness (judge gpt-5.4-mini): checker on 4.56 (100% pass, 33 items), off 4.63 (100%, 35); planted on 4.55 (100%, 11), planted off 3.75 (75%, 12). Planted errors on air: 0 of 3 on, 4 of 4 off. Planted export: 26 planted, 26 caught, 0 reached air.
-- The generated headline said "rose from 4.63 to 4.56" (wrong; template assumed improvement). Generated file kept at `runs/eval/eval-results.generated.md`; committed `docs/eval-results.md` still says "not run yet" until T10b-fixes re-runs it.
-- 9 of 35 checker-off first drafts failed layer 1, but none had a wrong fact: 6 were actor-check false positives (opponent named as place or object, e.g. "in Ironvale territory"), 3 were uncited minute numbers ("at minute 24"). Fixed by the T10b-fixes prompt. Honest story: in normal play first drafts were already accurate; the Fact-Checker proves itself on planted errors.
+## T10b live evaluation completed (2026-10-16, seeds 7, 30, 42, 12 moments each)
+- Foundry Groundedness (judge gpt-5.4-mini):
+  - Fact-Checker on: Groundedness mean 4.57 (100% pass, 35 items), Layer 1 pass 100% (35/35).
+  - Fact-Checker off: Groundedness mean 4.60 (97% pass, 35 items), Layer 1 pass 97% (34/35; caught confused opponent attribution in attempt 1 of moment `kby-iva-42-15-pressing_trap`).
+  - Planted on: Groundedness mean 4.75 (100% pass, 12 items), Layer 1 pass 100% (12/12), 4 of 4 caught, 0 reached air.
+  - Planted off: Groundedness mean 3.83 (75% pass, 12 items), Layer 1 pass 67% (8/12), 0 of 4 caught, 4 reached air.
+  - Planted export: 4 insight plants + 22 rendering plants = 26 planted, 26 caught, 0 reached air.
+- Headline: "With planted errors, the Fact-Checker kept Groundedness at 4.75 (100% pass) against 3.83 (75% pass) without it, and 0 of 4 planted errors reached air against 4 of 4; in normal play both conditions scored about 4.6 because first drafts were already accurate."
+- Fixed actor-check false positives (possessive and locative opponent mentions e.g. "in Ironvale territory") and minute citations without needing explicit evidence refs.
+- SPEC design rule 2 proposed wording saved in `docs/reviews/2026-10-16-t10b-fixes.md`.
 
 ## Done
 - [x] Registered for the hackathon (2026-10-14), confirmation email received
@@ -51,9 +57,10 @@ Phases S and B are on `main` (fad5e35, incl. T10b code). Next: run `docs/prompts
 - [x] 2026-10-15 (cloud session, after push-to-talk worked end to end): mic opened once when the voice is turned on and kept warm; empty utterances and commit_empty fail at once with 'I did not catch that, try again'; transcription in its own task, a new press supersedes it; a line cut off in the browser is audited as interrupted (page names it, server marks it); QaTiming with pressed/transcribed/answered/spoken marks, p50 metrics and 'answered in X.X s' on the card (SPEC proposal 7); transcription bias with en-US/tr-TR and a football plus league-name phrase list (fallback if rejected); tolerant intents in the offline Q&A (Scarne/Skorne answered, Skagne no data); profile dropdown changes apply by themselves. 213 tests, 7 live.
 - [x] 2026-10-16 (cloud session, after the merge of dfa9c05): empty press caught in the page (under 0.3 s never reaches Voice Live) and spoken as "I didn't catch that, try again." / "Anlayamadım, tekrar dener misin?" through the normal audited path; the voice socket closes quietly when the browser already left (profile switch), no more ASGI exception noise; live tests exempt from the 30 s guard so `python -m pytest tests -m live` works without flags. 219 tests, 7 live. Oguz's third live run: 7/7 live passed, p50 answer 3.7 s, speech audit 13/13 exact.
 - [x] 2026-10-16 (cloud session): T10b code: app/eval/{export_runs,run_eval,report}.py, tests/eval (12 offline, 1 live), docs/eval-results.md rendered as "not run yet"; runs/ gitignored. 231 tests, 8 live.
+- [x] 2026-10-16 (local session): T10b fixes and live Foundry evaluation (t10b-fixes branch). Fixed actor check false positives (possessive/locative opponent mentions), allowed minute citations without explicit key, honest headline derivation in report.py, live export and 4 Foundry evaluation runs completed; docs/eval-results.md populated with real numbers and honest headline. 241 tests pass.
 
 ## Next step
-Locally (T10b): `python -m app.eval.export_runs --seeds 7 30 42 --limit 12 --live` (about 36 moments plus the planted 12 through the live pipeline), then `python -m app.eval.run_eval runs/eval` (4 Foundry evaluation runs, long-running, polled), then commit docs/eval-results.md and put the headline in the README and the demo (scene 6). Then T10 (tracing + recap + hosted, timeboxed), T13 to T16. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
+Merge `t10b-fixes` into `main`, then `docs/prompts/T13-deploy.md`, then Phase P (polish), T10 (tracing + recap + hosted, timeboxed), T14 to T16. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
 
 ## Working in a cloud session (claude.ai/code)
 Cloud sessions are useful for reviews and Azure-free implementation. They have no Azure login, no `.env`, no `azd`, and run Linux.

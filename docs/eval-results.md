@@ -1,21 +1,24 @@
 # Evaluation results: Fact-Checker on versus off
 
-Generated 2026-10-16 15:50 UTC by `python -m app.eval.run_eval`. Seeds 7, 30, 42, first 12 moments each, agents offline (templates), exported 2026-10-16T15:50:59+00:00.
+Generated 2026-10-16 17:20 UTC by `python -m app.eval.run_eval`. Seeds 7, 30, 42, first 12 moments each, agents live (Foundry), exported 2026-10-16T17:15:18+00:00.
 
-**Headline:** Not run yet: the evaluation has not been executed against Foundry, so there are no scores to report.
+**Headline:** With planted errors, the Fact-Checker kept Groundedness at 4.75 (100% pass) against 3.83 (75% pass) without it, and 0 of 4 planted errors reached air against 4 of 4; in normal play both conditions scored about 4.6 because first drafts were already accurate.
 
 Foundry evaluators (judge model from `SMALL_MODEL_DEPLOYMENT`): Groundedness, Relevance, Coherence, scored 1 to 5 by the service; pass rate is the service's threshold. Our own deterministic metric over the same aired texts: the layer 1 number and actor check, and for the planted conditions how many planted insights reached air.
 
-| Condition | Items | Groundedness mean | pass | Relevance mean | pass | Coherence mean | pass | Number check pass | Planted caught / reached air | Status |
+| Condition | Items | Groundedness mean | pass | Relevance mean | pass | Coherence mean | pass | Layer 1 pass (numbers and actors) | Planted caught / reached air | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Fact-Checker on (what aired) | 35 | n/a | n/a | n/a | n/a | n/a | n/a | 100% | no plants | not run yet |
-| Fact-Checker off (first drafts aired) | 35 | n/a | n/a | n/a | n/a | n/a | n/a | 100% | no plants | not run yet |
-| Planted errors, Fact-Checker on | 12 | n/a | n/a | n/a | n/a | n/a | n/a | 100% | 4 / 0 of 4 | not run yet |
-| Planted errors, Fact-Checker off | 12 | n/a | n/a | n/a | n/a | n/a | n/a | 67% | 0 / 4 of 4 | not run yet |
+| Fact-Checker on (what aired) | 35 | 4.57 | 100% | 4.49 | 100% | 4.06 | 100% | 100% | no plants | completed |
+| Fact-Checker off (first drafts aired) | 35 | 4.60 | 97% | 4.51 | 100% | 4.14 | 100% | 97% | no plants | completed |
+| Planted errors, Fact-Checker on | 12 | 4.75 | 100% | 4.50 | 100% | 4.00 | 100% | 100% | 4 / 0 of 4 | completed |
+| Planted errors, Fact-Checker off | 12 | 3.83 | 75% | 4.67 | 100% | 4.08 | 100% | 67% | 0 / 4 of 4 | completed |
 
 ## Runs
 
-Not run yet. `python -m app.eval.run_eval runs/eval` submits one evaluation per condition and fills this section with run ids and portal links.
+- Fact-Checker on (what aired): eval `eval_7715e42d8fbf4e25867a0248bc0b9bba`, run `evalrun_47c210b2c1ea4ee786d68c8a79bcf699`, status completed [portal](https://ai.azure.com/nextgen/r/dD2eNplVR0O3Y7tFFMlrjQ,rg-matchday,,matchday-foundry-ok,matchday/build/evaluations/eval_7715e42d8fbf4e25867a0248bc0b9bba/run/evalrun_47c210b2c1ea4ee786d68c8a79bcf699)
+- Fact-Checker off (first drafts aired): eval `eval_85c5ca41f8984d4ba4337566d4f5f4f4`, run `evalrun_c187d7838852412089c0d40336d962ee`, status completed [portal](https://ai.azure.com/nextgen/r/dD2eNplVR0O3Y7tFFMlrjQ,rg-matchday,,matchday-foundry-ok,matchday/build/evaluations/eval_85c5ca41f8984d4ba4337566d4f5f4f4/run/evalrun_c187d7838852412089c0d40336d962ee)
+- Planted errors, Fact-Checker on: eval `eval_fffc023824b64e4a8bd7b5c4f347529f`, run `evalrun_cea904e7398e4bfbb5500244158b342c`, status completed [portal](https://ai.azure.com/nextgen/r/dD2eNplVR0O3Y7tFFMlrjQ,rg-matchday,,matchday-foundry-ok,matchday/build/evaluations/eval_fffc023824b64e4a8bd7b5c4f347529f/run/evalrun_cea904e7398e4bfbb5500244158b342c)
+- Planted errors, Fact-Checker off: eval `eval_602530cf9272400c903cc07316dac80e`, run `evalrun_45301bcfe1364fc888eedbefe124d468`, status completed [portal](https://ai.azure.com/nextgen/r/dD2eNplVR0O3Y7tFFMlrjQ,rg-matchday,,matchday-foundry-ok,matchday/build/evaluations/eval_602530cf9272400c903cc07316dac80e/run/evalrun_45301bcfe1364fc888eedbefe124d468)
 
 ## Export
 
