@@ -5,7 +5,7 @@
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
 ## Current task (2026-10-16)
-T10b fixes and live evaluation completed on `t10b-fixes`. Next: merge `t10b-fixes` into `main`, then `docs/prompts/T13-deploy.md`, then Phase P (polish), T10, T14 to T16. Order and dates in tasks/plan.md "Revised order from 2026-10-16".
+T13 deploy completed on `t13-deploy`. All 6 deliverables finished and committed; 246 tests pass. Next: merge `t13-deploy` into `main`, then Phase P (polish), T10, T14 to T16. Order and dates in tasks/plan.md "Revised order from 2026-10-16".
 
 ## Workflow from 2026-10-16
 - The Fable cloud session's usage credits are used up; it is no longer used for development (maybe a final cross-check review at the end).
@@ -58,9 +58,10 @@ T10b fixes and live evaluation completed on `t10b-fixes`. Next: merge `t10b-fixe
 - [x] 2026-10-16 (cloud session, after the merge of dfa9c05): empty press caught in the page (under 0.3 s never reaches Voice Live) and spoken as "I didn't catch that, try again." / "Anlayamadım, tekrar dener misin?" through the normal audited path; the voice socket closes quietly when the browser already left (profile switch), no more ASGI exception noise; live tests exempt from the 30 s guard so `python -m pytest tests -m live` works without flags. 219 tests, 7 live. Oguz's third live run: 7/7 live passed, p50 answer 3.7 s, speech audit 13/13 exact.
 - [x] 2026-10-16 (cloud session): T10b code: app/eval/{export_runs,run_eval,report}.py, tests/eval (12 offline, 1 live), docs/eval-results.md rendered as "not run yet"; runs/ gitignored. 231 tests, 8 live.
 - [x] 2026-10-16 (local session): T10b fixes and live Foundry evaluation (t10b-fixes branch). Fixed actor check false positives (possessive/locative opponent mentions), allowed minute citations without explicit key, honest headline derivation in report.py, live export and 4 Foundry evaluation runs completed; docs/eval-results.md populated with real numbers and honest headline. 241 tests pass.
+- [x] 2026-10-16 (local session): T13 deploy (t13-deploy branch). Per-visitor match sessions (MatchRegistry, mc_session cookie, 503 cap at 4, 600s idle reaper, MCP ContextVar routing, ADR 0001); Dockerfile (python:3.11-slim, non-root appuser, port 8010, healthcheck) and .dockerignore; docker-compose.yml offline mode (AGENT_MODE=template, VOICE_MODE=off); .github/workflows/image.yml for GHCR image build & push on main; infra/deploy.ps1 idempotent Azure Container Apps deployment in eastus2 (cae-matchday, ca-matchday, App Insights, managed identity with Cognitive Services OpenAI User and Azure AI Developer roles); docs/deploy.md guide and live deployment records. 246 tests pass.
 
 ## Next step
-Merge `t10b-fixes` into `main`, then `docs/prompts/T13-deploy.md`, then Phase P (polish), T10 (tracing + recap + hosted, timeboxed), T14 to T16. Live agent work uses `FOUNDRY_PROJECT_ENDPOINT` from .env (local, gitignored) and `az login --tenant ...`; azd reuses the az login.
+Merge `t13-deploy` into `main`, triggering the GHCR workflow to push the image, then run `pwsh infra/deploy.ps1` to finalize the live Container App. Then Phase P (polish: P1 design review with Claude Design, P2 original assets, P3 UI implementation).
 
 ## Working in a cloud session (claude.ai/code)
 Cloud sessions are useful for reviews and Azure-free implementation. They have no Azure login, no `.env`, no `azd`, and run Linux.

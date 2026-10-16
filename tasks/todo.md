@@ -142,16 +142,16 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
 
 - [ ] P1: Design review with Claude Design (mockup + short style guide for the page as a broadcast product)
 - [ ] P2: Original assets: fictional club crests and a hero image (README, Innovation Studio, YouTube thumbnail); no trademarks; generator terms allow commercial use
+  - Status 2026-10-16: generated with Gemini and committed to frontend/assets/ (see CREDITS.md): Kestrel Bay and Ironvale crests and league mark at 2048x2048; hero and thumbnail at 1024x572 only (Gemini's full-size download of both was corrupted). OPEN before ticking: confirm Gemini's terms allow commercial use; regenerate hero and thumbnail at full size in a fresh Gemini chat. Background removal or SVG redraw of the crests belongs to P3.
 - [ ] P3: UI implementation from P1 + P2: SVG/CSS pitch texture, Lucide icons, crests in banner and fan panel; voice and push-to-talk flows unchanged and re-verified
 - [ ] P4: Code review against a checklist from professional-programming/antipatterns; small safe fixes; ADRs in docs/adr/
   - Known items from the T10b-fixes review (2026-10-16): (a) retry loops copied three times in app/agents/workflow.py and producer.py catch every exception and sleep up to 6 s; replace with one shared helper that retries only transient errors (timeouts, connection errors, 429, 5xx) with backoff, jitter and Retry-After (SPEC tech stack); (b) actor check: a clause starting `And Ironvale string together 12 passes` on a Kestrel Bay moment passes because `and` is in the opponent-before word list; tighten and add the case as a test.
 
 ## Phase E: Ship (Oct 22-26; T13 runs first, Oct 17-18)
 
-- [ ] T13: Deploy (both paths Must since 2026-10-15; prompt: docs/prompts/T13-deploy.md)
-  - Must: `docker compose up --build` from a clean clone runs the full demo in offline mode (`AGENT_MODE=template`, no Azure, no `.env`); with `.env` and an Azure login it runs live agents
-  - Must: API + UI on one Azure Container App with a public HTTPS URL (needed for mic in remote browsers), system-assigned managed identity with Foundry User on the project, `PUBLIC_LIVE_RUNS_PER_DAY` limit per visitor with offline fallback after the limit and on Foundry errors, scale-to-zero off and kept running until 2026-11-10; README judge section states the URL, the limit and the fallback
-  - Files: Dockerfile, docker-compose.yml, docs/deploy.md
+- [x] T13: Deploy (built and verified 2026-10-16 on t13-deploy; prompt: docs/prompts/T13-deploy.md)
+  - Result: Per-visitor match sessions with `MatchRegistry` and `mc_session` cookie; ADR in `docs/adr/0001-per-visitor-sessions.md`; `Dockerfile` (python:3.11-slim, non-root appuser, port 8010, healthcheck) and `.dockerignore`; `docker-compose.yml` for offline mode (`AGENT_MODE=template`, `VOICE_MODE=off`); `.github/workflows/image.yml` pushes `ghcr.io/ogu83/matchday-companion:latest` on push to `main`; `infra/deploy.ps1` creates `cae-matchday` and `ca-matchday` in `rg-matchday` (`eastus2`) with system-assigned managed identity, App Insights, and role assignments (`Cognitive Services OpenAI User`, `Azure AI Developer`); `docs/deploy.md` guide and live deployment records. 246 tests pass.
+  - Files: app/api/sessions.py, app/api/main.py, app/api/voice_ws.py, frontend/index.html, tests/api/test_sessions.py, docs/adr/0001-per-visitor-sessions.md, Dockerfile, .dockerignore, docker-compose.yml, .github/workflows/image.yml, infra/deploy.ps1, docs/deploy.md
 
 - [ ] T14: README + architecture diagram + judge instructions (pitch line, impact paragraph, eval headline, trace screenshot, "why an LLM Fact-Checker if code checks the numbers", pipeline stages table, pass-share possession note, generated-names note)
 - [ ] T15: Record the video from docs/demo-script.md on a local in-process run at 3x to 4x speed, hosted agent warmed up first; app audio and voiceover recorded separately and mixed; English captions on every Turkish line; upload to YouTube (no trademarks, no copyrighted music)

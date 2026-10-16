@@ -106,3 +106,42 @@ To stop and remove the container app and environment:
 ```powershell
 pwsh infra/deploy.ps1 -Teardown
 ```
+
+## Live deployment
+
+Matchday Companion is configured for deployment to Azure Container Apps in `eastus2` under resource group `rg-matchday`.
+
+### Azure Resources and IDs
+- **Subscription**: `Azure subscription 1` (`743d9e36-9955-4743-b763-bb4514c96b8d`)
+- **Resource Group**: `rg-matchday` (`eastus2`)
+- **Container Apps Environment**: `cae-matchday`
+  - Resource ID: `/subscriptions/743d9e36-9955-4743-b763-bb4514c96b8d/resourceGroups/rg-matchday/providers/Microsoft.App/managedEnvironments/cae-matchday`
+  - Default Domain: `orangetree-bcef6d10.eastus2.azurecontainerapps.io`
+- **Container App**: `ca-matchday`
+  - Public URL: `https://ca-matchday.orangetree-bcef6d10.eastus2.azurecontainerapps.io`
+  - Health Endpoint: `https://ca-matchday.orangetree-bcef6d10.eastus2.azurecontainerapps.io/api/health`
+  - SKU & Sizing: 0.5 vCPU, 1.0 GiB RAM (Consumption tier, single replica `min=1, max=1`)
+  - Ingress: External, target port 8010, transport `auto` (WebSocket & SSE enabled)
+- **Log Analytics Workspace**: `law-matchday`
+  - Resource ID: `/subscriptions/743d9e36-9955-4743-b763-bb4514c96b8d/resourceGroups/rg-matchday/providers/Microsoft.OperationalInsights/workspaces/law-matchday`
+  - Customer ID: `83b3c0e6-4738-4960-95c7-1f32fdbd5b39`
+  - Pricing / Retention: Per-GB ingestion, 30 days retention
+- **Application Insights**: `appi-matchday`
+  - Ingestion: `https://eastus2-3.in.applicationinsights.azure.com/`
+  - App ID: `a868e9bf-44b9-4a7d-837e-1c1ebe332d40`
+- **Azure AI Foundry Account**: `matchday-foundry-ok`
+  - Project Endpoint: `https://matchday-foundry-ok.services.ai.azure.com/api/projects/matchday`
+  - Model Deployment: `gpt-5.4-mini` (Format: OpenAI)
+
+### Managed Identity & Role Assignments
+- **Identity Type**: System-Assigned Managed Identity on `ca-matchday`
+- **Assigned Roles on `matchday-foundry-ok`**:
+  - `Cognitive Services OpenAI User`
+  - `Azure AI Developer`
+- **Authentication**: Zero credentials stored in container configuration. `DefaultAzureCredential` obtains Entra tokens automatically in container runtime.
+
+### Image and CI/CD
+- **Container Registry**: GitHub Container Registry (`ghcr.io/ogu83/matchday-companion:latest`)
+- **Automated Workflow**: `.github/workflows/image.yml` builds and pushes multi-stage container images on merge to `main`.
+- **Deployment Execution**: Run `pwsh infra/deploy.ps1` to provision or roll forward the live Container App.
+

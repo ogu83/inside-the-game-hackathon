@@ -113,7 +113,14 @@ if (-not $envId) {
 }
 
 # 5. Deploy or Update Container App
-$appExists = az containerapp show -g $ResourceGroup -n $AppName --query name -o tsv 2>$null
+$appProvState = az containerapp show -g $ResourceGroup -n $AppName --query properties.provisioningState -o tsv 2>$null
+if ($appProvState -eq "Failed") {
+    Write-Host "Existing Container App is in Failed state. Cleaning up before recreation..." -ForegroundColor Yellow
+    az containerapp delete -g $ResourceGroup -n $AppName --yes | Out-Null
+    $appExists = $null
+} else {
+    $appExists = az containerapp show -g $ResourceGroup -n $AppName --query name -o tsv 2>$null
+}
 
 $envVars = @(
     "AGENT_MODE=$AgentMode",
