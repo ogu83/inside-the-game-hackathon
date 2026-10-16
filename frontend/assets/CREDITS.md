@@ -4,7 +4,7 @@ All images are original, AI-generated assets for the fictional Meridian League. 
 
 - **Tool:** Google Gemini app (gemini.google.com), image generation ("Flash High"), generated 2026-10-16 by Oguz Koroglu.
 - **Prompts:** `docs/prompts/P2-assets.md`, revised versions used in the Gemini conversation "Meridian League Asset Prompts Generation".
-- **Licence:** commercial use of Gemini outputs still to be confirmed against Google's current Generative AI terms before submission (Microsoft receives a commercial licence to the submission). Status: pending.
+- **Licence:** commercial use of the Gemini outputs confirmed by Oguz on 2026-10-16 against Google's terms for his plan (Microsoft receives a commercial licence to the submission).
 - **Watermarks:** no visible watermark found in any of the five files (corners checked). Images may carry Google's invisible SynthID watermark.
 
 | File | Size | Source | Notes |
