@@ -6,7 +6,7 @@ from app.agents.run_match import live_workflow, run_moment
 from app.ledger.state import detect_all
 from app.simulator.engine import simulate
 
-pytestmark = pytest.mark.live
+pytestmark = [pytest.mark.live, pytest.mark.timeout(0)]  # tests/conftest.py does the same for any live test
 
 
 async def test_live_commentator_and_fact_checker_on_three_moments() -> None:
