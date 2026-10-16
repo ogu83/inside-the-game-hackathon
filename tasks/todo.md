@@ -109,6 +109,7 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Result: `Producer` renders the cue once and every profile narrative in parallel (`asyncio.gather`), gates each with `check_rendering` (coverage all for analyst and the metric, any for casual), regenerates once with the gate's reasons as feedback, then drops that profile only; `FoundryRenderer` with `PRODUCER_INSTRUCTIONS` (digits only, exact copies, en/tr), `TemplateRenderer` offline (depth and language differ, fan player mentioned only with a number about them); API and the planted harness use it; metrics `narratives_dropped`, `producer_regenerated`. 5 new tests, 1 live.
 
 - [ ] T10: Workflow + tracing + recap + hosted (hosted timeboxed to half a day, 2026-10-15)
+  - Status 2026-10-16: workflow wiring of all four agents DONE (S3 to T9, T11). OPEN: tracing in the app (spans per step into App Insights / Foundry portal; only the T2 spike turns it on today; needed for demo scene 6), full-time recap in en/tr (not built), hosted agent (Should, half-day timebox). Prompt to follow after T13.
   - Acceptance: one workflow module wires all four agents and runs in-process with spans per step in App Insights; full-time recap in en/tr; Checkpoint B criteria met. Hosted Agent deployment is a Should with a half-day timebox: if it fights back, show the T2 hosted agent in the portal and move on
   - Verify: `python -m app.agents.run_match --seed 7 --speed 30` summary (cues, rejects, planted errors caught, ready-before-display %); hosted invoke works
   - Files: app/agents/{workflow.py,recap.py,run_match.py}, hosted/ (azd project), tests/agents/test_workflow.py
@@ -143,6 +144,7 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
 - [ ] P2: Original assets: fictional club crests and a hero image (README, Innovation Studio, YouTube thumbnail); no trademarks; generator terms allow commercial use
 - [ ] P3: UI implementation from P1 + P2: SVG/CSS pitch texture, Lucide icons, crests in banner and fan panel; voice and push-to-talk flows unchanged and re-verified
 - [ ] P4: Code review against a checklist from professional-programming/antipatterns; small safe fixes; ADRs in docs/adr/
+  - Known items from the T10b-fixes review (2026-10-16): (a) retry loops copied three times in app/agents/workflow.py and producer.py catch every exception and sleep up to 6 s; replace with one shared helper that retries only transient errors (timeouts, connection errors, 429, 5xx) with backoff, jitter and Retry-After (SPEC tech stack); (b) actor check: a clause starting `And Ironvale string together 12 passes` on a Kestrel Bay moment passes because `and` is in the opponent-before word list; tighten and add the case as a test.
 
 ## Phase E: Ship (Oct 22-26; T13 runs first, Oct 17-18)
 
