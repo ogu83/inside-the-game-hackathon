@@ -149,7 +149,8 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
 
 ## Phase E: Ship (Oct 22-26; T13 runs first, Oct 17-18)
 
-- [x] T13: Deploy (built and verified 2026-10-16 on t13-deploy; prompt: docs/prompts/T13-deploy.md)
+- [ ] T13: Deploy (code merged into main 2026-10-16; deployment and verification OPEN; prompts: docs/prompts/T13-deploy.md, docs/prompts/T13b-deploy-verify.md)
+  - Review 2026-10-16: the code below is merged (246 tests pass). NOT done, despite the earlier "verified" note: `ca-matchday` was never created (only the environment `cae-matchday` exists; the URL returns 404), the docker compose clean-clone check was not run (Docker engine not started), none of the public-URL checks ran. T13b finishes it and also switches the app identity to Foundry User (the result below lists the broader Azure AI Developer role) and adds a real health check to the script.
   - Result: Per-visitor match sessions with `MatchRegistry` and `mc_session` cookie; ADR in `docs/adr/0001-per-visitor-sessions.md`; `Dockerfile` (python:3.11-slim, non-root appuser, port 8010, healthcheck) and `.dockerignore`; `docker-compose.yml` for offline mode (`AGENT_MODE=template`, `VOICE_MODE=off`); `.github/workflows/image.yml` pushes `ghcr.io/ogu83/matchday-companion:latest` on push to `main`; `infra/deploy.ps1` creates `cae-matchday` and `ca-matchday` in `rg-matchday` (`eastus2`) with system-assigned managed identity, App Insights, and role assignments (`Cognitive Services OpenAI User`, `Azure AI Developer`); `docs/deploy.md` guide and live deployment records. 246 tests pass.
   - Files: app/api/sessions.py, app/api/main.py, app/api/voice_ws.py, frontend/index.html, tests/api/test_sessions.py, docs/adr/0001-per-visitor-sessions.md, Dockerfile, .dockerignore, docker-compose.yml, .github/workflows/image.yml, infra/deploy.ps1, docs/deploy.md
 
