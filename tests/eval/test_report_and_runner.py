@@ -7,7 +7,7 @@ import pytest
 
 from app.agents.models import DirectorDecision, Insight, MomentResult, Verdict
 from app.eval.export_runs import build_records, write_jsonl
-from app.eval.report import evaluator_stats, headline, own_metrics, render_markdown
+from app.eval.report import evaluator_stats, groundedness_change, headline, own_metrics, render_markdown
 from app.eval.run_eval import load_results, results_to_dict, run_conditions, to_eval_items, write_report
 from app.ledger.state import detect_all
 from app.simulator.engine import simulate
@@ -83,7 +83,7 @@ async def test_runner_submits_each_condition_and_renders_the_report(tmp_path) ->
     assert saved["checker_on"]["run_id"] == "run-checker_on" and saved["checker_on"]["report_url"].endswith("checker_on")
     assert saved["checker_on"]["items"][0]["scores"][0] == {"name": "groundedness", "score": 5.0, "passed": True}
     text = write_report(tmp_path, tmp_path / "eval-results.md")
-    assert "Groundedness rose from 2.00 to 5.00" in text and "0 of 1 planted errors reached air; with it off, 1 did." in text
+    assert "in normal play Groundedness rose from 2.00 to 5.00" in text and "0 of 1 planted errors reached air against 1 of 1" in text
     assert "run `run-checker_on`" in text and "[portal](https://ai.azure.com/fake/checker_on)" in text
     assert "| Fact-Checker on (what aired) | 3 | 5.00 | 100% | 4.00 | 100% | 5.00 | 100% | 100% | no plants | completed |" in text
     assert "\u2014" not in text
@@ -136,3 +136,69 @@ async def test_offline_export_end_to_end(tmp_path) -> None:
     records = load_records(tmp_path)
     assert any(r.planted_kind for r in records["planted_off"]), "the planted first drafts are marked"
     assert all(r.number_check_ok for r in records["checker_on"]), "what airs with the checker on passes layer 1"
+
+
+def test_groundedness_change_derives_rose_fell_and_unchanged() -> None:
+    # rose: change >= +0.1
+    assert groundedness_change(4.8, 4.5) == "rose from 4.50 to 4.80"
+    assert groundedness_change(5.0, 2.0) == "rose from 2.00 to 5.00"
+    assert groundedness_change(4.6, 4.5) == "rose from 4.50 to 4.60"
+
+    # fell: change <= -0.1
+    assert groundedness_change(4.3, 4.6) == "fell from 4.60 to 4.30"
+    assert groundedness_change(3.5, 4.55) == "fell from 4.55 to 3.50"
+    assert groundedness_change(4.5, 4.6) == "fell from 4.60 to 4.50"
+
+    # was unchanged: |change| < 0.1
+    assert groundedness_change(4.56, 4.63) == "was unchanged (4.56 vs 4.63)"
+    assert groundedness_change(4.63, 4.56) == "was unchanged (4.63 vs 4.56)"
+    assert groundedness_change(4.60, 4.55) == "was unchanged (4.60 vs 4.55)"
+    assert groundedness_change(4.50, 4.50) == "was unchanged (4.50 vs 4.50)"
+
+
+def test_headline_with_and_without_planted_conditions() -> None:
+    from app.eval.export_runs import EvalRecord
+
+    rec = dict(seed=30, moment_id="m", kind="k", team="T", minute=1, query="q", response="r", context="c", cited_keys=[], status="verified")
+    records = {
+        "checker_on": [], "checker_off": [],
+        "planted_on": [EvalRecord(condition="planted_on", number_check_ok=True, planted_kind="wrong_number", planted_reached_air=False, **rec)],
+        "planted_off": [
+            EvalRecord(condition="planted_off", number_check_ok=False, planted_kind="wrong_number", planted_reached_air=True, **rec),
+            EvalRecord(condition="planted_off", number_check_ok=False, planted_kind="swapped_team", planted_reached_air=True, **rec),
+            EvalRecord(condition="planted_off", number_check_ok=False, planted_kind="wrong_number", planted_reached_air=True, **rec),
+            EvalRecord(condition="planted_off", number_check_ok=False, planted_kind="wrong_number", planted_reached_air=True, **rec),
+        ],
+    }
+    results = {
+        "checker_on": {"items": [{"scores": [{"name": "groundedness", "score": 4.56, "passed": True}]}]},
+        "checker_off": {"items": [{"scores": [{"name": "groundedness", "score": 4.63, "passed": True}]}]},
+        "planted_on": {"items": [{"scores": [{"name": "groundedness", "score": 4.55, "passed": True}]}]},
+        "planted_off": {"items": [{"scores": [{"name": "groundedness", "score": 3.75, "passed": True}]}]},
+    }
+    h = headline(records, results)
+    assert h == (
+        "With planted errors, the Fact-Checker kept Groundedness at 4.55 (100% pass) against 3.75 (100% pass) without it, "
+        "and 0 of 1 planted errors reached air against 4 of 4; in normal play both conditions scored about 4.6 because first drafts were already accurate."
+    )
+
+    # Normal play only: fell
+    results_fell = {
+        "checker_on": {"items": [{"scores": [{"name": "groundedness", "score": 4.30, "passed": True}]}]},
+        "checker_off": {"items": [{"scores": [{"name": "groundedness", "score": 4.60, "passed": True}]}]},
+    }
+    assert headline({}, results_fell) == "With the Fact-Checker on, Groundedness fell from 4.60 to 4.30."
+
+    # Normal play only: rose
+    results_rose = {
+        "checker_on": {"items": [{"scores": [{"name": "groundedness", "score": 4.80, "passed": True}]}]},
+        "checker_off": {"items": [{"scores": [{"name": "groundedness", "score": 4.50, "passed": True}]}]},
+    }
+    assert headline({}, results_rose) == "With the Fact-Checker on, Groundedness rose from 4.50 to 4.80."
+
+    # Normal play only: unchanged
+    results_unchanged = {
+        "checker_on": {"items": [{"scores": [{"name": "groundedness", "score": 4.56, "passed": True}]}]},
+        "checker_off": {"items": [{"scores": [{"name": "groundedness", "score": 4.63, "passed": True}]}]},
+    }
+    assert headline({}, results_unchanged) == "With the Fact-Checker on, Groundedness was unchanged (4.56 vs 4.63)."

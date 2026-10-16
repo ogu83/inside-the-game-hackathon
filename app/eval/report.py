@@ -46,13 +46,56 @@ def _num(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.2f}"
 
 
+def groundedness_change(on_mean: float, off_mean: float) -> str:
+    """Describe how Groundedness changed between checker-off and checker-on."""
+    diff = round(on_mean - off_mean, 4)
+    if diff >= 0.1:
+        return f"rose from {_num(off_mean)} to {_num(on_mean)}"
+    if diff <= -0.1:
+        return f"fell from {_num(off_mean)} to {_num(on_mean)}"
+    return f"was unchanged ({_num(on_mean)} vs {_num(off_mean)})"
+
+
 def headline(records: dict[str, list[EvalRecord]], results: dict[str, dict[str, Any]]) -> str:
-    on, off = evaluator_stats(results.get("checker_on")).get("groundedness", {}), evaluator_stats(results.get("checker_off")).get("groundedness", {})
-    p_on, p_off = own_metrics(records.get("planted_on", [])), own_metrics(records.get("planted_off", []))
+    on = evaluator_stats(results.get("checker_on")).get("groundedness", {})
+    off = evaluator_stats(results.get("checker_off")).get("groundedness", {})
+    p_on_eval = evaluator_stats(results.get("planted_on")).get("groundedness", {})
+    p_off_eval = evaluator_stats(results.get("planted_off")).get("groundedness", {})
+    p_on_mean, p_off_mean = p_on_eval.get("mean"), p_off_eval.get("mean")
+    p_on_pass, p_off_pass = p_on_eval.get("pass_rate"), p_off_eval.get("pass_rate")
+    p_on_rec, p_off_rec = own_metrics(records.get("planted_on", [])), own_metrics(records.get("planted_off", []))
+
     if not results or on.get("mean") is None or off.get("mean") is None:
         return "Not run yet: the evaluation has not been executed against Foundry, so there are no scores to report."
-    return (f"With the Fact-Checker on, Groundedness rose from {_num(off['mean'])} to {_num(on['mean'])} and "
-            f"{p_on['planted_reached_air']} of {p_on['planted_n']} planted errors reached air; with it off, {p_off['planted_reached_air']} did.")
+
+    on_mean, off_mean = on["mean"], off["mean"]
+    diff = round(on_mean - off_mean, 4)
+
+    has_planted = (
+        results.get("planted_on") is not None
+        and results.get("planted_off") is not None
+        and p_on_mean is not None
+        and p_off_mean is not None
+        and p_off_rec["planted_n"] > 0
+    )
+
+    if has_planted:
+        if diff >= 0.1:
+            normal = f"in normal play Groundedness rose from {_num(off_mean)} to {_num(on_mean)}"
+        elif diff <= -0.1:
+            normal = f"in normal play Groundedness fell from {_num(off_mean)} to {_num(on_mean)}"
+        elif f"{on_mean:.1f}" == f"{off_mean:.1f}":
+            normal = f"in normal play both conditions scored about {on_mean:.1f} because first drafts were already accurate"
+        else:
+            normal = f"in normal play Groundedness was unchanged ({_num(on_mean)} vs {_num(off_mean)}) because first drafts were already accurate"
+        return (
+            f"With planted errors, the Fact-Checker kept Groundedness at {_num(p_on_mean)} ({_pct(p_on_pass)} pass) "
+            f"against {_num(p_off_mean)} ({_pct(p_off_pass)} pass) without it, and {p_on_rec['planted_reached_air']} of "
+            f"{p_on_rec['planted_n']} planted errors reached air against {p_off_rec['planted_reached_air']} of {p_off_rec['planted_n']}; "
+            f"{normal}."
+        )
+
+    return f"With the Fact-Checker on, Groundedness {groundedness_change(on_mean, off_mean)}."
 
 
 def render_markdown(records: dict[str, list[EvalRecord]], results: dict[str, dict[str, Any]], manifest: dict[str, Any] | None, *, now: datetime | None = None) -> str:
@@ -70,7 +113,7 @@ def render_markdown(records: dict[str, list[EvalRecord]], results: dict[str, dic
         "Foundry evaluators (judge model from `SMALL_MODEL_DEPLOYMENT`): Groundedness, Relevance, Coherence, scored 1 to 5 by the service; "
         "pass rate is the service's threshold. Our own deterministic metric over the same aired texts: the layer 1 number and actor check, and for the planted conditions how many planted insights reached air.",
         "",
-        "| Condition | Items | Groundedness mean | pass | Relevance mean | pass | Coherence mean | pass | Number check pass | Planted caught / reached air | Status |",
+        "| Condition | Items | Groundedness mean | pass | Relevance mean | pass | Coherence mean | pass | Layer 1 pass (numbers and actors) | Planted caught / reached air | Status |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for condition in CONDITIONS:
