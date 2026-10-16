@@ -19,6 +19,7 @@
     <span class="badge delay" v-if="clock">broadcast delay {{ clock.delay_s }} s</span>
     <span class="badge" v-if="mode">{{ mode }} playback</span>
     <span class="badge" :class="{ warn: agentMode === 'template' && fallbackReason }" v-if="agentMode" :title="fallbackReason || ''">{{ agentMode === 'foundry' ? 'Foundry agents' : 'offline agents' }}<span v-if="fallbackReason">: {{ fallbackReason }}</span></span>
+    <span class="badge warn" v-if="busyMessage">{{ busyMessage }}</span>
     <span class="clock" v-if="clock">{{ playbackClock }}</span>
   </header>
   <div class="voicebar" v-if="voice">
@@ -189,7 +190,7 @@ if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clo
 createApp({
   setup() {
     const state = reactive({
-      form: { seed: 30, speed: 1, delay_s: 20 }, starting: false, running: false, clock: null, mode: null, agentMode: null, fallbackReason: null,
+      form: { seed: 30, speed: 1, delay_s: 20 }, starting: false, running: false, clock: null, mode: null, agentMode: null, fallbackReason: null, busyMessage: '',
       teams: { home: 'Home', away: 'Away', homeId: 'kby' }, league: { clubs: [] }, playerNames: {},
       ticker: [], ball: null, trail: [], banner: null, narratives: [], metrics: null, timeline: [], drawerOpen: true, filter: 'all',
       profile: { club_id: null, player_id: null, depth: 'casual', language: 'en' }, profileKey: null,
@@ -446,6 +447,12 @@ createApp({
       if (!state.league.clubs.length) await loadLeague();
       const res = await fetch('/api/match/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.form) });
       const info = await res.json();
+      if (!res.ok) {
+        state.starting = false;
+        state.busyMessage = info.detail || 'The demo is busy, try again in a minute.';
+        return;
+      }
+      state.busyMessage = '';
       const [homeId, awayId] = info.match_id.split('-');
       state.teams = { homeId, home: teamName(homeId), away: teamName(awayId) };
       state.clock = info.clock; state.mode = info.mode; state.agentMode = info.agent_mode; state.fallbackReason = info.fallback_reason;

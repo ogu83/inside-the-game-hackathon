@@ -19,6 +19,7 @@ from starlette.websockets import WebSocketState
 
 from app.agents.fact_check_rules import check_speech, cited_evidence
 from app.agents.models import Answer, FanProfile, QaTiming, SpeechAudit
+from app.api.sessions import get_ws_session_id, qa_pipeline_for_run
 from app.api.streams import MatchRun
 from app.voice.qa import new_question
 from app.voice.session import Lang, NothingHeard, Speaker, SpeechError, TranscriptionError
@@ -116,7 +117,8 @@ async def _ask(run: MatchRun, ws: WebSocket, fan: FanProfile, transcript: str, w
         run.metrics["speech_skipped_stale"] += 1
     question = new_question(fan.key(), transcript, len(run.displayed_events()))
     await ws.send_json({"type": "question", "question": question.model_dump()})
-    answer = await ws.app.state.qa.answer(question, fan)
+    qa = qa_pipeline_for_run(run, ws.app)
+    answer = await qa.answer(question, fan)
     timing.answered_at = time.time()
     answer.timing = timing
     run.record_timing(timing)
@@ -209,7 +211,11 @@ async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asynci
 @router.websocket("/api/voice")
 async def voice(ws: WebSocket, lang: Lang = "en", profile: str | None = None) -> None:
     await ws.accept()
-    run: MatchRun | None = ws.app.state.run
+    session_id = get_ws_session_id(ws)
+    registry = getattr(ws.app.state, "registry", None)
+    run: MatchRun | None = registry.get(session_id) if registry else None
+    if run is None:
+        run = getattr(ws.app.state, "run", None)
     factory = ws.app.state.speaker_factory
     if run is None or factory is None:
         reason = "no match running" if run is None else "voice is off (no Foundry endpoint or VOICE_MODE=off)"
