@@ -38,7 +38,7 @@ The script is idempotent:
 - Creates or updates the Container App (`ca-matchday`) with 0.5 vCPU, 1.0 GiB memory, min/max replicas 1, port 8010 external ingress.
 - Enables system-assigned managed identity on the container app and assigns:
   - `Cognitive Services OpenAI User`
-  - `Azure AI Developer`
+  - `Foundry User`
   on the `matchday-foundry-ok` cognitive services account.
 
 ## Health Check and Verification
