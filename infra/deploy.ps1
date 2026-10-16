@@ -203,6 +203,9 @@ if ($principalId) {
         --role "Foundry User" `
         --scope $cogAccountId `
         --assignee-principal-type ServicePrincipal
+    if ($LASTEXITCODE -ne 0) {
+        throw "Role assignment 'Foundry User' failed for principal $principalId."
+    }
 }
 
 # 7. Verification & Output

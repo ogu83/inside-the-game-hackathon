@@ -36,10 +36,7 @@ The script is idempotent:
 - Creates Log Analytics workspace (`law-matchday`) and Application Insights (`appi-matchday`) if missing.
 - Creates Container Apps environment (`cae-matchday`) linked to Log Analytics.
 - Creates or updates the Container App (`ca-matchday`) with 0.5 vCPU, 1.0 GiB memory, min/max replicas 1, port 8010 external ingress.
-- Enables system-assigned managed identity on the container app and assigns:
-  - `Cognitive Services OpenAI User`
-  - `Foundry User`
-  on the `matchday-foundry-ok` cognitive services account.
+- Enables system-assigned managed identity on the container app and assigns `Foundry User` on the `matchday-foundry-ok` account (enough for the Responses API and Voice Live; no other role is needed). A failed assignment stops the script.
 
 ## Health Check and Verification
 
@@ -156,6 +153,6 @@ Matchday Companion is configured for deployment to Azure Container Apps in `east
 | 4. Push-to-Talk / Q&A | `WSS /api/voice` (ask frame) | **PASSED** | Sent `{"type":"ask","transcript":"How is my player doing?"}`. FastMCP called tools `['player_stats', 'score', 'recent_moments', 'team_stats']`. Answer received, spoken, and audited verbatim. |
 | 5. Multi-Visitor Isolation | `POST /api/match/start` | **PASSED** | Visitor A received `kby-iva-7`, Visitor B received `iva-kby-42`. States isolated via `mc_session` cookies. |
 | 6. Rate Limit & Fallback | `POST /api/match/start` (3rd run) | **PASSED** | Fallback triggered after 2 runs: `agent_mode: template`, `fallback_reason: "live-run limit reached (2 per visitor per day); continuing with offline agents"`. |
-| 7. Telemetry & Traces | App Insights / Log Analytics | **PASSED** | `ContainerAppConsoleLogs_CL` verified live MSI tokens, 3 workflow supersteps, and HTTP 200 OK from `openai/v1/responses`. `AppRequests` verified in `law-matchday`. |
+| 7. Telemetry & Traces | App Insights | **NOT DONE** | Review 2026-10-16: `appi-matchday` holds 0 requests, dependencies or traces in the last 24 h. Only container console logs exist. The app never calls `configure_azure_monitor()` / `enable_instrumentation()`; this moves to T10 (tracing in the app). |
 | 8. Docker Compose Offline | `docker compose up --build -d` | **PASSED** | Clean clone build, offline health check 200, started match `kby-iva-7`, received `event: cue` SSE stream, clean teardown. |
 
