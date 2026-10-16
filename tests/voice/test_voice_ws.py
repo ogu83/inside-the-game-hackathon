@@ -248,9 +248,62 @@ def test_too_short_push_to_talk_is_reported_not_answered() -> None:
                 if m.get("text"):
                     msg = json.loads(m["text"])
                     if msg["type"] == "question":
-                        assert msg["question"] is None and msg["reason"] == "I did not catch that, try again"
+                        assert msg["question"] is None and msg["reason"] == "I didn't catch that, try again."
                         break
         assert app.state.run.metrics["nothing_heard"] == 1
+
+
+def nothing_heard_flow(profile: str, frames, speaker: FakeSpeaker | None = None) -> tuple[list[dict], FakeSpeaker, dict]:
+    speaker = speaker or FakeSpeaker()
+    with TestClient(app) as client:
+        async def factory():
+            return speaker
+
+        app.state.speaker_factory = factory
+        app.state.workflow_factory = template_workflow
+        client.post("/api/match/start", json={"seed": 7, "speed": 1500, "delay_s": 120, "minutes": 4})
+        messages = []
+        with client.websocket_connect(f"/api/voice?profile={profile}") as ws:
+            frames(ws)
+            while True:
+                m = ws.receive()
+                if not m.get("text"):
+                    continue
+                msg = json.loads(m["text"])
+                messages.append(msg)
+                if msg["type"] == "spoken" and (msg["audit"]["question_id"] or "").startswith("nh-"):
+                    break
+        return messages, speaker, app.state.run.report()
+
+
+def test_a_press_cancelled_in_the_page_is_answered_with_a_spoken_line_without_voice_live() -> None:
+    def frames(ws):
+        ws.send_text(json.dumps({"type": "talk_start"}))
+        ws.send_bytes(b"\x00\x01" * 2000)
+        ws.send_text(json.dumps({"type": "talk_cancel"}))
+
+    messages, speaker, metrics = nothing_heard_flow("iva|iva-07|casual|tr", frames)
+    reason = next(m for m in messages if m["type"] == "question")["reason"]
+    assert reason == "Anlayamadım, tekrar dener misin?"
+    spoken_line = next(m for m in messages if m["type"] == "speaking" and m.get("question_id", "").startswith("nh-"))
+    assert spoken_line["text"] == reason and spoken_line["lang"] == "tr"
+    assert speaker.spoken[-1] == (reason, "tr") and not getattr(speaker, "transcribed", []), "spoken verbatim, nothing sent to Voice Live"
+    audit = messages[-1]["audit"]
+    assert audit["ok"] and audit["approved_text"] == reason and audit["profile_key"] == "iva|iva-07|casual|tr"
+    assert metrics["nothing_heard"] == 1 and metrics.get("answers_spoken", 0) == 0 and metrics["speech_checks"] >= 1
+
+
+def test_commit_empty_from_voice_live_is_spoken_the_same_way() -> None:
+    def frames(ws):
+        ws.send_text(json.dumps({"type": "talk_start"}))
+        ws.send_bytes(b"\x00\x01" * 24000)
+        ws.send_text(json.dumps({"type": "talk_end"}))
+
+    deaf = FakeSpeaker()
+    deaf.hears_nothing = True
+    messages, speaker, metrics = nothing_heard_flow("-|-|casual|en", frames, speaker=deaf)
+    assert speaker.transcribed == [48000], "Voice Live was asked and said the buffer was empty"
+    assert speaker.spoken[-1] == ("I didn't catch that, try again.", "en") and metrics["nothing_heard"] == 1
 
 
 def test_commit_empty_from_voice_live_is_reported_at_once() -> None:
@@ -271,7 +324,7 @@ def test_commit_empty_from_voice_live_is_reported_at_once() -> None:
                 m = ws.receive()
                 if m.get("text") and json.loads(m["text"]).get("type") == "question":
                     msg = json.loads(m["text"])
-                    assert msg["question"] is None and msg["reason"] == "Anlayamadım, tekrar dener misin"
+                    assert msg["question"] is None and msg["reason"] == "Anlayamadım, tekrar dener misin?"
                     break
         assert speaker.transcribed == [48000] and app.state.run.metrics["nothing_heard"] == 1
 

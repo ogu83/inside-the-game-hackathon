@@ -70,6 +70,10 @@ def test_page_script_parses_and_pure_helpers_behave(tmp_path: Path) -> None:
     )
     out = subprocess.run(["node", "-e", gate_probe, str(tmp_path / "helpers.js")], check=True, capture_output=True, text=True).stdout
     assert json.loads(out) == [True, True, False, False, 1, True, False, True, 2, True], "interrupt mutes until the next line starts"
+    talk_probe = "const h = require(process.argv[1]); console.log(JSON.stringify([h.MIN_TALK_BYTES, h.talkOutcome(0), h.talkOutcome(h.MIN_TALK_BYTES - 1), h.talkOutcome(h.MIN_TALK_BYTES), h.talkOutcome(96000)]))"
+    out = subprocess.run(["node", "-e", talk_probe, str(tmp_path / "helpers.js")], check=True, capture_output=True, text=True).stdout
+    assert json.loads(out) == [14400, "talk_cancel", "talk_cancel", "talk_end", "talk_end"], "under 0.3 s of audio the press is cancelled in the page"
+    assert "type: talkOutcome(talkBytes)" in HTML and "talkBytes += pcm.buffer.byteLength" in HTML
     assert "interrupting = state.voice ? bargeIn() : null; startTalk();" in HTML, "the press mutes playback before anything async"
     script = SCRIPT
     assert script.count("getUserMedia(") == 1 and script.index("getUserMedia(") < script.index("const toggleVoice"), "the mic is opened once, by warmMic, before the first press"

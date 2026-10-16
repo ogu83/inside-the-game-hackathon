@@ -259,7 +259,7 @@ class MatchRun:
         self.audits.append(audit)
         self.metrics["speech_checks"] += 1
         self.metrics["speech_mismatches"] += int(not audit.ok)
-        if audit.question_id:
+        if audit.question_id and not audit.question_id.startswith("nh-"):
             self.metrics["answers_spoken"] += 1
 
     def mark_interrupted(self, ref: str) -> SpeechAudit | None:

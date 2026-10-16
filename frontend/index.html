@@ -175,13 +175,16 @@ class PushToTalk {
 // Barge-in gate: pre-generated speech arrives far faster than real time, so at press time the whole line is usually
 // already scheduled in the browser. interrupt() mutes playback at once; chunks that still arrive for the interrupted
 // line are dropped until the next 'speaking' message starts a new line (nextLine()).
+// A press shorter than this (about 0.3 s of pcm16 at 24 kHz) is caught in the page: nothing goes to Voice Live.
+const MIN_TALK_BYTES = 24000 * 2 * 0.3;
+const talkOutcome = (bytesSent) => (bytesSent >= MIN_TALK_BYTES ? 'talk_end' : 'talk_cancel');
 class PlaybackGate {
   constructor() { this.muted = false; this.line = 0; }
   interrupt() { this.muted = true; return true; }
   nextLine() { this.line++; this.muted = false; return this.line; }
   accept(chunk) { return !this.muted && !!chunk; }
 }
-if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clockText, labelPos, askRoute, PushToTalk, PlaybackGate };
+if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clockText, labelPos, askRoute, PushToTalk, PlaybackGate, talkOutcome, MIN_TALK_BYTES };
 
 createApp({
   setup() {
@@ -322,7 +325,7 @@ createApp({
           if (!state.talking || !socketOpen()) return;  // warm but silent until the button is held
           const f = e.inputBuffer.getChannelData(0); const pcm = new Int16Array(f.length);
           for (let i = 0; i < f.length; i++) pcm[i] = Math.max(-1, Math.min(1, f[i])) * 32767;
-          voiceWs.send(pcm.buffer);
+          voiceWs.send(pcm.buffer); talkBytes += pcm.buffer.byteLength;
         };
         source.connect(micNode); micNode.connect(micCtx.destination);
         state.micReady = true;
@@ -366,6 +369,7 @@ createApp({
     // and Voice Live transcribes it; with the voice off, the browser's own speech recognition supplies the transcript.
     const ptt = new PushToTalk();
     let interrupting = null;  // set at press time, sent with talk_start
+    let talkBytes = 0;  // audio sent during the current hold
     const pressTalk = (e) => { if (state.running && ptt.press(e)) { interrupting = state.voice ? bargeIn() : null; startTalk(); } };  // mute first, then anything async
     const releaseTalk = () => { if (ptt.release()) stopTalk(); };
     const startTalk = async () => {
@@ -375,7 +379,7 @@ createApp({
         if (!ptt.held) return;  // released while reconnecting
         if (!mic && !(await warmMic())) { ptt.release(); return; }  // normally already warm since the voice was turned on
         if (!ptt.held) return;
-        state.talking = true;
+        state.talking = true; talkBytes = 0;
         voiceWs.send(JSON.stringify({ type: 'talk_start', interrupting }));
         return;
       }
@@ -397,7 +401,8 @@ createApp({
       state.talking = false;  // the warm mic keeps running; frames stop here because onaudioprocess checks state.talking
       if (recognition) { recognition.stop(); recognition = null; return; }
       const ws = voiceWs, pressId = ptt.pressId;
-      if (ws && ws.readyState === 1) setTimeout(() => { if (ws.readyState === 1 && pressId === ptt.pressId) ws.send(JSON.stringify({ type: 'talk_end' })); }, 150);
+      // A too-short press never reaches Voice Live: the server speaks "I didn't catch that" instead.
+      if (ws && ws.readyState === 1) setTimeout(() => { if (ws.readyState === 1 && pressId === ptt.pressId) ws.send(JSON.stringify({ type: talkOutcome(talkBytes) })); }, 150);
     };
     const listen = (path, handlers) => {
       const es = new EventSource(path);

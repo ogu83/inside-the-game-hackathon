@@ -25,7 +25,7 @@ from app.voice.session import Lang, NothingHeard, Speaker, SpeechError, Transcri
 router = APIRouter()
 log = logging.getLogger(__name__)
 DONE = object()
-NOTHING_HEARD = {"en": "I did not catch that, try again", "tr": "Anlayamadım, tekrar dener misin"}
+NOTHING_HEARD = {"en": "I didn't catch that, try again.", "tr": "Anlayamadım, tekrar dener misin?"}
 
 
 def narrative_for(cue: dict[str, Any], lang: str) -> dict[str, Any] | None:
@@ -124,6 +124,21 @@ async def _ask(run: MatchRun, ws: WebSocket, fan: FanProfile, transcript: str, w
     waiting.put_nowait(answer)
 
 
+async def _nothing_heard(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asyncio.Queue) -> None:
+    """An empty press (caught in the page, or Voice Live's commit_empty): the reply is shown and spoken verbatim through
+    the normal speech path, so it is audited like every other line."""
+    run.metrics["nothing_heard"] += 1
+    text = NOTHING_HEARD[fan.language]
+    await ws.send_json({"type": "question", "question": None, "reason": text})
+    while not waiting.empty():
+        stale = waiting.get_nowait()
+        if isinstance(stale, Answer):
+            waiting.put_nowait(stale)
+            break
+        run.metrics["speech_skipped_stale"] += 1
+    waiting.put_nowait(Answer(question_id=f"nh-{int(time.time() * 1000)}", text=text, evidence_refs=[], tool_calls=[]))
+
+
 async def _transcribe_then_ask(run: MatchRun, ws: WebSocket, fan: FanProfile, pcm: bytes, waiting: asyncio.Queue, speaker: Speaker, state: dict, pressed_at: float) -> None:
     """One utterance, in its own task: a slow or failed transcription never blocks the next press."""
     timing = QaTiming(pressed_at=pressed_at)
@@ -132,9 +147,8 @@ async def _transcribe_then_ask(run: MatchRun, ws: WebSocket, fan: FanProfile, pc
         timing.transcribed_at = time.time()
     except asyncio.CancelledError:
         raise
-    except NothingHeard:  # empty or too short: fails at once, with a human reason
-        run.metrics["nothing_heard"] += 1
-        await ws.send_json({"type": "question", "question": None, "reason": NOTHING_HEARD[fan.language]})
+    except NothingHeard:  # empty or too short: fails at once, with a spoken, human reason
+        await _nothing_heard(run, ws, fan, waiting)
         return
     except (TranscriptionError, RuntimeError) as exc:  # reported to the page; the voice keeps working
         log.warning("transcription failed: %s", exc)
@@ -144,8 +158,7 @@ async def _transcribe_then_ask(run: MatchRun, ws: WebSocket, fan: FanProfile, pc
     if transcript.strip():
         await _ask(run, ws, fan, transcript, waiting, speaker, state, timing=timing)
     else:
-        run.metrics["nothing_heard"] += 1
-        await ws.send_json({"type": "question", "question": None, "reason": NOTHING_HEARD[fan.language]})
+        await _nothing_heard(run, ws, fan, waiting)
 
 
 async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asyncio.Queue, speaker: Speaker, state: dict) -> None:
@@ -182,6 +195,9 @@ async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asynci
             elif kind == "talk_end" and talking:
                 talking = False
                 pending = asyncio.create_task(_transcribe_then_ask(run, ws, fan, bytes(pcm), waiting, speaker, state, pressed_at))
+            elif kind == "talk_cancel" and talking:
+                talking = False  # the page caught a too-short press: nothing goes to Voice Live, the reply is spoken
+                await _nothing_heard(run, ws, fan, waiting)
     except WebSocketDisconnect:
         return
     finally:
