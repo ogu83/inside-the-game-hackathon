@@ -291,20 +291,37 @@ def check_rendering(
     return check
 
 
-# Opponent phrasing: the other club or its players may be named only as the ones acted upon.
-_EN_BEFORE = {"against", "on", "over", "past", "from", "versus", "vs", "to", "beat", "beating", "behind", "through", "around", "off", "by",
-              "under", "at", "with", "than", "pressing", "pressed", "pressured", "pressure", "trapped", "trap", "caught", "forced", "forcing",
-              "denied", "stopped", "dispossessed", "robbed", "chasing", "pinned", "outnumbered", "overran", "overrun", "squeezed", "hemmed",
-              "left", "leaving", "while", "as", "whilst", "for", "and", "so"}
-_EN_AFTER = {"chasing", "chase", "chased", "concede", "conceded", "conceding", "struggle", "struggled", "struggling", "pinned", "overrun",
-             "could", "couldn't", "cannot", "can't", "failed", "fail", "lost", "lose", "losing", "defend", "defending", "defended",
-             "sat", "sit", "sitting", "drop", "dropped", "dropping", "retreat", "retreated", "retreating", "scrambling", "scrambled", "are", "were", "have", "had", "did", "look", "looked"}
+# Opponent phrasing: the other club or its players may be named only as the ones acted upon or as places.
+_EN_BEFORE = {
+    "against", "on", "over", "past", "from", "versus", "vs", "to", "beat", "beating", "behind", "through", "around", "off", "by",
+    "under", "at", "with", "than", "pressing", "pressed", "pressured", "pressure", "trapped", "trap", "caught", "forced", "forcing",
+    "force", "forces", "denied", "stopped", "dispossessed", "robbed", "chasing", "pinned", "pin", "pins", "pinning", "outnumbered",
+    "overran", "overrun", "squeezed", "hemmed", "leave", "leaves", "left", "leaving", "keep", "keeps", "kept", "keeping",
+    "push", "pushes", "pushed", "pushing", "put", "puts", "putting", "while", "as", "whilst", "for", "and", "so",
+}
+_EN_AFTER = {
+    "chasing", "chase", "chased", "concede", "conceded", "conceding", "struggle", "struggled", "struggling", "pinned", "overrun",
+    "could", "couldn't", "cannot", "can't", "failed", "fail", "lost", "lose", "losing", "defend", "defending", "defended",
+    "sat", "sit", "sitting", "drop", "dropped", "dropping", "retreat", "retreated", "retreating", "scrambling", "scrambled",
+    "are", "were", "have", "had", "did", "look", "looked",
+}
 _EN_AFTER_SUBJECT = {"are", "were", "have", "had", "did", "look", "looked"}  # these need a passive-sounding word right after
-_EN_PASSIVE = {"chasing", "pinned", "overrun", "struggling", "scrambling", "stretched", "exposed", "tired", "tiring", "unable", "forced", "pushed", "penned", "second", "behind", "outnumbered", "powerless", "passive", "reactive", "deep", "defending", "sitting", "rattled", "on", "under"}
-_TR_AFTER = {"karşı", "karşısında", "karşısına", "üzerinde", "üzerine", "önünde", "savunmasında", "savunmasına", "savunması", "sahasında", "yarısında",
-             "kalesine", "kalesinde", "ceza", "baskısı", "baskısına", "baskısıyla", "ardından", "peşinden", "arkasından", "gerisinde", "geriye", "zorlandı", "zorlanıyor",
-             "koşuyor", "koşturuyor", "kovalıyor", "yoruldu", "sıkıştı", "sıkışıyor"}
-_TR_SUFFIX = re.compile(r"'(?:y?[aeıiuü]|n?[ıiuü]n|d[ae]n|t[ae]n|y?l[ae]|d[ae]|t[ae])\b")
+_EN_PASSIVE = {
+    "chasing", "pinned", "overrun", "struggling", "scrambling", "stretched", "exposed", "tired", "tiring", "unable", "forced", "pushed",
+    "penned", "second", "behind", "outnumbered", "powerless", "passive", "reactive", "deep", "defending", "sitting", "rattled", "on", "under",
+}
+_EN_PLACE = {
+    "territory", "territories", "half", "halves", "box", "boxes", "area", "areas", "goal", "goals",
+    "defence", "defense", "defences", "defenses", "end", "ends", "side", "sides", "third", "thirds",
+}
+_TR_AFTER = {
+    "karsi", "karsisinda", "karsisina", "uzerinde", "uzerine", "onunde", "ardindan",
+    "pesinden", "arkasindan", "gerisinde", "geriye", "zorlandi", "zorlaniyor", "zorlayan", "kosuyor", "kosturuyor",
+    "kovaliyor", "yoruldu", "sikisti", "sikisiyor", "birakti", "birakiyor", "birakan", "tuttu", "tutuyor", "tutan",
+    "itti", "itiyor", "iten", "hapsetti", "hapsediyor", "hapseden", "altinda", "altina",
+}
+_TR_PLACE_PREFIXES = ("yari", "ceza", "kale", "savunma", "bolge", "saha", "alan", "taraf")
+_TR_OBJ_SUFFIX = re.compile(r"'(?:y?[aeıiuü]|d[ae]n|t[ae]n|y?l[ae]|d[ae]|t[ae])\b")
 
 
 def _tokens(text: str) -> list[str]:
@@ -317,13 +334,37 @@ def _name_positions(tokens: list[str], name: str) -> list[int]:
     return [i for i in range(len(folded) - len(parts) + 1) if folded[i:i + len(parts)] == parts]
 
 
+def _is_place(tokens: list[str], start: int, length: int, lang: Lang) -> bool:
+    if lang == "tr":
+        after = [_fold(t) for t in tokens[start + length:start + length + 3]]
+        if after and any(after[0].startswith(p) for p in _TR_PLACE_PREFIXES):
+            return True
+        if len(after) > 1 and after[0] in ("kendi", "kendi\u0307") and any(after[1].startswith(p) for p in _TR_PLACE_PREFIXES):
+            return True
+        return False
+    after = [t.casefold() for t in tokens[start + length:start + length + 3]]
+    if after and after[0] in _EN_PLACE:
+        return True
+    if len(after) > 1 and after[0] in ("own", "defensive", "attacking", "penalty", "18-yard") and after[1] in _EN_PLACE:
+        return True
+    return False
+
+
 def _as_object(tokens: list[str], start: int, length: int, lang: Lang) -> bool:
     """True when the name at tokens[start:start+length] is acted upon rather than acting."""
+    if _is_place(tokens, start, length, lang):
+        return True
     before = [t.casefold() for t in tokens[max(0, start - 3):start]]
     after = [t.casefold() for t in tokens[start + length:start + length + 3]]
     last = tokens[start + length - 1]
     if lang == "tr":
-        return bool(_TR_SUFFIX.search(last)) or any(w in _TR_AFTER for w in after[:2]) or any(w in ("karşı", "karşısında", "üzerinde") for w in before)
+        after_tr = [_fold(t) for t in tokens[start + length:start + length + 3]]
+        before_tr = [_fold(t) for t in tokens[max(0, start - 3):start]]
+        return (
+            bool(_TR_OBJ_SUFFIX.search(last))
+            or any(w in _TR_AFTER for w in after_tr[:2])
+            or any(w in ("karsi", "karsisinda", "uzerinde") for w in before_tr)
+        )
     if any(w in _EN_BEFORE for w in before[-2:]):
         return True
     if after and after[0] in _EN_AFTER:

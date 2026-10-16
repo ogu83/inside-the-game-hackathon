@@ -138,3 +138,62 @@ async def test_fact_checker_passes_labels_so_the_rewrite_is_checked_too() -> Non
     good = Insight(moment_id=IVA_TRAP.moment_id, claim="Ironvale set a pressing trap with 2 pressures in 21 seconds.", why_it_matters="w", evidence_refs=list(IVA_TRAP.evidence), confidence=0.8)
     verdict, checks = await FactChecker(judge).check(good, IVA_TRAP, IVA_LABELS, 1)
     assert verdict.status == "rejected" and verdict.reasons[0] == "rewrite failed the number check" and "Kestrel Bay named as the actor" in verdict.reasons[1]
+
+
+def test_opponent_as_place_or_object_passes_layer_1_live_cases() -> None:
+    # 6 real cases from Foundry evaluation
+    s1 = "The regain comes 38.2 m from goal, which can leave Ironvale starting again in their own half."
+    assert check_actors(s1, MOMENT, KBY_LABELS) == []
+    s2 = "That turn-over happened in Ironvale territory and can set up the next action nearer the attacking end."
+    assert check_actors(s2, MOMENT, KBY_LABELS) == []
+    s3 = "That sequence turns possession into a shot and carries the ball 49.4 m into Kestrel Bay territory."
+    assert check_actors(s3, IVA_TRAP, IVA_LABELS) == []
+    s4 = "The move carried the ball 69.5 m into Ironvale territory, but it ended without a shot."
+    assert check_actors(s4, MOMENT, KBY_LABELS) == []
+    s5 = "That spell gave Ironvale a longer spell in Kestrel Bay territory."
+    assert check_actors(s5, IVA_TRAP, IVA_LABELS) == []
+    s6 = "That turnover leaves Ironvale starting from 45.9 metres out, which can push the next action into Kestrel Bay territory."
+    assert check_actors(s6, MOMENT, KBY_LABELS) == []
+
+
+def test_opponent_possessive_and_locative_place_mentions() -> None:
+    # English place nouns and possessives
+    assert check_actors("Kestrel Bay kept the ball in Ironvale's half.", MOMENT, KBY_LABELS) == []
+    assert check_actors("The attack reached Ironvale's territory.", MOMENT, KBY_LABELS) == []
+    assert check_actors("They pushed into Ironvale's box.", MOMENT, KBY_LABELS) == []
+    assert check_actors("The ball was delivered into the Ironvale area.", MOMENT, KBY_LABELS) == []
+    assert check_actors("Kestrel Bay threatened the Ironvale goal.", MOMENT, KBY_LABELS) == []
+    assert check_actors("They probed the Ironvale defence.", MOMENT, KBY_LABELS) == []
+    assert check_actors("A shot tested the Ironvale defense.", MOMENT, KBY_LABELS) == []
+    assert check_actors("Action stayed at the Ironvale end of the pitch.", MOMENT, KBY_LABELS) == []
+    assert check_actors("The move developed on the Ironvale side.", MOMENT, KBY_LABELS) == []
+    assert check_actors("Possession was contested in the Ironvale third.", MOMENT, KBY_LABELS) == []
+    assert check_actors("Ironvale were pinned in their own half.", MOMENT, KBY_LABELS) == []
+    assert check_actors("That tackle puts Ironvale under pressure.", MOMENT, KBY_LABELS) == []
+    assert check_actors("Kestrel Bay keep Ironvale penned in.", MOMENT, KBY_LABELS) == []
+    assert check_actors("The press will force Ironvale to clear long.", MOMENT, KBY_LABELS) == []
+
+    # Turkish place nouns and possessives
+    assert check_actors("Kestrel Bay, Ironvale'in yarı sahasında baskı kurdu.", MOMENT, KBY_LABELS, "tr") == []
+    assert check_actors("Kestrel Bay, Ironvale yarı sahasında topu kazandı.", MOMENT, KBY_LABELS, "tr") == []
+    assert check_actors("Kestrel Bay topu Ironvale ceza sahasına taşıdı.", MOMENT, KBY_LABELS, "tr") == []
+    assert check_actors("Ironvale kalesinde tehlike yaşandı.", MOMENT, KBY_LABELS, "tr") == []
+    assert check_actors("Kestrel Bay, Ironvale savunmasını zorladı.", MOMENT, KBY_LABELS, "tr") == []
+    assert check_actors("Oyun Ironvale bölgesinde geçti.", MOMENT, KBY_LABELS, "tr") == []
+    assert check_actors("Ironvale'i kendi yarı sahasında bıraktı.", MOMENT, KBY_LABELS, "tr") == []
+    assert check_actors("Ironvale'i baskı altında tuttu.", MOMENT, KBY_LABELS, "tr") == []
+
+
+def test_opponent_acting_still_fails_layer_1() -> None:
+    # Swapped team as actor must still fail
+    assert check_actors("Kestrel Bay set a pressing trap with 2 pressures.", IVA_TRAP, IVA_LABELS)[0].startswith("Kestrel Bay named as the actor")
+    assert check_actors("Kestrel Bay's pressing trap caught Ironvale.", IVA_TRAP, IVA_LABELS)[0].startswith("Kestrel Bay named as the actor")
+    assert check_actors("Kestrel Bay have strung together 22 passes.", IVA_TRAP, IVA_LABELS)[0].startswith("Kestrel Bay named as the actor")
+    assert check_actors("Luca Brightwater led the press and Ironvale won it.", IVA_TRAP, IVA_LABELS)[0].startswith("Luca Brightwater plays for Kestrel Bay")
+    assert check_actors("Luca Brightwater's pass opened up the defence.", IVA_TRAP, IVA_LABELS)[0].startswith("Luca Brightwater plays for Kestrel Bay")
+
+    # Turkish swapped team as actor must still fail
+    assert check_actors("Kestrel Bay 21 saniyede 2 kez baskı yaptı.", IVA_TRAP, IVA_LABELS, "tr")[0].startswith("Kestrel Bay named as the actor")
+    assert check_actors("Kestrel Bay'in baskısı sonuç verdi.", IVA_TRAP, IVA_LABELS, "tr")[0].startswith("Kestrel Bay named as the actor")
+    assert check_actors("Luca Brightwater baskıya öncülük etti.", IVA_TRAP, IVA_LABELS, "tr")[0].startswith("Luca Brightwater plays for Kestrel Bay")
+
