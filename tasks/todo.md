@@ -113,10 +113,12 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Verify: `python -m app.agents.run_match --seed 7 --speed 30` summary (cues, rejects, planted errors caught, ready-before-display %); hosted invoke works
   - Files: app/agents/{workflow.py,recap.py,run_match.py}, hosted/ (azd project), tests/agents/test_workflow.py
 
-- [ ] T10b: Foundry evaluation (start as soon as T10 runs; can start earlier from the S3 run log `python -m app.agents.run_match --jsonl`, see docs/reviews/2026-10-15-fable-review.md section 3)
+- [ ] T10b: Foundry evaluation (code done 2026-10-16 in a cloud session with fakes; the live export and the evaluation runs are Oguz's to run locally)
   - Acceptance: 3 recorded seeded matches exported as an evaluation dataset; Foundry cloud evaluation (Groundedness, Task Adherence) with Fact-Checker on vs off; planted-error count; results table in docs/eval-results.md with one headline sentence for README and video
   - Verify: evaluation job submitted and polled to completion; scores visible in the Foundry portal
-  - Files: app/eval/export_runs.py, app/eval/run_eval.py, docs/eval-results.md
+  - Files: app/eval/export_runs.py, app/eval/run_eval.py, app/eval/report.py, docs/eval-results.md, tests/eval/
+  - Result (code): `export_runs` builds two items per said moment from the same run (checker_on = aired verified or rewritten insight, checker_off = attempt 1 aired unchanged; rejected counted, not aired) for seeds 7, 30, 42 (first 12 moments) plus planted_on and planted_off from the planted run (seed 30, 4 + 4 plants), with query, response, context (evidence as key: value lines plus team and player labels) and a deterministic layer 1 verdict per item, written to runs/eval/*.jsonl with a manifest; `run_eval` submits one FoundryEvals run per condition (Groundedness, Relevance, Coherence; judge SMALL_MODEL_DEPLOYMENT; timeout 900 s), saves results_<condition>.json and renders docs/eval-results.md (per-condition table, run ids, portal links, headline; "not run yet" until the live run). 12 offline tests, 1 live (2 items).
+  - To run locally: `python -m app.eval.export_runs --seeds 7 30 42 --limit 12 --live` then `python -m app.eval.run_eval runs/eval`; commit docs/eval-results.md.
 
 - [x] T11: API full (done 2026-10-15 in a cloud session)
   - Acceptance: adds `GET /api/stream/fan?profile=...`, `GET /api/profiles`, verdict stream for the debug drawer

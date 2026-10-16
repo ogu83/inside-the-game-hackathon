@@ -35,6 +35,7 @@ def offline_workflow(writer=None):
 
 
 PLANT_PROFILES = [FanProfile(language="en", depth="casual"), FanProfile(language="tr", depth="analyst")]
+LAST_PLANTING: list[PlantingCommentator] = []
 
 
 async def run_planted(seed: int, n: int, live: bool = False, plan_seed: int = 0, limit: int | None = None) -> tuple[list[MomentResult], PlantedReport]:
@@ -52,6 +53,8 @@ async def run_planted(seed: int, n: int, live: bool = False, plan_seed: int = 0,
         workflow = offline_workflow(commentator)
     tampered: list[tuple[str, str, str]] = []
     producer = (live_producer if live else offline_producer)(tamper=make_tamper(plan, plan_seed, tampered))
+    LAST_PLANTING.clear()
+    LAST_PLANTING.append(commentator)  # the eval export reads the plan and the planted insights from here
     pacing = PacingTracker()
     results: list[MomentResult] = []
     report = PlantedReport()

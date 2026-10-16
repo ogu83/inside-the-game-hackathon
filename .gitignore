@@ -12,3 +12,4 @@ docs/document.pdf
 .azure/
 spikes/hosted/src/t2-spike/.venv/
 spikes/out/
+runs/
