@@ -33,7 +33,7 @@ param(
     [ValidateSet("foundry", "template")]
     [string]$AgentMode = "foundry",
     [ValidateSet("live", "off")]
-    [string]$VoiceMode = "off",
+    [string]$VoiceMode = "live",
     [string]$FoundryEndpoint = "https://matchday-foundry-ok.services.ai.azure.com/api/projects/matchday",
     [string]$CognitiveAccountName = "matchday-foundry-ok",
     [string]$FrontierModel = "gpt-5.4-mini",
@@ -130,6 +130,7 @@ $envVars = @(
     "SMALL_MODEL_DEPLOYMENT=$SmallModel",
     "APPLICATIONINSIGHTS_CONNECTION_STRING=$appInsightsConn",
     "BROADCAST_DELAY_S=20",
+    "PUBLIC_LIVE_RUNS_PER_DAY=2",
     "MAX_CONCURRENT_RUNS=4",
     "RUN_IDLE_TTL_S=600",
     "PORT=8010"
@@ -191,27 +192,53 @@ $principalId = az containerapp identity show -g $ResourceGroup -n $AppName --que
 
 if ($principalId) {
     Write-Host "Container App Principal ID: $principalId"
-    $cogAccountId = az cognitiveservices account show -g $ResourceGroup -n $CognitiveAccountName --query id -o tsv 2>$null
+    $cogAccountId = az cognitiveservices account show -g $ResourceGroup -n $CognitiveAccountName --query id -o tsv
+    if (-not $cogAccountId) {
+        throw "Cognitive account $CognitiveAccountName not found in resource group $ResourceGroup."
+    }
 
-    if ($cogAccountId) {
-        Write-Host "Assigning 'Cognitive Services OpenAI User' to managed identity..."
-        az role assignment create `
-            --assignee $principalId `
-            --role "Cognitive Services OpenAI User" `
-            --scope $cogAccountId `
-            --assignee-principal-type ServicePrincipal 2>$null | Out-Null
-
-        Write-Host "Assigning 'Azure AI Developer' to managed identity..."
-        az role assignment create `
-            --assignee $principalId `
-            --role "Azure AI Developer" `
-            --scope $cogAccountId `
-            --assignee-principal-type ServicePrincipal 2>$null | Out-Null
+    Write-Host "Assigning 'Foundry User' role to managed identity..."
+    az role assignment create `
+        --assignee-object-id $principalId `
+        --role "Foundry User" `
+        --scope $cogAccountId `
+        --assignee-principal-type ServicePrincipal
+    if ($LASTEXITCODE -ne 0) {
+        throw "Role assignment 'Foundry User' failed for principal $principalId."
     }
 }
 
 # 7. Verification & Output
 $fqdn = az containerapp show -g $ResourceGroup -n $AppName --query properties.configuration.ingress.fqdn -o tsv
+if (-not $fqdn) {
+    throw "Container App $AppName has no ingress FQDN."
+}
+
+Write-Host "Waiting for container app health check at https://$fqdn/api/health (timeout 5 min)..." -ForegroundColor Cyan
+$healthUrl = "https://$fqdn/api/health"
+$timeout = (Get-Date).AddMinutes(5)
+$healthy = $false
+
+while ((Get-Date) -lt $timeout) {
+    try {
+        $resp = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 10 -ErrorAction Stop
+        if ($resp.status -eq "ok") {
+            $healthy = $true
+            Write-Host "Health check passed: $($resp | ConvertTo-Json -Compress)" -ForegroundColor Green
+            break
+        }
+    } catch {
+        Write-Host "Waiting for service to become healthy ($($_.Exception.Message))..." -ForegroundColor Gray
+    }
+    Start-Sleep -Seconds 10
+}
+
+if (-not $healthy) {
+    Write-Host "Health check failed after 5 minutes. Fetching recent container logs:" -ForegroundColor Red
+    az containerapp logs show -n $AppName -g $ResourceGroup --tail 50
+    throw "Deployment verification failed: $healthUrl did not return 200 OK within 5 minutes."
+}
+
 Write-Host ""
 Write-Host "=== Deployment Successful ===" -ForegroundColor Green
 Write-Host "App URL:    https://$fqdn" -ForegroundColor Yellow

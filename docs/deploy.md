@@ -36,10 +36,7 @@ The script is idempotent:
 - Creates Log Analytics workspace (`law-matchday`) and Application Insights (`appi-matchday`) if missing.
 - Creates Container Apps environment (`cae-matchday`) linked to Log Analytics.
 - Creates or updates the Container App (`ca-matchday`) with 0.5 vCPU, 1.0 GiB memory, min/max replicas 1, port 8010 external ingress.
-- Enables system-assigned managed identity on the container app and assigns:
-  - `Cognitive Services OpenAI User`
-  - `Azure AI Developer`
-  on the `matchday-foundry-ok` cognitive services account.
+- Enables system-assigned managed identity on the container app and assigns `Foundry User` on the `matchday-foundry-ok` account (enough for the Responses API and Voice Live; no other role is needed). A failed assignment stops the script.
 
 ## Health Check and Verification
 
@@ -135,13 +132,27 @@ Matchday Companion is configured for deployment to Azure Container Apps in `east
 
 ### Managed Identity & Role Assignments
 - **Identity Type**: System-Assigned Managed Identity on `ca-matchday`
-- **Assigned Roles on `matchday-foundry-ok`**:
-  - `Cognitive Services OpenAI User`
-  - `Azure AI Developer`
-- **Authentication**: Zero credentials stored in container configuration. `DefaultAzureCredential` obtains Entra tokens automatically in container runtime.
+- **Principal ID**: `2fd20383-7702-4747-be26-74ccc92cbf9d`
+- **Assigned Role on `matchday-foundry-ok`**: `Foundry User` (Role ID: `53ca6127-db72-4b80-b1b0-d745d6d5456d`)
+- **Authentication**: Zero credentials stored in container configuration. `DefaultAzureCredential` obtains Entra tokens automatically via MSI endpoint `http://localhost:12356/msi/token` in container runtime.
 
 ### Image and CI/CD
 - **Container Registry**: GitHub Container Registry (`ghcr.io/ogu83/matchday-companion:latest`)
+- **Image Digest**: `sha256:e923194d1c3b8151fc7d18804942c26da87ecae21b66c15bb443d0fc4036c93e`
+- **Visibility**: Public (anonymous pulls enabled)
 - **Automated Workflow**: `.github/workflows/image.yml` builds and pushes multi-stage container images on merge to `main`.
 - **Deployment Execution**: Run `pwsh infra/deploy.ps1` to provision or roll forward the live Container App.
+
+### Verification Results (2026-10-16)
+
+| Check | Target | Result | Evidence / Details |
+|---|---|---|---|
+| 1. Health Probe | `GET /api/health` | **PASSED** | HTTP 200: `{"status":"ok","agent_mode":"foundry","voice":true,"running":false,"active_runs":0}` |
+| 2. Live Match Start | `POST /api/match/start` | **PASSED** | HTTP 200 in 0.47s: `match_id: kby-iva-30`, `mode: live`, `agent_mode: foundry`. Live supersteps 1 to 3 completed. |
+| 3. Voice Live Stream | `WSS /api/voice` | **PASSED** | Connected with MSI credentials. Received `speaking` frame, 18 PCM chunks (386,400 bytes), and `spoken` frame with exact verbatim audit transcript match (`check: true`). |
+| 4. Push-to-Talk / Q&A | `WSS /api/voice` (ask frame) | **PASSED** | Sent `{"type":"ask","transcript":"How is my player doing?"}`. FastMCP called tools `['player_stats', 'score', 'recent_moments', 'team_stats']`. Answer received, spoken, and audited verbatim. |
+| 5. Multi-Visitor Isolation | `POST /api/match/start` | **PASSED** | Visitor A received `kby-iva-7`, Visitor B received `iva-kby-42`. States isolated via `mc_session` cookies. |
+| 6. Rate Limit & Fallback | `POST /api/match/start` (3rd run) | **PASSED** | Fallback triggered after 2 runs: `agent_mode: template`, `fallback_reason: "live-run limit reached (2 per visitor per day); continuing with offline agents"`. |
+| 7. Telemetry & Traces | App Insights | **NOT DONE** | Review 2026-10-16: `appi-matchday` holds 0 requests, dependencies or traces in the last 24 h. Only container console logs exist. The app never calls `configure_azure_monitor()` / `enable_instrumentation()`; this moves to T10 (tracing in the app). |
+| 8. Docker Compose Offline | `docker compose up --build -d` | **PASSED** | Clean clone build, offline health check 200, started match `kby-iva-7`, received `event: cue` SSE stream, clean teardown. |
 
