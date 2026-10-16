@@ -93,7 +93,7 @@ class Producer:
             source = f"{draft.headline} {draft.metric_value or ''}"
             metric = self._text(draft.metric_value, moment.moment_id, "broadcast", "en") if draft.metric_value is not None else None
             headline = self._text(draft.headline, moment.moment_id, "broadcast", "en")[:60]
-            check = check_rendering(f"{headline} {metric or ''}", cited, source, moment_id=moment.moment_id, profile_key="broadcast", coverage="all")
+            check = check_rendering(f"{headline} {metric or ''}", cited, source, moment_id=moment.moment_id, profile_key="broadcast", coverage="all", minute=moment.minute)
             checks.append(check)
             if check.ok:
                 priority = draft.priority if draft.priority in ("low", "normal", "high") else "normal"
@@ -111,7 +111,7 @@ class Producer:
         for _ in range(self.max_regenerations + 1):
             text = await self.renderer.narrative(insight, moment, labels, profile, feedback)
             text = self._text(text, moment.moment_id, profile.key(), profile.language)
-            check = check_rendering(text, cited, insight.claim, moment_id=moment.moment_id, profile_key=profile.key(), lang=profile.language, coverage=coverage)
+            check = check_rendering(text, cited, insight.claim, moment_id=moment.moment_id, profile_key=profile.key(), lang=profile.language, coverage=coverage, minute=moment.minute)
             checks.append(check)
             if check.ok:
                 return FanNarrative(moment_id=moment.moment_id, profile_key=profile.key(), text=text), checks

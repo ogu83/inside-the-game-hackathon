@@ -141,3 +141,42 @@ def test_family_matching_rules() -> None:
     assert uncited_family.mismatches == ["3 not in cited evidence (pass_streak_passes = 14, pass_streak_duration_s = 52)"]
     assert check_numbers("0.9 minutes of passing", cited, gate="insight", moment_id="m").ok, "seconds cited, minutes spoken"
     assert check_numbers("14 touches", {"pass_streak_passes": 14.0}, gate="insight", moment_id="m").mismatches == ["14 not in cited evidence (pass_streak_passes = 14)"]
+
+
+def test_minute_context_passes_when_equal_to_moment_minute_en() -> None:
+    # All prompt examples pass without being in evidence_refs
+    assert check_numbers("At minute 24, Kestrel Bay won the ball.", {}, gate="insight", moment_id="m", minute=24).ok
+    assert check_numbers("Ironvale's press at 37 forced a turnover.", {}, gate="insight", moment_id="m", minute=37).ok
+    assert check_numbers("A goal arrived in the 24th minute.", {}, gate="insight", moment_id="m", minute=24).ok
+    assert check_numbers("At minute 21, the sequence began.", {}, gate="insight", moment_id="m", minute=21).ok
+
+
+def test_minute_context_passes_when_equal_to_moment_minute_tr() -> None:
+    assert check_numbers("24. dakikada Kestrel Bay tehlike yarattı.", {}, gate="insight", moment_id="m", lang="tr", minute=24).ok
+    assert check_numbers("dakika 24'te gelen baskı sonuç verdi.", {}, gate="insight", moment_id="m", lang="tr", minute=24).ok
+    assert check_numbers("24'üncü dakikada top kazanıldı.", {}, gate="insight", moment_id="m", lang="tr", minute=24).ok
+
+
+def test_minute_must_equal_moment_minute_to_pass_without_citation() -> None:
+    # Wrong minute fails when uncited
+    check = check_numbers("At minute 30, Kestrel Bay struck.", {}, gate="insight", moment_id="m", minute=24)
+    assert not check.ok
+    assert any("30 not in cited evidence" in m for m in check.mismatches)
+
+    tr_check = check_numbers("30. dakikada gelen baskı", {}, gate="insight", moment_id="m", lang="tr", minute=24)
+    assert not tr_check.ok
+
+
+def test_non_minute_use_of_same_number_requires_cited_key() -> None:
+    # A number equal to minute used for passes, metres, etc. still needs a cited key
+    check_passes = check_numbers("Kestrel Bay completed 24 passes.", {}, gate="insight", moment_id="m", minute=24)
+    assert not check_passes.ok
+
+    check_metres = check_numbers("A move carried the ball 24 metres forward.", {}, gate="insight", moment_id="m", minute=24)
+    assert not check_metres.ok
+
+    tr_passes = check_numbers("Kestrel Bay 24 pas yaptı.", {}, gate="insight", moment_id="m", lang="tr", minute=24)
+    assert not tr_passes.ok
+
+    # If cited, passes pass
+    assert check_numbers("Kestrel Bay completed 24 passes at minute 24.", {"pass_streak_passes": 24.0}, gate="insight", moment_id="m", minute=24).ok

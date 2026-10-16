@@ -197,3 +197,15 @@ def test_opponent_acting_still_fails_layer_1() -> None:
     assert check_actors("Kestrel Bay'in baskısı sonuç verdi.", IVA_TRAP, IVA_LABELS, "tr")[0].startswith("Kestrel Bay named as the actor")
     assert check_actors("Luca Brightwater baskıya öncülük etti.", IVA_TRAP, IVA_LABELS, "tr")[0].startswith("Luca Brightwater plays for Kestrel Bay")
 
+
+def test_insight_minute_passes_without_evidence_refs() -> None:
+    # Minute is in candidate moment (minute=11)
+    ins = insight("At minute 11, Kestrel Bay had 14 passes.", refs=["pass_streak_passes"])
+    verdict, check = check_insight(ins, MOMENT, 1)
+    assert verdict is None and check.ok
+
+    # Wrong minute fails
+    wrong = insight("At minute 20, Kestrel Bay had 14 passes.", refs=["pass_streak_passes"])
+    verdict_wrong, check_wrong = check_insight(wrong, MOMENT, 1)
+    assert verdict_wrong is not None and not check_wrong.ok
+

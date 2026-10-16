@@ -81,10 +81,33 @@ class FoundNumber:
     decimals: int
     unit: str | None  # "pct", "min", "s", "m" or None
     family: str | None = None  # the fact the number quotes, from the noun after it: "passes", "pressures", "seconds", ...
+    is_minute_context: bool = False
 
 
 def _fold(word: str) -> str:
     return word.translate(_TR_FOLD).casefold()
+
+
+_MINUTE_BEFORE_RE = re.compile(r"(?:\b(?:at|in|on)\s+)?\b(?:minutes?|mins?|dakika\w*|dk)\.?\s*$", re.IGNORECASE)
+_AT_BEFORE_RE = re.compile(r"\bat\s+$", re.IGNORECASE)
+_MINUTE_AFTER_RE = re.compile(r"^\s*(?:-\s*)?(?:minutes?|mins?|dakika\w*|dk\.?)\b", re.IGNORECASE)
+_ORDINAL_TAIL_RE = re.compile(r"^(?:st|nd|rd|th|\.|\'?[ıiuü]nc[ıiuü]|\'?(?:d[ae]|t[ae]))\b", re.IGNORECASE)
+
+
+def _check_minute_context(before: str, after: str, tail: str, unit: str | None, family: str | None) -> bool:
+    if family is not None and family != "minutes":
+        return False
+    if unit is not None and unit != "min":
+        return False
+    if _MINUTE_BEFORE_RE.search(before):
+        return True
+    if _AT_BEFORE_RE.search(before):
+        return True
+    if _ORDINAL_TAIL_RE.match(tail) and (_MINUTE_AFTER_RE.match(after) or tail.startswith("'")):
+        return True
+    if _MINUTE_AFTER_RE.match(after):
+        return True
+    return False
 
 
 def _parse_body(body: str, lang: Lang) -> tuple[float, int] | None:
@@ -120,6 +143,7 @@ def extract_numbers(text: str, lang: Lang = "en") -> list[FoundNumber]:
         unit: str | None = None
         family: str | None = None
         after = text[m.end():]
+        before = text[:m.start()]
         if m.group("pct_pre") or tail == "%":
             unit, family = "pct", "pct"
         else:
@@ -132,7 +156,13 @@ def extract_numbers(text: str, lang: Lang = "en") -> list[FoundNumber]:
                 family = _family_of(noun.group("noun"))
             elif unit:
                 family = {"min": "minutes", "s": "seconds", "m": "metres"}[unit]
-        found.append(FoundNumber(value=value, raw=m.group(0).strip(), decimals=decimals, unit=unit, family=family))
+        is_minute_context = _check_minute_context(before, after, tail, unit, family)
+        if is_minute_context:
+            if unit is None:
+                unit = "min"
+            if family is None:
+                family = "minutes"
+        found.append(FoundNumber(value=value, raw=m.group(0).strip(), decimals=decimals, unit=unit, family=family, is_minute_context=is_minute_context))
     return found
 
 
@@ -210,10 +240,15 @@ def check_numbers(
     moment_id: str,
     profile_key: str | None = None,
     lang: Lang = "en",
+    minute: int | float | None = None,
 ) -> NumberCheck:
     """The reusable gate: every digit number must match a cited value; number words are not allowed."""
+    if minute is None and "minute" in cited:
+        minute = cited["minute"]
     mismatches = []
     for n in extract_numbers(text, lang):
+        if minute is not None and n.is_minute_context and abs(n.value - minute) < 1e-9:
+            continue
         if matches(n, cited):
             continue
         if n.family and any(_key_in_family(k, n.family) for k in cited):
@@ -272,6 +307,7 @@ def check_rendering(
     lang: Lang = "en",
     source_lang: Lang = "en",
     coverage: Coverage = "any",
+    minute: int | float | None = None,
 ) -> NumberCheck:
     """Producer gate: the number check plus a coverage rule against the verified source text.
 
@@ -279,7 +315,7 @@ def check_rendering(
     "any": at least one must survive when the source has numbers (casual depth); "none": no rule.
     A dropped number is reported as "dropped number: 14".
     """
-    check = check_numbers(text, cited, gate="producer", moment_id=moment_id, profile_key=profile_key, lang=lang)
+    check = check_numbers(text, cited, gate="producer", moment_id=moment_id, profile_key=profile_key, lang=lang, minute=minute)
     if coverage == "none":
         return check
     source = {round(n.value, 6) for n in extract_numbers(source_text, source_lang)}
@@ -416,7 +452,7 @@ def check_insight(insight: Insight, moment: CandidateMoment, attempt: int, label
         reasons.append(f"insight is about {insight.moment_id}, expected {moment.moment_id}")
     cited, unknown = cited_evidence(insight, moment)
     reasons += [f"unknown evidence key: {k}" for k in unknown]
-    check = check_numbers(f"{insight.claim}\n{insight.why_it_matters}", cited, gate="insight", moment_id=moment.moment_id, lang=lang)
+    check = check_numbers(f"{insight.claim}\n{insight.why_it_matters}", cited, gate="insight", moment_id=moment.moment_id, lang=lang, minute=moment.minute)
     reasons += check.mismatches
     if labels:
         reasons += check_actors(f"{insight.claim} {insight.why_it_matters}", moment, labels, lang)
@@ -425,9 +461,9 @@ def check_insight(insight: Insight, moment: CandidateMoment, attempt: int, label
     return None, check
 
 
-def check_speech(approved_text: str, transcript: str, cited: dict[str, float], *, moment_id: str, profile_key: str | None, lang: Lang) -> NumberCheck:
+def check_speech(approved_text: str, transcript: str, cited: dict[str, float], *, moment_id: str, profile_key: str | None, lang: Lang, minute: int | float | None = None) -> NumberCheck:
     """Speech gate: the transcript must be the approved text (ignoring case, spacing and end punctuation) and pass the number check."""
-    check = check_numbers(transcript, cited, gate="speech", moment_id=moment_id, profile_key=profile_key, lang=lang)
+    check = check_numbers(transcript, cited, gate="speech", moment_id=moment_id, profile_key=profile_key, lang=lang, minute=minute)
     if _normalise(transcript) != _normalise(approved_text):
         check = check.model_copy(update={"ok": False, "mismatches": check.mismatches + ["transcript differs from approved text"]})
     return check
