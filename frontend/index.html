@@ -165,23 +165,44 @@
         <div v-if="!ticker.length" class="empty">Start a match to see the feed. Seed 30 is the demo seed.</div>
       </div>
     </section>
-    <section>
+    <section aria-label="Your co-commentator">
       <h2>Your co-commentator <span class="right" v-if="profileKey">{{ profileKey }}</span></h2>
       <div class="profile">
-        <label>club
-          <select v-model="profile.club_id"><option :value="null">no club</option><option v-for="c in league.clubs" :key="c.id" :value="c.id">{{ c.short }}</option></select>
+        <label class="profile-field">Club
+          <div class="styled-select-wrap">
+            <img v-if="profile.club_id" :src="'/static/assets/crest-' + profile.club_id + '-256.png'" alt="" class="select-prefix-crest">
+            <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="select-prefix-icon" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 000 20 14.5 14.5 0 000-20M2 12h20"></path></svg>
+            <select v-model="profile.club_id" aria-label="Club">
+              <option :value="null">No club</option>
+              <option v-for="c in league.clubs" :key="c.id" :value="c.id">{{ c.short }}</option>
+            </select>
+            <svg class="select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+          </div>
         </label>
-        <label>player
-          <select v-model="profile.player_id"><option :value="null">no player</option><option v-for="p in players" :key="p.id" :value="p.id">{{ p.number }} {{ p.name }}</option></select>
+        <label class="profile-field">Player
+          <div class="styled-select-wrap">
+            <span v-if="selectedPlayer" class="select-prefix-num" :style="{ color: profile.club_id === 'kby' ? 'var(--kby)' : 'var(--iva)' }">{{ selectedPlayer.number }}</span>
+            <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="select-prefix-icon" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            <select v-model="profile.player_id" :disabled="!players.length" aria-label="Player">
+              <option :value="null">{{ players.length ? 'No player' : 'Select club first' }}</option>
+              <option v-for="p in players" :key="p.id" :value="p.id">#{{ p.number }} {{ p.name }}</option>
+            </select>
+            <svg class="select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+          </div>
         </label>
-        <label>depth
-          <select v-model="profile.depth"><option value="casual">casual</option><option value="analyst">analyst</option></select>
-        </label>
-        <label>language
-          <select v-model="profile.language"><option value="en">English</option><option value="tr">Türkçe</option></select>
-        </label>
-        <button @click="follow" :disabled="!running">{{ profileKey ? (profilePending ? 'apply profile change' : 'profile applied') : 'follow the match for me' }}</button>
-        <div class="pending" v-if="profilePending">change pending: {{ pendingKey }} (applying...)</div>
+        <div role="group" aria-label="Depth" class="segmented-control">
+          <button type="button" :aria-pressed="profile.depth === 'casual'" :class="{ active: profile.depth === 'casual' }" @click="profile.depth = 'casual'" class="segment-btn">Casual</button>
+          <button type="button" :aria-pressed="profile.depth === 'analyst'" :class="{ active: profile.depth === 'analyst' }" @click="profile.depth = 'analyst'" class="segment-btn">Analyst</button>
+        </div>
+        <div role="group" aria-label="Language" class="segmented-control">
+          <button type="button" :aria-pressed="profile.language === 'en'" :class="{ active: profile.language === 'en' }" @click="profile.language = 'en'" class="segment-btn">English</button>
+          <button type="button" :aria-pressed="profile.language === 'tr'" :class="{ active: profile.language === 'tr' }" @click="profile.language = 'tr'" class="segment-btn">Türkçe</button>
+        </div>
+        <button type="button" class="follow-btn secondary" @click="follow" :disabled="!running">{{ profileKey ? (profilePending ? 'apply profile change' : 'profile applied') : 'follow the match for me' }}</button>
+        <div class="profile-pending-chip pending" v-if="profilePending">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>change pending: {{ pendingKey }} (applying...)</span>
+        </div>
       </div>
       <div class="ask">
         <div class="ptt-row" v-if="voice">
@@ -528,6 +549,7 @@ createApp({
     const metricKeys = ['cues_shown', 'moments_skipped', 'cues_rejected', 'cues_dropped_late', 'number_checks', 'number_checks_failed', 'narratives_dropped', 'producer_regenerated', 'speech_checks', 'speech_mismatches', 'lines_interrupted', 'questions_answered', 'qa_answer_p50_ms', 'qa_speech_p50_ms'];
     const playbackClock = computed(() => state.clock ? clockText(state.clock.playback_t) : '');
     const players = computed(() => { const c = state.league.clubs.find(c => c.id === state.profile.club_id); return c ? c.players : []; });
+    const selectedPlayer = computed(() => players.value.find(p => p.id === state.profile.player_id));
     const filtered = computed(() => state.timeline.filter(m => {
       if (state.filter === 'verified') return m.verdict && m.verdict.status === 'verified';
       if (state.filter === 'rewritten') return m.verdict && m.verdict.status === 'rewritten';
@@ -929,7 +951,7 @@ createApp({
       };
     };
     loadLeague();
-    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, setSpeed, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk, qaTiming, selectedMoment, filterCounts, momentTitle, verdictClass, verdictText, pad };
+    return { ...toRefs(state), filters, metricKeys, playbackClock, players, selectedPlayer, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, setSpeed, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk, qaTiming, selectedMoment, filterCounts, momentTitle, verdictClass, verdictText, pad };
   },
 }).mount('#app');
 </script>
