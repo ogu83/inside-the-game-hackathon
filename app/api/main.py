@@ -45,6 +45,7 @@ class StartRequest(BaseModel):
     precompute: bool | None = None
     home: str = "kby"
     away: str = "iva"
+    plant: int = Field(default=0, ge=0, le=3)
 
 
 class _AppView:
@@ -269,11 +270,17 @@ async def health() -> dict:
         "voice": app.state.speaker_factory is not None,
         "running": running,
         "active_runs": active,
+        "demo_plant": os.environ.get("DEMO_PLANT", "").lower() in ("1", "true", "yes"),
     }
 
 
 @app.post("/api/match/start")
 async def start_match(request: StartRequest, http: Request) -> dict:
+    if request.plant > 0 and os.environ.get("DEMO_PLANT", "").lower() not in ("1", "true", "yes"):
+        raise HTTPException(
+            status_code=403,
+            detail="Planted-claim demo disabled on this instance (DEMO_PLANT != 1)",
+        )
     session_id = get_session_id(http)
     mode, fallback_reason = agent_mode(), None
     workflow_factory, producer = app.state.workflow_factory, app.state.producer
@@ -285,6 +292,7 @@ async def start_match(request: StartRequest, http: Request) -> dict:
         lambda: MatchRun(
             seed=request.seed, speed=request.speed, delay_s=request.delay_s if request.delay_s is not None else default_delay(),
             minutes=request.minutes, precompute=request.precompute, home=request.home, away=request.away,
+            plant=request.plant,
             workflow_factory=workflow_factory, producer=producer, agent_mode=mode, fallback_reason=fallback_reason,
         ),
     )

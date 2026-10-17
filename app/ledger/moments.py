@@ -8,7 +8,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from app.ledger.metrics import in_window, possession_pct, pressure_count, progress_m, regains_after_pressure
+from app.ledger.metrics import in_window, possession_pct, pressure_count, progress_m, regains_after_pressure, shot_count
 from app.ledger.models import CandidateMoment
 from app.simulator.engine import metres
 from app.simulator.models import MatchEvent
@@ -60,6 +60,12 @@ class PassStreakDetector:
         team = self._team or end.team_id
         counts = Counter(p.player_id for p in self._passes if p.player_id)
         top_player_id, top_passes = counts.most_common(1)[0] if counts else (None, 0)
+        recent_10 = in_window(history, last.t, 600)
+        parts = first.match_id.split("-")
+        home, away = (parts[0], parts[1]) if len(parts) >= 2 else ("kby", "iva")
+        away_shots = float(shot_count(recent_10, away))
+        home_shots = float(shot_count(recent_10, home))
+        team_shots = away_shots if team == away else home_shots
         return CandidateMoment(
             moment_id=f"{first.match_id}-{last.seq}-pass_streak",
             window=(first.seq, last.seq),
@@ -74,6 +80,9 @@ class PassStreakDetector:
                 "top_player_passes": float(top_passes),
                 "pass_streak_progress_m": progress_m(first.x, last.end_x if last.end_x is not None else last.x),
                 "pass_streak_ended_in_shot": 1.0 if ended_in_shot else 0.0,
+                "away_shots_last_10min": away_shots,
+                "home_shots_last_10min": home_shots,
+                "team_shots_last_10min": team_shots,
                 **_possession_keys(history, team, last.t),
                 "minute": float(last.minute),
             },

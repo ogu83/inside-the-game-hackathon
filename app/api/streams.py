@@ -141,7 +141,7 @@ class Processed:
             "cue": self.cue.model_dump() if self.cue else None,
             "narratives": [n.model_dump() for n in self.narratives],
             "dropped_profiles": self.dropped_profiles,
-            "displayed": self.displayed, "fallback": self.fallback,
+            "displayed": self.displayed or ("rejected" if r.verdict and r.verdict.status == "rejected" else None), "fallback": self.fallback,
         }
 
 
@@ -154,6 +154,7 @@ class MatchRun:
     home: str = "kby"
     away: str = "iva"
     precompute: bool | None = None
+    plant: int = 0
     workflow_factory: WorkflowFactory = template_workflow
     producer: Producer = field(default_factory=lambda: Producer(TemplateRenderer()))
     profiles: list[FanProfile] = field(default_factory=lambda: list(DEFAULT_PROFILES))
@@ -182,8 +183,28 @@ class MatchRun:
     def mode(self) -> str:
         return "precompute" if (self.precompute if self.precompute is not None else self.speed > 1) else "live"
 
+    def _wrap_planting(self, factory: WorkflowFactory) -> WorkflowFactory:
+        if self.plant <= 0:
+            return factory
+        from app.agents.planted_errors import PlantPlan, PlantingCommentator
+        from app.ledger.state import detect_all
+        all_moments = detect_all(self.events)
+        plan = PlantPlan.build_demo(all_moments, n=self.plant, seed=self.seed)
+
+        def planting_factory():
+            wf = factory()
+            if "commentator" in wf.executors:
+                wf.executors["commentator"].writer = PlantingCommentator(
+                    wf.executors["commentator"].writer, plan, seed=self.seed, recover=False
+                )
+            return wf
+
+        return planting_factory
+
     async def start(self) -> None:
         self.events = simulate(self.seed, self.home, self.away, self.minutes)
+        if self.plant > 0:
+            self.workflow_factory = self._wrap_planting(self.workflow_factory)
         loop = asyncio.get_running_loop()
         if self.mode == "precompute":
             ledger = Ledger()
@@ -293,7 +314,7 @@ class MatchRun:
             return
         log.warning("falling back to offline agents: %s", reason)
         self.agent_mode, self.fallback_reason = "template", reason
-        self.workflow_factory = template_workflow
+        self.workflow_factory = self._wrap_planting(template_workflow) if self.plant > 0 else template_workflow
         self.producer = Producer(TemplateRenderer(), tamper=self.producer.tamper)
         data = {"reason": reason}
         self.broadcast.publish("cues", "fallback", data)

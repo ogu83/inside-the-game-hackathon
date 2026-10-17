@@ -298,3 +298,35 @@ async def test_timelines_returns_only_moments_on_air_at_playback_time() -> None:
     assert len(finished_timelines) == len(run.processed)
     await run.stop()
 
+
+async def test_start_match_with_plant_forbidden_without_env_flag(client: httpx.AsyncClient, monkeypatch) -> None:
+    monkeypatch.delenv("DEMO_PLANT", raising=False)
+    health = (await client.get("/api/health")).json()
+    assert health["demo_plant"] is False
+    res = await client.post("/api/match/start", json={"seed": 30, "speed": FAST, "plant": 1})
+    assert res.status_code == 403
+    assert "Planted-claim demo disabled" in res.json()["detail"]
+
+
+async def test_planted_demo_moment_rejected_and_never_aired(client: httpx.AsyncClient, monkeypatch) -> None:
+    monkeypatch.setenv("DEMO_PLANT", "1")
+    health = (await client.get("/api/health")).json()
+    assert health["demo_plant"] is True
+
+    res = await client.post("/api/match/start", json={"seed": 30, "speed": FAST, "delay_s": 5, "minutes": 20, "plant": 1})
+    assert res.status_code == 200
+
+    cues = await read_sse(client, "/api/stream/cues")
+    aired_moment_ids = {data["cue"]["moment_id"] for event, data in cues if event == "cue" and "cue" in data}
+    assert "kby-iva-30-31-pass_streak" not in aired_moment_ids
+
+    moments_resp = await client.get("/api/match/moments")
+    moments_data = moments_resp.json()
+    planted_timeline = next((m for m in moments_data["moments"] if m["moment_id"] == "kby-iva-30-31-pass_streak"), None)
+    assert planted_timeline is not None
+    assert planted_timeline["verdict"]["status"] == "rejected"
+    assert planted_timeline["cue"] is None
+    assert planted_timeline["displayed"] == "rejected"
+    assert any("6 shots does not match the cited shots value (away_shots_last_10min = 0)" in r for r in planted_timeline["verdict"]["reasons"])
+    assert any("Ironvale have had 6 shots." in a["claim"] for a in planted_timeline["attempts"])
+
