@@ -43,7 +43,8 @@ def test_page_has_the_t12_panels_and_keeps_the_voice_controls() -> None:
     assert "Open timeline" in HTML, "timeline footer has Open timeline button"
     assert "rejected-step" in HTML, "rejected steps have special highlight"
     css = (ROOT / "frontend" / "style.css").read_text(encoding="utf-8")
-    assert 'href="/static/style.css"' in HTML and "@media (max-width: 900px)" in css
+    assert 'href="/static/style.css?v=' in HTML, "versioned so a redeploy is not hidden by a cached stylesheet"
+    assert "@media (max-width: 900px)" in css
     phone = css.split("@media (max-width: 480px)")[1]
     for rule in (".profile { grid-template-columns: 1fr; }", ".row { grid-template-columns: 1fr;", ".player-label { display: none; }", "header h1 { font-size: 16px; width: 100%;"):
         assert rule in phone, rule
@@ -109,3 +110,12 @@ def test_page_script_parses_and_pure_helpers_behave(tmp_path: Path) -> None:
     assert away == {"x": pytest.approx(94.5), "y": pytest.approx(54.4), "home": False}, "the away team is mirrored into the home frame"
     assert key1 == "-|-|casual|en" and key2 == "iva|iva-06|analyst|tr"
     assert c0 == "00:00" and c125 == "02:05"
+
+
+def test_page_landmarks_are_closed_and_siblings() -> None:
+    """P3 review: a missing </header> nested main and the drawer inside the header's flex row and broke the layout."""
+    for tag in ("header", "main", "footer", "nav", "section", "article", "details"):
+        assert HTML.count(f"<{tag}") == HTML.count(f"</{tag}>"), tag
+    assert HTML.index("</header>") < HTML.index("<main"), "main must follow the header, not sit inside it"
+    assert '<div id="app" :' not in HTML, "#app is the Vue mount element; bindings on it are never compiled"
+    assert "document.getElementById('app').className = 'phone-' + tab" in HTML, "phone tabs swap content"

@@ -5,7 +5,7 @@
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
 ## Current task (2026-10-17)
-P3 UI implementation completed on branch `p3-ui`. Restyled single page (`frontend/index.html`, `frontend/style.css`) to floodlight broadcast design from P1 (15 items in docs/design/p3-notes.md committed cleanly). All 8 browser checks verified in real Chromium at 1440x900 and 390px, with 4 screenshots saved to `docs/design/screenshots/`. 246 tests pass. Next: P4 code review (docs/prompts/P4-code-review.md), then T10.
+P3 UI implementation completed on branch `p3-ui`. Restyled single page (`frontend/index.html`, `frontend/style.css`) to floodlight broadcast design from P1 (15 items in docs/design/p3-notes.md committed cleanly). Review 2026-10-17: the agent's browser checks were scripted with injected state; the real page had a missing </header> and broken phone tabs, fixed in review and re-verified with a real match at 1440x900 and 390 px (see tasks/todo.md P3). Voice and push-to-talk with a microphone still to check with Oguz. 247 tests pass. Next: P4 code review (docs/prompts/P4-code-review.md), then T10.
 
 ## Workflow from 2026-10-16
 - The Fable cloud session's usage credits are used up; it is no longer used for development (maybe a final cross-check review at the end).

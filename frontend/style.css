@@ -1300,6 +1300,8 @@ section h2 { font-size: 16px; color: var(--muted); margin: 0 0 10px; text-transf
     flex: 0 0 auto;
   }
 
+  .ticker { grid-template-columns: 1fr; }
+
   /* tab swapping on phone */
   .phone-live .ticker,
   .phone-live .narrative-feed,
@@ -1332,9 +1334,20 @@ section h2 { font-size: 16px; color: var(--muted); margin: 0 0 10px; text-transf
     max-height: none !important;
     border-radius: 12px !important;
   }
-  .phone-agents .drawer-grid {
+  .phone-agents .drawer-body {
     grid-template-columns: 1fr;
+    max-height: none;
   }
+  .phone-agents .moments-list {
+    max-height: 240px;
+    overflow-y: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .phone-agents .moment-detail { padding: 12px; }
+  .phone-agents .drawer-header { flex-wrap: wrap; padding: 10px 12px; }
+  .phone-agents .drawer-sub { display: none; }
+  .phone-agents .filter-chips { margin-left: 0; flex-wrap: wrap; width: 100%; }
 }
 
 /* Phone width (about 400 px): one column, wrapped header, compact drawer rows, readable banner. */
