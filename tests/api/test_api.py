@@ -66,7 +66,25 @@ async def client():
 async def test_health(client: httpx.AsyncClient) -> None:
     response = await client.get("/api/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["running"] is False
+    assert data["active_runs"] == 0
+    assert data["running"] == (data["active_runs"] > 0)
+
+    # Start a match, health reports running: True, active_runs == 1
+    started = await client.post("/api/match/start", json={"seed": 7, "speed": 100, "delay_s": 5, "minutes": 10})
+    assert started.status_code == 200
+    health_running = (await client.get("/api/health")).json()
+    assert health_running["running"] is True
+    assert health_running["active_runs"] == 1
+
+    # Stop match, health reverts to running: False, active_runs == 0
+    stopped = await client.post("/api/match/stop")
+    assert stopped.status_code == 200
+    health_stopped = (await client.get("/api/health")).json()
+    assert health_stopped["running"] is False
+    assert health_stopped["active_runs"] == 0
 
 
 async def test_streams_need_a_running_match(client: httpx.AsyncClient) -> None:

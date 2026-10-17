@@ -266,7 +266,7 @@ def get_run(request: Request) -> MatchRun | None:
 async def health() -> dict:
     registry = getattr(app.state, "registry", None)
     active = registry.active_count() if registry else 0
-    running = active > 0 or (app.state.run is not None and not app.state.run.finished.is_set())
+    running = active > 0
     return {
         "status": "ok",
         "agent_mode": os.environ.get("AGENT_MODE", "template"),
