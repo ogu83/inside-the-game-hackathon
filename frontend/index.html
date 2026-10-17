@@ -96,7 +96,7 @@
         {{ voice ? 'Voice on' : 'Voice off' }}
       </button>
     </div>
-  <div class="voicebar" v-if="voice">
+  <div class="voicebar" v-if="voice" aria-live="polite">
     <div class="waveform" :class="{ live: !!speaking }" aria-hidden="true">
       <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
     </div>
@@ -295,7 +295,7 @@
         </div>
       </div>
       <!-- Current Answer Card -->
-      <article class="qa current-qa" v-if="qa.length">
+      <article class="qa current-qa" v-if="qa.length" aria-live="polite">
         <div class="meta">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0"></path></svg>
           You asked at <b class="qa-clock">{{ qa[0].askedTime || playbackClock }}</b>, {{ qa[0].langName || (profile.language === 'tr' ? 'Türkçe' : 'English') }}: <span class="qa-query">{{ qa[0].transcript }}</span>
@@ -367,28 +367,28 @@
   </main>
   <!-- Agent Timeline Drawer -->
   <div class="drawer-container">
-    <section class="drawer-panel" aria-label="Agent timeline" v-if="drawerOpen">
+    <section id="timeline-drawer" class="drawer-panel" aria-label="Agent timeline" v-if="drawerOpen">
       <div class="drawer-handle"></div>
       <div class="drawer-header">
         <h2>Agent timeline</h2>
         <span class="drawer-sub">every moment, every agent, every check</span>
-        <div class="filter-chips">
-          <button type="button" class="chip" :class="{ on: filter === 'all' }" @click="filter = 'all'">
+        <div class="filter-chips" role="group" aria-label="Moment filters">
+          <button type="button" class="chip" :class="{ on: filter === 'all' }" :aria-pressed="filter === 'all'" @click="filter = 'all'">
             All {{ filterCounts.all }}
           </button>
-          <button type="button" class="chip" :class="{ on: filter === 'verified' }" @click="filter = 'verified'">
+          <button type="button" class="chip" :class="{ on: filter === 'verified' }" :aria-pressed="filter === 'verified'" @click="filter = 'verified'">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#3DD68C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
             Verified {{ filterCounts.verified }}
           </button>
-          <button type="button" class="chip" :class="{ on: filter === 'rewritten' }" @click="filter = 'rewritten'">
+          <button type="button" class="chip" :class="{ on: filter === 'rewritten' }" :aria-pressed="filter === 'rewritten'" @click="filter = 'rewritten'">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg>
             Rewritten {{ filterCounts.rewritten }}
           </button>
-          <button type="button" class="chip" :class="{ on: filter === 'rejected' }" @click="filter = 'rejected'">
+          <button type="button" class="chip" :class="{ on: filter === 'rejected' }" :aria-pressed="filter === 'rejected'" @click="filter = 'rejected'">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FF5D6C" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
             Rejected {{ filterCounts.rejected }}
           </button>
-          <button type="button" class="chip" :class="{ on: filter === 'skipped' }" @click="filter = 'skipped'">
+          <button type="button" class="chip" :class="{ on: filter === 'skipped' }" :aria-pressed="filter === 'skipped'" @click="filter = 'skipped'">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AA7BB" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"></path></svg>
             Skipped {{ filterCounts.skipped }}
           </button>
@@ -510,7 +510,7 @@
       <span><b class="stat-num stat-rejected">{{ metrics ? metrics.cues_rejected : 0 }}</b> rejected</span>
       <span><b class="stat-num">{{ metrics ? metrics.number_checks : 0 }}</b> number checks, <b :class="metrics && metrics.number_checks_failed ? 'stat-rejected' : 'stat-ok'">{{ metrics ? metrics.number_checks_failed : 0 }}</b> failed</span>
       <span>answer p50 <b class="stat-num">{{ metrics && metrics.qa_answer_p50_ms ? (metrics.qa_answer_p50_ms / 1000).toFixed(1) + ' s' : '-' }}</b></span>
-      <button type="button" @click="drawerOpen = !drawerOpen" class="footer-btn">
+      <button type="button" @click="drawerOpen = !drawerOpen" class="footer-btn" :aria-expanded="drawerOpen" aria-controls="timeline-drawer">
         {{ drawerOpen ? 'Close timeline' : 'Open timeline' }}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path :d="drawerOpen ? 'M6 9l6 6 6-6' : 'M6 15l6-6 6 6'"></path>
@@ -1016,6 +1016,30 @@ createApp({
         audioPct: (audioMs / total * 100).toFixed(1) + '%',
       };
     };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && !e.repeat) {
+          const tag = (document.activeElement && document.activeElement.tagName) || '';
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+          if (document.activeElement && document.activeElement.classList.contains('ptt-btn')) return;
+          if (state.running && state.voice) {
+            e.preventDefault();
+            pressTalk(e);
+          }
+        }
+      });
+      window.addEventListener('keyup', (e) => {
+        if (e.code === 'Space') {
+          const tag = (document.activeElement && document.activeElement.tagName) || '';
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+          if (document.activeElement && document.activeElement.classList.contains('ptt-btn')) return;
+          if (state.running && state.voice) {
+            e.preventDefault();
+            releaseTalk();
+          }
+        }
+      });
+    }
     loadLeague();
     return { ...toRefs(state), filters, metricKeys, playbackClock, players, selectedPlayer, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, setSpeed, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk, qaTiming, selectedMoment, filterCounts, momentTitle, verdictClass, verdictText, pad, phoneTab, micBlocked, voiceUnavailable, liveLimitReached };
   },
