@@ -599,6 +599,7 @@ createApp({
       phoneTab: 'live',
       micBlocked: false, voiceUnavailable: false, liveLimitReached: false,
     });
+    if (typeof window !== 'undefined') window.__app = state;
     const filters = ['all', 'said', 'skipped', 'rejected', 'late', 'failed checks'];
     const metricKeys = ['cues_shown', 'moments_skipped', 'cues_rejected', 'cues_dropped_late', 'number_checks', 'number_checks_failed', 'narratives_dropped', 'producer_regenerated', 'speech_checks', 'speech_mismatches', 'lines_interrupted', 'questions_answered', 'qa_answer_p50_ms', 'qa_speech_p50_ms'];
     const playbackClock = computed(() => state.clock ? clockText(state.clock.playback_t) : '');
