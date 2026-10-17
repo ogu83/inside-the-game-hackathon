@@ -4,8 +4,8 @@
      Update it after every significant step so the state survives compaction.
      The compaction_save.ps1 hook timestamps each compaction automatically. -->
 
-## Current task (2026-10-16)
-T13 and T13b deploy & verify completed on `t13b-deploy`. Live Azure Container App operational at `https://ca-matchday.orangetree-bcef6d10.eastus2.azurecontainerapps.io` with Foundry User role and live Voice Live; 7 of 8 checks pass (traces in App Insights not done: the app never enables tracing, moved to T10); 246 tests pass. P1 and P2 done (docs/design/). Next: P3 (docs/prompts/P3-ui.md), then P4 (docs/prompts/P4-code-review.md), then T10.
+## Current task (2026-10-17)
+P3 UI implementation completed on branch `p3-ui`. Restyled single page (`frontend/index.html`, `frontend/style.css`) to floodlight broadcast design from P1 (15 items in docs/design/p3-notes.md committed cleanly). All 8 browser checks verified in real Chromium at 1440x900 and 390px, with 4 screenshots saved to `docs/design/screenshots/`. 246 tests pass. Next: P4 code review (docs/prompts/P4-code-review.md), then T10.
 
 ## Workflow from 2026-10-16
 - The Fable cloud session's usage credits are used up; it is no longer used for development (maybe a final cross-check review at the end).
@@ -60,9 +60,10 @@ T13 and T13b deploy & verify completed on `t13b-deploy`. Live Azure Container Ap
 - [x] 2026-10-16 (local session): T10b fixes and live Foundry evaluation (t10b-fixes branch). Fixed actor check false positives (possessive/locative opponent mentions), allowed minute citations without explicit key, honest headline derivation in report.py, live export and 4 Foundry evaluation runs completed; docs/eval-results.md populated with real numbers and honest headline. 241 tests pass.
 - [x] 2026-10-16 (local session): T13 deploy (t13-deploy branch). Per-visitor match sessions (MatchRegistry, mc_session cookie, 503 cap at 4, 600s idle reaper, MCP ContextVar routing, ADR 0001); Dockerfile (python:3.11-slim, non-root appuser, port 8010, healthcheck) and .dockerignore; docker-compose.yml offline mode (AGENT_MODE=template, VOICE_MODE=off); .github/workflows/image.yml for GHCR image build & push on main; infra/deploy.ps1 idempotent Azure Container Apps deployment in eastus2 (cae-matchday, ca-matchday, App Insights, managed identity with Cognitive Services OpenAI User and Azure AI Developer roles); docs/deploy.md guide and live deployment records. 246 tests pass.
 - [x] 2026-10-16 (local session): T13b deploy & live verification (t13b-deploy branch). Public GHCR image verified anonymously. Azure Container App ca-matchday deployed to cae-matchday in eastus2 with Foundry User role on matchday-foundry-ok. Verified 7 of 8 checks (review: traces not in App Insights, moved to T10): health probe 200, live match start in 0.47s (Foundry agent supersteps 1-3 completed), Voice Live streamed 18 PCM chunks over WSS with verbatim audit match, Q&A over WSS called 4 FastMCP tools and spoke answer, visitor isolation verified, rate limit fallback to template mode verified at 2 runs, console logs in Log Analytics ContainerAppConsoleLogs_CL (not traces), docker compose offline mode verified on clean clone. 246 tests pass.
+- [x] 2026-10-17 (local session): P3 UI implementation (p3-ui branch). Restyled single page to floodlight broadcast design (pitch mowing stripes pattern, radial vignette, glowing ball with trail and player pill, lower-third cue banner with team crest block, verdict chip and 2-row layout, scoreboard pill with league mark and speed toggle, voice bar with waveform glyph and uppercase status label, 6-state push-to-talk button and voice-off input, answer card with 19px text and timing bar, agent timeline drawer with rejected step styling, styled selects and segmented depth/language fan controls, clock-font ticker, 390px responsive layout with bottom tab navigation, chip-plus-icon status/error notices, favicon and og:image metadata, a11y focus rings and keyboard management). All 8 browser checks verified; 4 PNG screenshots saved in docs/design/screenshots/. 246 tests pass.
 
 ## Next step
-P3 UI implementation (docs/prompts/P3-ui.md), then P4 code review (docs/prompts/P4-code-review.md), then T10 (tracing in the app, recap, hosted), T14 to T16.
+P4 code review (docs/prompts/P4-code-review.md), then T10 (tracing in the app, recap, hosted), T14 to T16.
 
 ## Working in a cloud session (claude.ai/code)
 Cloud sessions are useful for reviews and Azure-free implementation. They have no Azure login, no `.env`, no `azd`, and run Linux.
