@@ -73,12 +73,25 @@
         {{ voice ? 'Voice on' : 'Voice off' }}
       </button>
     </div>
-  </header>
   <div class="voicebar" v-if="voice">
-    <span v-if="voiceStatus">{{ voiceStatus }}</span>
-    <span v-else-if="speaking">speaking ({{ profile.language }}): {{ speaking }}</span>
-    <span v-else>voice ready{{ micReady ? ', microphone warm' : '' }}, waiting for the next verified line</span>
-    <span class="audit">speech audit {{ speechChecks - speechMismatches }}/{{ speechChecks }} exact<span v-if="interruptedLines">, {{ interruptedLines }} interrupted</span></span>
+    <div class="waveform" :class="{ live: !!speaking }" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <span class="voice-state" v-if="speaking">Speaking, {{ profile.language }}</span>
+    <span class="voice-state" v-else-if="voiceStatus">{{ voiceStatus }}</span>
+    <span class="voice-state" v-else>Voice ready</span>
+
+    <span class="voice-text" v-if="speaking">{{ speaking }}</span>
+    <span class="voice-text muted" v-else>waiting for the next verified line</span>
+
+    <div class="voice-right">
+      <span class="paused-chip" v-if="talking">Paused for you</span>
+      <span class="voice-audit" v-if="speechChecks > 0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3DD68C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg>
+        Speech audit {{ speechChecks - speechMismatches }} of {{ speechChecks }} exact
+      </span>
+      <span class="voice-interrupted" v-if="interruptedLines">{{ interruptedLines }} interrupted</span>
+    </div>
   </div>
   <main>
     <section>
