@@ -230,8 +230,21 @@ class MatchRun:
             out["qa_speech_p50_ms"] = round(statistics.median(speech))
         return out
 
-    def timelines(self) -> list[dict[str, Any]]:
-        return [p.timeline() for p in sorted(self.processed.values(), key=lambda p: p.moment.window[1])]
+    def timelines(self, playback_t: float | None = None) -> list[dict[str, Any]]:
+        if self.finished.is_set():
+            return [p.timeline() for p in sorted(self.processed.values(), key=lambda p: p.moment.window[1])]
+        if self.clock is None:
+            return []
+        if playback_t is None:
+            playback_t = self.clock.playback_t(time.monotonic())
+        shown = []
+        for p in self.processed.values():
+            if not self.events or p.moment.window[1] > len(self.events):
+                continue
+            closing_t = self.events[p.moment.window[1] - 1].t
+            if closing_t <= playback_t:
+                shown.append(p)
+        return [p.timeline() for p in sorted(shown, key=lambda p: p.moment.window[1])]
 
     # LedgerView for the MCP tools and the Q&A agent: only what the broadcast has shown.
     def displayed_events(self) -> list[MatchEvent]:
@@ -365,7 +378,8 @@ class MatchRun:
                 self.metrics["moments_skipped"] += 1
                 done = Processed(moment, result, None, [], asyncio.get_running_loop().time(), fallback=fallback)
                 self.processed[moment.moment_id] = done
-                self.broadcast.publish("verdicts", "skipped", done.timeline())
+                if self.mode != "precompute":
+                    self.broadcast.publish("verdicts", "skipped", done.timeline())
                 return
             span.set_attribute("factcheck.layer", verdict.layer)
             span.set_attribute("factcheck.attempts", verdict.attempt)
@@ -389,7 +403,8 @@ class MatchRun:
             if moment.moment_id in self._late:
                 done.displayed = "late"
             self.processed[moment.moment_id] = done
-            self.broadcast.publish("verdicts", "verdict", done.timeline())
+            if self.mode != "precompute":
+                self.broadcast.publish("verdicts", "verdict", done.timeline())
 
     async def _display_loop(self) -> None:
         assert self.clock is not None
@@ -431,11 +446,13 @@ class MatchRun:
         if done.result.verdict is None:
             done.displayed = "skipped"
             self.broadcast.publish("cues", "skipped", {"moment_id": moment.moment_id, "reason": done.result.decision.reason, "seq": event.seq})
+            self.broadcast.publish("verdicts", "skipped", done.timeline())
             return
         if done.cue is None:
             done.displayed = "rejected"
             self.metrics["cues_rejected"] += 1
             self.broadcast.publish("cues", "dropped", {"moment_id": moment.moment_id, "reason": done.result.verdict.status, "seq": event.seq, "reasons": done.result.verdict.reasons})
+            self.broadcast.publish("verdicts", "verdict", done.timeline())
             return
         await self._ensure_narratives(done)
         done.displayed = "shown"
@@ -446,6 +463,7 @@ class MatchRun:
         })
         for narrative in done.narratives:
             self.broadcast.publish(f"fan:{narrative.profile_key}", "narrative", self.narrative_payload(narrative, replay=False))
+        self.broadcast.publish("verdicts", "verdict", done.timeline())
 
     def _event_payload(self, event: MatchEvent) -> dict[str, Any]:
         return {"seq": event.seq, "minute": event.minute, "second": event.second, "type": event.type, "team_id": event.team_id,

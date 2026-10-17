@@ -271,3 +271,30 @@ async def test_qa_endpoint_answers_text_first(client: httpx.AsyncClient) -> None
     assert state["qa_answer_p50_ms"] >= 0 and "qa_speech_p50_ms" not in state, "text-only questions are never spoken"
     assert (await client.post("/api/qa", json={"transcript": "x", "profile_key": "bad"})).status_code == 422
     assert (await client.get("/api/match/audits")).json() == {"audits": [], "exact": 0}
+
+
+async def test_timelines_returns_only_moments_on_air_at_playback_time() -> None:
+    events = simulate(seed=7)
+    moments = detect_all(events)
+    assert len(moments) >= 5
+    run = MatchRun(seed=7, speed=100.0, delay_s=10.0, minutes=90, precompute=True)
+    await run.start()
+
+    early_timelines = run.timelines(playback_t=100.0)
+    early_ids = {t["moment_id"] for t in early_timelines}
+
+    for m in moments:
+        m_closing_t = events[m.window[1] - 1].t
+        if m_closing_t > 100.0:
+            assert m.moment_id not in early_ids
+        else:
+            assert m.moment_id in early_ids
+
+    full_timelines = run.timelines(playback_t=6000.0)
+    assert len(full_timelines) == len(run.processed)
+
+    run.finished.set()
+    finished_timelines = run.timelines()
+    assert len(finished_timelines) == len(run.processed)
+    await run.stop()
+
