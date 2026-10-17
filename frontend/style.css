@@ -700,6 +700,17 @@ section h2 { font-size: 16px; color: var(--muted); margin: 0 0 10px; text-transf
   font-size: 14px;
   color: var(--rewritten);
 }
+.mic-blocked-notice {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+  color: var(--rewritten);
+  background: rgba(242, 179, 61, 0.08);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
 .voice-off-row {
   display: flex;
   gap: 8px;

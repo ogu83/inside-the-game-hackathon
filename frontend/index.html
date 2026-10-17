@@ -34,12 +34,27 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7AB4FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
         Broadcast delay {{ clock.delay_s }} s
       </span>
-      <span class="chip-badge" :class="{ warn: agentMode === 'template' }" v-if="agentMode" :title="fallbackReason || ''">
+      <span class="chip-badge warn" v-if="liveLimitReached">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        Live runs used for today, playing with offline agents
+      </span>
+      <span class="chip-badge" :class="{ warn: agentMode === 'template' }" v-else-if="agentMode" :title="fallbackReason || ''">
         <svg v-if="agentMode === 'foundry'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3DD68C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg>
         <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
         {{ agentMode === 'foundry' ? 'Foundry agents live' : ('Offline agents' + (fallbackReason ? ': ' + fallbackReason : '')) }}
       </span>
-      <span class="chip-badge warn" v-if="busyMessage">{{ busyMessage }}</span>
+      <span class="chip-badge warn" v-if="busyMessage">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        {{ busyMessage }}
+      </span>
+      <span class="chip-badge warn" v-if="voiceUnavailable">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+        Voice unavailable, text answers still work
+      </span>
+      <span class="chip-badge warn" v-if="micBlocked">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line></svg>
+        Microphone blocked, type your question instead
+      </span>
     </div>
 
     <div class="header-actions">
@@ -254,6 +269,14 @@
         <div class="not-heard-notice" v-if="voice && notHeard">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--rewritten)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: 0 0 auto"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01"></path></svg>
           <span>{{ notHeardReason || "I didn't catch that, try again" }}</span>
+        </div>
+        <div class="mic-blocked-notice" v-if="voice && micBlocked">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--rewritten)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: 0 0 auto"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line></svg>
+          <span>Microphone blocked, type your question instead</span>
+        </div>
+        <div class="mic-blocked-notice" v-if="voice && voiceUnavailable">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--rewritten)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: 0 0 auto"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+          <span>Voice unavailable, text answers still work</span>
         </div>
         <!-- State 6: Voice off -->
         <div class="voice-off-row" v-if="!voice">
@@ -566,6 +589,7 @@ createApp({
       sources: [], fanSource: null, startedAt: null,
       voice: false, voiceStatus: '', speaking: '', speechChecks: 0, speechMismatches: 0,
       phoneTab: 'live',
+      micBlocked: false, voiceUnavailable: false, liveLimitReached: false,
     });
     const filters = ['all', 'said', 'skipped', 'rejected', 'late', 'failed checks'];
     const metricKeys = ['cues_shown', 'moments_skipped', 'cues_rejected', 'cues_dropped_late', 'number_checks', 'number_checks_failed', 'narratives_dropped', 'producer_regenerated', 'speech_checks', 'speech_mismatches', 'lines_interrupted', 'questions_answered', 'qa_answer_p50_ms', 'qa_speech_p50_ms'];
@@ -734,7 +758,7 @@ createApp({
         }
         if (msg.type === 'answer') { const q = state.qa.find(q => q.key === msg.answer.question_id); if (q) { q.answer = msg.answer; if (msg.timing) q.answer.timing = msg.timing; } }
         if (msg.type === 'match_end') state.voiceStatus = 'match over, you can still ask questions';
-        if (msg.type === 'unavailable') state.voiceStatus = 'voice unavailable: ' + msg.reason;
+        if (msg.type === 'unavailable') { state.voiceUnavailable = true; state.voiceStatus = 'voice unavailable, text answers still work'; }
       };
     };
     // The microphone is opened once, on the user gesture that turns the voice on, and kept warm: getUserMedia and the
@@ -756,8 +780,18 @@ createApp({
         };
         source.connect(micNode); micNode.connect(micCtx.destination);
         state.micReady = true;
+        state.micBlocked = false;
         return true;
-      } catch (e) { state.voiceStatus = 'microphone unavailable: ' + e.message; state.micReady = false; return false; }
+      } catch (e) {
+        state.micBlocked = true;
+        state.voiceStatus = 'Microphone blocked, type your question instead';
+        state.micReady = false;
+        setTimeout(() => {
+          const inp = document.querySelector('.typed-label input, .voice-off-row input, .ask input');
+          if (inp) inp.focus();
+        }, 50);
+        return false;
+      }
     };
     const releaseMic = () => {
       if (micNode) { micNode.disconnect(); micNode = null; }
@@ -900,13 +934,15 @@ createApp({
       const info = await res.json();
       if (!res.ok) {
         state.starting = false;
-        state.busyMessage = info.detail || 'The demo is busy, try again in a minute.';
+        const retryAfter = res.headers && res.headers.get ? res.headers.get('Retry-After') : null;
+        state.busyMessage = info.detail || (retryAfter ? `The demo is busy, try again in ${retryAfter} s` : 'The demo is busy, try again in a minute');
         return;
       }
       state.busyMessage = '';
       const [homeId, awayId] = info.match_id.split('-');
       state.teams = { homeId, home: teamName(homeId), away: teamName(awayId) };
       state.clock = info.clock; state.mode = info.mode; state.agentMode = info.agent_mode; state.fallbackReason = info.fallback_reason;
+      state.liveLimitReached = info.agent_mode === 'template' && (info.fallback_reason === 'limit_exceeded' || info.live_runs_remaining === 0);
       state.running = true; state.starting = false;
       state.startedAt = performance.now() / 1000 - info.clock.event_t / info.clock.speed;
       const existing = await (await fetch('/api/match/moments')).json();
@@ -917,9 +953,9 @@ createApp({
         cue: c => { showBanner(c); markDisplayed(c.cue.moment_id, 'shown'); },
         dropped: d => markDisplayed(d.moment_id, d.reason === 'late' ? 'late' : 'rejected'),
         skipped: d => markDisplayed(d.moment_id, 'skipped'),
-        fallback: f => { state.agentMode = 'template'; state.fallbackReason = f.reason; },
+        fallback: f => { state.agentMode = 'template'; state.fallbackReason = f.reason; if (f.reason === 'limit_exceeded') state.liveLimitReached = true; },
       });
-      listen('/api/stream/verdicts', { verdict: upsertTimeline, skipped: upsertTimeline, fallback: f => { state.agentMode = 'template'; state.fallbackReason = f.reason; } });
+      listen('/api/stream/verdicts', { verdict: upsertTimeline, skipped: upsertTimeline, fallback: f => { state.agentMode = 'template'; state.fallbackReason = f.reason; if (f.reason === 'limit_exceeded') state.liveLimitReached = true; } });
       await follow();
     };
     const follow = async () => {
@@ -973,7 +1009,7 @@ createApp({
       };
     };
     loadLeague();
-    return { ...toRefs(state), filters, metricKeys, playbackClock, players, selectedPlayer, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, setSpeed, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk, qaTiming, selectedMoment, filterCounts, momentTitle, verdictClass, verdictText, pad, phoneTab };
+    return { ...toRefs(state), filters, metricKeys, playbackClock, players, selectedPlayer, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, setSpeed, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk, qaTiming, selectedMoment, filterCounts, momentTitle, verdictClass, verdictText, pad, phoneTab, micBlocked, voiceUnavailable, liveLimitReached };
   },
 }).mount('#app');
 </script>
