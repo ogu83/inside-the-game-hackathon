@@ -1,8 +1,9 @@
 # Design (P1 output)
 
-- Canvas (rendered mockups, private to Oguz until shared): https://claude.ai/artifact/WmraTuZ3UZf28R3QNLHxra
+- Canvas (rendered mockups, shared): https://claude.ai/artifact/WmraTuZ3UZf28R3QNLHxra
 - `style-guide.md`: tokens, type, spacing, icons, motion, pitch recipe.
 - `p3-notes.md`: the numbered change list P3 implements.
+- `screenshots/`: the implemented page from a real seed 30 match (desktop 1440x900 and phone 390 px, live cue and timeline).
 - `mockups/`: canvas sources, one per artboard:
   - `Main.dc.html`: live match, 1440x900, cue on screen, voice speaking (demo scene 1)
   - `Phone.dc.html`: the same at 390x844
