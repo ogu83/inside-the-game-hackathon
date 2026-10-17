@@ -197,6 +197,17 @@ def test_opponent_acting_still_fails_layer_1() -> None:
     assert check_actors("Kestrel Bay'in baskısı sonuç verdi.", IVA_TRAP, IVA_LABELS, "tr")[0].startswith("Kestrel Bay named as the actor")
     assert check_actors("Luca Brightwater baskıya öncülük etti.", IVA_TRAP, IVA_LABELS, "tr")[0].startswith("Luca Brightwater plays for Kestrel Bay")
 
+    # Clause where opponent is the subject following a conjunction must fail
+    assert check_actors("And Ironvale string together 12 passes.", MOMENT, KBY_LABELS)[0].startswith("Ironvale named as the actor")
+    assert check_actors("Kestrel Bay pressed and Ironvale string together 12 passes.", MOMENT, KBY_LABELS)[0].startswith("Ironvale named as the actor")
+    assert check_actors("So Ironvale string together 12 passes.", MOMENT, KBY_LABELS)[0].startswith("Ironvale named as the actor")
+    assert check_actors("While Ironvale string together 12 passes.", MOMENT, KBY_LABELS)[0].startswith("Ironvale named as the actor")
+
+    # But opponent in passive/suffering construction after a conjunction still passes
+    assert check_actors("Kestrel Bay pressed and Ironvale were pinned in their own half.", MOMENT, KBY_LABELS) == []
+    assert check_actors("It comes with 68% of the ball, so Ironvale are chasing.", MOMENT, KBY_LABELS) == []
+
+
 
 def test_insight_minute_passes_without_evidence_refs() -> None:
     # Minute is in candidate moment (minute=11)
