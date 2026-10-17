@@ -1139,6 +1139,193 @@ section h2 { font-size: 16px; color: var(--muted); margin: 0 0 10px; text-transf
 .row .when { color: var(--muted); font-variant-numeric: tabular-nums; }
 .empty { color: var(--muted); font-size: 13px; }
 
+.phone-tabs { display: none; }
+
+/* Phone width (max-width 600px / 390px): compact header, full-width pitch, lower third, 64px PTT, bottom tabs */
+@media (max-width: 600px) {
+  html, body {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100%;
+  }
+  #app {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    padding-bottom: 60px;
+    box-sizing: border-box;
+  }
+  .app-header {
+    height: auto;
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
+  .app-header .brand {
+    order: 1;
+  }
+  .app-header .header-actions {
+    order: 2;
+    margin-left: auto;
+  }
+  .app-header .scoreboard-pill {
+    order: 3;
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
+    padding: 6px 10px;
+  }
+  .scoreboard-pill .score-crest {
+    width: 22px;
+    height: 22px;
+  }
+  .scoreboard-pill .club-name {
+    font-size: 16px;
+  }
+  .scoreboard-pill .score-num {
+    font-size: 20px;
+    padding: 0 8px;
+  }
+  .scoreboard-pill .clock-display {
+    font-size: 20px;
+  }
+  .app-header .header-chips {
+    order: 4;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .header-speed, .match-settings {
+    display: none;
+  }
+  main {
+    grid-template-columns: 1fr;
+    padding: 10px;
+    gap: 12px;
+  }
+  .pitch-container {
+    border-radius: 10px;
+    width: 100%;
+  }
+  .cuebanner {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    border-radius: 12px;
+  }
+  .cuebanner .crest-block {
+    width: 8px;
+    flex: 0 0 8px;
+  }
+  .cuebanner .crest-block img {
+    display: none;
+  }
+  .cuebanner .body {
+    padding: 8px 10px;
+    gap: 3px;
+  }
+  .cuebanner .headline {
+    font-size: 19px;
+  }
+  .cuebanner .subline {
+    font-size: 12px;
+  }
+  .cuebanner .detail {
+    display: none;
+  }
+  .cuebanner .metric-col {
+    width: 70px;
+    flex: 0 0 70px;
+    padding: 4px 6px;
+  }
+  .cuebanner .metric-col .value {
+    font-size: 32px;
+  }
+  .cuebanner .metric-col .label {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+  }
+  .ptt-row {
+    width: 100%;
+  }
+  .ptt-btn {
+    width: 100%;
+    height: 64px;
+    border-radius: 16px;
+    font-size: 18px;
+    justify-content: center;
+  }
+  .phone-tabs {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: var(--chrome);
+    border-top: 1px solid var(--line);
+    z-index: 1000;
+  }
+  .phone-tabs button {
+    flex: 1;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: 600 12px 'Barlow', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    cursor: pointer;
+    border-top: 2px solid transparent;
+    padding: 0;
+  }
+  .phone-tabs button.active, .phone-tabs button[aria-pressed="true"] {
+    color: var(--text);
+    border-top-color: var(--kby);
+  }
+  .phone-tabs button svg {
+    flex: 0 0 auto;
+  }
+
+  /* tab swapping on phone */
+  .phone-live .ticker,
+  .phone-live .narrative-feed,
+  .phone-live .feed-history,
+  .phone-live .drawer-container {
+    display: none !important;
+  }
+
+  .phone-feed section:nth-of-type(1) .pitch-container,
+  .phone-feed section:nth-of-type(1) .direction-legend,
+  .phone-feed section:nth-of-type(2) .profile,
+  .phone-feed section:nth-of-type(2) .ask,
+  .phone-feed section:nth-of-type(2) .current-qa,
+  .phone-feed .drawer-container {
+    display: none !important;
+  }
+
+  .phone-agents main,
+  .phone-agents .app-footer {
+    display: none !important;
+  }
+  .phone-agents .drawer-container {
+    display: block !important;
+    position: relative !important;
+    padding: 10px;
+    margin-bottom: 20px;
+  }
+  .phone-agents .drawer-panel {
+    display: flex !important;
+    max-height: none !important;
+    border-radius: 12px !important;
+  }
+  .phone-agents .drawer-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Phone width (about 400 px): one column, wrapped header, compact drawer rows, readable banner. */
 @media (max-width: 480px) {
   html { font-size: 14px; }

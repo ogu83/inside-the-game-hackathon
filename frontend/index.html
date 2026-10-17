@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<div id="app">
+<div id="app" :class="['phone-' + phoneTab]">
   <header class="app-header">
     <div class="brand">
       <img src="/static/assets/league-mark-256.png" alt="" class="league-mark">
@@ -487,6 +487,20 @@
       </button>
     </footer>
   </div>
+  <nav class="phone-tabs" aria-label="Sections">
+    <button type="button" :aria-pressed="phoneTab === 'live'" :class="{ active: phoneTab === 'live' }" @click="phoneTab = 'live'">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M12 5v14"></path></svg>
+      <span>Live</span>
+    </button>
+    <button type="button" :aria-pressed="phoneTab === 'feed'" :class="{ active: phoneTab === 'feed' }" @click="phoneTab = 'feed'">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>
+      <span>Feed</span>
+    </button>
+    <button type="button" :aria-pressed="phoneTab === 'agents'" :class="{ active: phoneTab === 'agents' }" @click="phoneTab = 'agents'; drawerOpen = true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg>
+      <span>Agents</span>
+    </button>
+  </nav>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.5.13/vue.global.prod.min.js"></script>
 <script>
@@ -551,6 +565,7 @@ createApp({
       qa: [], micReady: false, interruptedLines: 0,
       sources: [], fanSource: null, startedAt: null,
       voice: false, voiceStatus: '', speaking: '', speechChecks: 0, speechMismatches: 0,
+      phoneTab: 'live',
     });
     const filters = ['all', 'said', 'skipped', 'rejected', 'late', 'failed checks'];
     const metricKeys = ['cues_shown', 'moments_skipped', 'cues_rejected', 'cues_dropped_late', 'number_checks', 'number_checks_failed', 'narratives_dropped', 'producer_regenerated', 'speech_checks', 'speech_mismatches', 'lines_interrupted', 'questions_answered', 'qa_answer_p50_ms', 'qa_speech_p50_ms'];
@@ -958,7 +973,7 @@ createApp({
       };
     };
     loadLeague();
-    return { ...toRefs(state), filters, metricKeys, playbackClock, players, selectedPlayer, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, setSpeed, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk, qaTiming, selectedMoment, filterCounts, momentTitle, verdictClass, verdictText, pad };
+    return { ...toRefs(state), filters, metricKeys, playbackClock, players, selectedPlayer, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, setSpeed, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk, qaTiming, selectedMoment, filterCounts, momentTitle, verdictClass, verdictText, pad, phoneTab };
   },
 }).mount('#app');
 </script>
