@@ -7,15 +7,20 @@ that set, whichever agent wrote it. An answer that fails both attempts becomes "
 """
 
 import re
+import time
 import uuid
 from typing import Any, Protocol
 
+from opentelemetry import trace
+
 from app.agents.fact_checker import FactChecker
-from app.agents.models import Answer, FanProfile, Insight, QaDraft, Question
+from app.agents.models import Answer, FanProfile, Insight, QaDraft, QaTiming, Question
 from app.ledger.labels import profile_labels
 from app.ledger.mcp_server import LedgerTools
 from app.ledger.models import CandidateMoment
 from app.simulator.league import CLUBS, PLAYERS
+
+tracer = trace.get_tracer(__name__)
 
 NO_DATA = {"en": "I don't have data on that.", "tr": "Bu konuda elimde veri yok."}
 MAX_ATTEMPTS = 2
@@ -216,25 +221,59 @@ class QaPipeline:
         self.fact_checker = fact_checker
         self.tools = tools
 
-    async def answer(self, question: Question, profile: FanProfile, labels: dict[str, str] | None = None) -> Answer:
-        labels = profile_labels(labels or {"team": "", "opponent": ""}, profile.club_id, profile.player_id)
-        evidence, gather_calls = qa_evidence(self.tools, profile, question.transcript)
-        moment = CandidateMoment(moment_id=f"qa-{question.question_id}", window=(question.asked_at_seq, question.asked_at_seq), kind="qa",
-                                 team_id=profile.club_id or "", minute=int(evidence.get("score_minute", 0)), evidence=evidence)
-        feedback: list[str] = []
-        verdict = None
-        draft = QaDraft(text=NO_DATA[profile.language], language=profile.language)
-        for attempt in range(1, MAX_ATTEMPTS + 1):
-            draft = await self.agent.draft(question, profile, labels, self.tools, feedback)
-            refs = self._refs(draft.text, evidence, profile.language)
-            insight = Insight(moment_id=moment.moment_id, claim=draft.text, why_it_matters="", evidence_refs=refs, confidence=0.8)
-            verdict, _ = await self.fact_checker.check(insight, moment, labels, attempt)
-            if verdict.status != "rejected":
-                text = verdict.insight.claim if verdict.insight else draft.text
-                return Answer(question_id=question.question_id, text=text, evidence_refs=refs, tool_calls=list(dict.fromkeys(draft.tool_calls + gather_calls)),
-                              verdict=verdict, evidence={k: evidence[k] for k in refs})
-            feedback = verdict.reasons
-        return Answer(question_id=question.question_id, text=NO_DATA[profile.language], evidence_refs=[], tool_calls=list(dict.fromkeys(draft.tool_calls + gather_calls)), verdict=verdict)
+    async def answer(self, question: Question, profile: FanProfile, labels: dict[str, str] | None = None, timing: QaTiming | None = None) -> Answer:
+        with tracer.start_as_current_span("qa.answer") as span:
+            span.set_attribute("qa.language", profile.language)
+            t_start = time.perf_counter()
+            timing = timing or QaTiming(pressed_at=time.time())
+            labels = profile_labels(labels or {"team": "", "opponent": ""}, profile.club_id, profile.player_id)
+            evidence, gather_calls = qa_evidence(self.tools, profile, question.transcript)
+            moment = CandidateMoment(moment_id=f"qa-{question.question_id}", window=(question.asked_at_seq, question.asked_at_seq), kind="qa",
+                                     team_id=profile.club_id or "", minute=int(evidence.get("score_minute", 0)), evidence=evidence)
+            feedback: list[str] = []
+            verdict = None
+            draft = QaDraft(text=NO_DATA[profile.language], language=profile.language)
+            draft_ms_total = 0.0
+            factcheck_ms_total = 0.0
+            for attempt in range(1, MAX_ATTEMPTS + 1):
+                t0 = time.perf_counter()
+                draft = await self.agent.draft(question, profile, labels, self.tools, feedback)
+                draft_ms_total += (time.perf_counter() - t0) * 1000
+                refs = self._refs(draft.text, evidence, profile.language)
+                insight = Insight(moment_id=moment.moment_id, claim=draft.text, why_it_matters="", evidence_refs=refs, confidence=0.8)
+                t1 = time.perf_counter()
+                verdict, _ = await self.fact_checker.check(insight, moment, labels, attempt)
+                factcheck_ms_total += (time.perf_counter() - t1) * 1000
+                if verdict.status != "rejected":
+                    text = verdict.insight.claim if verdict.insight else draft.text
+                    all_tools = list(dict.fromkeys(draft.tool_calls + gather_calls))
+                    timing.answered_at = time.time()
+                    total_ms = (time.perf_counter() - t_start) * 1000
+                    span.set_attribute("qa.tools", ",".join(all_tools))
+                    span.set_attribute("qa.verdict", verdict.status)
+                    if timing.transcription_ms() is not None:
+                        span.set_attribute("qa.timing.transcription_ms", timing.transcription_ms())
+                    if timing.answer_ms() is not None:
+                        span.set_attribute("qa.timing.answer_ms", timing.answer_ms())
+                    span.set_attribute("qa.timing.draft_ms", round(draft_ms_total, 2))
+                    span.set_attribute("qa.timing.factcheck_ms", round(factcheck_ms_total, 2))
+                    span.set_attribute("qa.timing.total_ms", round(total_ms, 2))
+                    return Answer(question_id=question.question_id, text=text, evidence_refs=refs, tool_calls=all_tools,
+                                  verdict=verdict, evidence={k: evidence[k] for k in refs}, timing=timing)
+                feedback = verdict.reasons
+            all_tools = list(dict.fromkeys(draft.tool_calls + gather_calls))
+            timing.answered_at = time.time()
+            total_ms = (time.perf_counter() - t_start) * 1000
+            span.set_attribute("qa.tools", ",".join(all_tools))
+            span.set_attribute("qa.verdict", verdict.status if verdict else "rejected")
+            if timing.transcription_ms() is not None:
+                span.set_attribute("qa.timing.transcription_ms", timing.transcription_ms())
+            if timing.answer_ms() is not None:
+                span.set_attribute("qa.timing.answer_ms", timing.answer_ms())
+            span.set_attribute("qa.timing.draft_ms", round(draft_ms_total, 2))
+            span.set_attribute("qa.timing.factcheck_ms", round(factcheck_ms_total, 2))
+            span.set_attribute("qa.timing.total_ms", round(total_ms, 2))
+            return Answer(question_id=question.question_id, text=NO_DATA[profile.language], evidence_refs=[], tool_calls=all_tools, verdict=verdict, timing=timing)
 
     @staticmethod
     def _refs(text: str, evidence: dict[str, float], lang: str) -> list[str]:

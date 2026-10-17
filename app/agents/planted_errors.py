@@ -70,6 +70,18 @@ def corrupt_text(text: str, lang: str, kind: RenderingCorruption, rng: random.Ra
 
 def corrupt_insight(insight: Insight, moment: CandidateMoment, labels: dict[str, str], kind: InsightCorruption, rng: random.Random) -> Insight:
     if kind == "wrong_number":
+        shots_key = next((k for k in ("away_shots_last_10min", "team_shots_last_10min", "pass_streak_ended_in_shot") if k in moment.evidence), None)
+        if shots_key is not None and (insight.evidence_refs and any("shot" in r for r in insight.evidence_refs) or shots_key in ("away_shots_last_10min", "team_shots_last_10min")):
+            team = labels.get("team", moment.team_id)
+            if team == "iva":
+                team = "Ironvale"
+            elif team == "kby":
+                team = "Kestrel Bay"
+            refs = list(dict.fromkeys(insight.evidence_refs + [shots_key]))
+            return insight.model_copy(update={
+                "claim": f"{team} have had 6 shots.",
+                "evidence_refs": refs,
+            })
         number = _first_number(insight.claim, "en")
         if number is None:
             return insight.model_copy(update={"claim": f"{insight.claim} They have had 6 shots."})
@@ -104,20 +116,29 @@ class PlantPlan:
         renderings = {m: RENDERING_KINDS[i % len(RENDERING_KINDS)] for i, m in enumerate(rest[:n_renderings])}
         return cls(insights=insights, renderings=renderings)
 
+    @classmethod
+    def build_demo(cls, moments: list[CandidateMoment], n: int = 1, seed: int = 0) -> "PlantPlan":
+        shots_moments = [m for m in moments if any("shot" in k for k in m.evidence)]
+        target_ids = [m.moment_id for m in shots_moments[:n]]
+        if len(target_ids) < n:
+            target_ids += [m.moment_id for m in moments if m.moment_id not in target_ids][:n - len(target_ids)]
+        return cls(insights={mid: "wrong_number" for mid in target_ids})
+
 
 class PlantingCommentator:
-    """Wraps an InsightWriter and corrupts attempt 1 of the planned moments."""
+    """Wraps an InsightWriter and corrupts attempt 1 of the planned moments (and retries if recover=False)."""
 
-    def __init__(self, inner, plan: PlantPlan, seed: int = 0) -> None:
+    def __init__(self, inner, plan: PlantPlan, seed: int = 0, recover: bool = True) -> None:
         self.inner = inner
         self.plan = plan
         self.rng = random.Random(seed)
         self.planted: dict[str, Insight] = {}
+        self.recover = recover
 
     async def write(self, moment: CandidateMoment, labels: dict[str, str], feedback: list[str]) -> Insight:
         insight = await self.inner.write(moment, labels, feedback)
         kind = self.plan.insights.get(moment.moment_id)
-        if kind is None or feedback:
+        if kind is None or (feedback and self.recover):
             return insight
         corrupted = corrupt_insight(insight, moment, labels, kind, self.rng)
         self.planted[moment.moment_id] = corrupted

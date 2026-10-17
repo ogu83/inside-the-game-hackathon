@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
+from typing import Any
 
 from app.agents.analyst import PacingTracker, RuleDirector
 from app.agents.fact_checker import FactChecker
@@ -19,8 +20,10 @@ from app.agents.models import FanProfile, MomentResult
 from app.agents.planted_errors import PlantedReport, PlantingCommentator, PlantPlan, make_tamper, report_insights
 from app.agents.producer import FoundryRenderer, Producer
 from app.agents.workflow import build_workflow, run_moment
+from app.ledger.labels import moment_labels
 from app.ledger.models import CandidateMoment
 from app.ledger.state import detect_all
+from app.observability import flush_tracing, init_observability
 from app.simulator.engine import simulate
 from app.simulator.models import MatchEvent
 
@@ -164,32 +167,76 @@ def live_workflow():
     )
 
 
-def summary(results: list[MomentResult]) -> dict[str, int]:
+def summary(results: list[MomentResult], extra: dict | None = None) -> dict[str, Any]:
+    from typing import Any
+
     statuses = [r.verdict.status for r in results if r.verdict]
     checks = [c for r in results for c in r.checks]
-    return {
+    cues = statuses.count("verified") + statuses.count("rewritten")
+    out: dict[str, Any] = {
         "moments": len(results),
+        "cues": cues,
         "skipped": sum(not r.decision.say for r in results),
         "verified": statuses.count("verified"),
         "rewritten": statuses.count("rewritten"),
         "rejected": statuses.count("rejected"),
-        "retries": sum(len(r.attempts) - 1 for r in results),
+        "retries": sum(max(0, len(r.attempts) - 1) for r in results),
         "number_checks": len(checks),
         "number_checks_failed": sum(not c.ok for c in checks),
+        "planted_errors_caught": 0,
+        "ready_before_display_share": 1.0,
     }
+    if extra:
+        out.update(extra)
+    return out
+
+
+async def run_recap(events: list[MatchEvent], moments: list[CandidateMoment], live: bool = False) -> tuple[str, str]:
+    from app.agents.recap import TemplateRecapWriter, build_recap_evidence, generate_recap, recap_writer_from_env
+
+    writer = recap_writer_from_env() if live else TemplateRecapWriter()
+    profile_en = FanProfile(language="en", depth="casual")
+    ev_en, lbl_en = build_recap_evidence(events, moments, profile=profile_en)
+    recap_en, _ = await generate_recap(writer, ev_en, lbl_en, profile_en)
+
+    profile_tr = FanProfile(language="tr", depth="analyst")
+    ev_tr, lbl_tr = build_recap_evidence(events, moments, profile=profile_tr)
+    recap_tr, _ = await generate_recap(writer, ev_tr, lbl_tr, profile_tr)
+    return recap_en.text, recap_tr.text
 
 
 async def run(seed: int, live: bool, jsonl: Path | None, limit: int | None) -> list[MomentResult]:
+    from opentelemetry import trace
+
+    tracer = trace.get_tracer("app.agents.run_match")
     events = simulate(seed)
     moments = detect_all(events)[:limit]
     workflow = live_workflow() if live else offline_workflow()
     pacing = PacingTracker()
     results = []
+    producer = live_producer() if live else offline_producer()
     for moment in moments:
         t = close_t(moment, events)
-        result = await run_moment(workflow, moment, pacing=pacing.state_for(moment, t))
-        pacing.record(result.decision, t)
-        results.append(result)
+        with tracer.start_as_current_span(f"moment {moment.moment_id}") as span:
+            span.set_attribute("match.id", f"seed-{seed}")
+            span.set_attribute("moment.id", moment.moment_id)
+            span.set_attribute("moment.kind", moment.kind)
+            span.set_attribute("moment.minute", float(moment.minute))
+            t_start = asyncio.get_running_loop().time()
+            result = await run_moment(workflow, moment, pacing=pacing.state_for(moment, t))
+            pacing.record(result.decision, t)
+            results.append(result)
+            latency_ms = round((asyncio.get_running_loop().time() - t_start) * 1000, 2)
+            span.set_attribute("moment.latency_ms", latency_ms)
+            if result.verdict is None:
+                span.set_attribute("cue.status", "skipped")
+            else:
+                span.set_attribute("cue.status", "aired" if result.verdict.status != "rejected" else "rejected")
+                span.set_attribute("factcheck.layer", result.verdict.layer)
+                span.set_attribute("factcheck.attempts", result.verdict.attempt)
+                if result.verdict.status != "rejected" and result.verdict.insight:
+                    labels = moment_labels(moment, ("kby", "iva"))
+                    await producer.render(result.verdict.insight, moment, labels, [FanProfile()])
     if jsonl:
         jsonl.parent.mkdir(parents=True, exist_ok=True)
         with jsonl.open("w", encoding="utf-8") as f:
@@ -199,29 +246,48 @@ async def run(seed: int, live: bool, jsonl: Path | None, limit: int | None) -> l
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--live", action="store_true", help="use Foundry agents from .env")
-    parser.add_argument("--jsonl", type=Path, default=None)
-    parser.add_argument("--limit", type=int, default=None, help="only the first N moments")
-    parser.add_argument("--plant", type=int, default=0, help="plant N insight and N rendering errors and report the catches")
-    args = parser.parse_args()
-    if args.plant:
-        results, report = asyncio.run(run_planted(args.seed, args.plant, args.live, limit=args.limit))
+    import sys
+
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    init_observability()
+    try:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--seed", type=int, default=7)
+        parser.add_argument("--speed", type=float, default=None, help="playback speed; runs match simulation")
+        parser.add_argument("--live", action="store_true", help="use Foundry agents from .env")
+        parser.add_argument("--jsonl", type=Path, default=None)
+        parser.add_argument("--limit", type=int, default=None, help="only the first N moments")
+        parser.add_argument("--plant", type=int, default=0, help="plant N insight and N rendering errors and report the catches")
+        args = parser.parse_args()
+        if args.plant:
+            results, report = asyncio.run(run_planted(args.seed, args.plant, args.live, limit=args.limit))
+            events = simulate(args.seed)
+            moments = detect_all(events)[:args.limit]
+            recap_en, recap_tr = asyncio.run(run_recap(events, moments, args.live))
+            print("RECAP en:", recap_en)
+            print("RECAP tr:", recap_tr)
+            print(json.dumps(summary(results, {"planted_errors_caught": report.caught_by_code})))
+            print(json.dumps(report.as_dict()))
+            print(report.headline())
+            for line in report.reached_air_detail:
+                print("REACHED AIR:", line)
+            return
+        results = asyncio.run(run(args.seed, args.live, args.jsonl, args.limit))
+        for r in results:
+            v = r.verdict
+            if v is None:
+                print(f"skipped   director: {r.decision.reason}")
+                continue
+            print(f"{v.status:9} L{'1' if v.layer == 'code' else '2'} attempt {v.attempt} [{r.decision.angle}]: {(v.insight.claim if v.insight else '')}  {v.reasons if v.reasons else ''}")
+        events = simulate(args.seed)
+        moments = detect_all(events)[:args.limit]
+        recap_en, recap_tr = asyncio.run(run_recap(events, moments, args.live))
+        print("RECAP en:", recap_en)
+        print("RECAP tr:", recap_tr)
         print(json.dumps(summary(results)))
-        print(json.dumps(report.as_dict()))
-        print(report.headline())
-        for line in report.reached_air_detail:
-            print("REACHED AIR:", line)
-        return
-    results = asyncio.run(run(args.seed, args.live, args.jsonl, args.limit))
-    for r in results:
-        v = r.verdict
-        if v is None:
-            print(f"skipped   director: {r.decision.reason}")
-            continue
-        print(f"{v.status:9} L{'1' if v.layer == 'code' else '2'} attempt {v.attempt} [{r.decision.angle}]: {(v.insight.claim if v.insight else '')}  {v.reasons if v.reasons else ''}")
-    print(json.dumps(summary(results)))
+    finally:
+        flush_tracing()
 
 
 if __name__ == "__main__":

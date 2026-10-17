@@ -23,6 +23,9 @@ Skip the database, SQLAlchemy and MVC files (this app has no database). Save the
 2. **Actor check hole.** In `app/agents/fact_check_rules.py`, a clause starting `And Ironvale string together 12 passes` on a Kestrel Bay moment passes, because `and` is in the opponent-before word list. Tighten the rule so a clause whose subject is the opponent fails, without bringing back the T10b false positives (opponent named as a place or object, possessives). Add this case and the T10b false-positive cases as tests.
 3. **Health payload.** `/api/health` in `app/api/main.py` mixes the per-visitor registry with the legacy single `app.state.run` (the public app returned `"running": true` with `"active_runs": 0`). Decide whether `app.state.run` is still needed after T13 sessions; if not, remove the legacy path; either way make `running` mean `active_runs > 0`. Test it.
 
+4. **Live-run limit can be bypassed.** `visitor_id` in `app/api/main.py` takes the *first* `X-Forwarded-For` entry, which the client controls, so a forged header gets unlimited live runs. Use the entry added by the Container Apps ingress (the last one) or the connecting address, and document why in a comment. Tests: a forged first entry does not change the visitor; two different real addresses are two visitors.
+5. **Global daily cap on live runs.** The public URL is a demo for judging only. Add `PUBLIC_LIVE_RUNS_TOTAL_PER_DAY` (default 40; 0 means no cap) next to the per-visitor limit in `app/api/limits.py`: once the day's total is reached, every new match uses offline agents with the visible notice "Live runs for today are used up, playing with offline agents". Add the env var to `infra/deploy.ps1` and `docs/deploy.md`. Tests: the 41st live start of a day falls back; the count resets the next UTC day.
+
 ## Review pass (after the known items)
 
 Walk `app/` against the checklist, file by file, largest first (`fact_check_rules.py`, `streams.py`, `main.py`, `voice/session.py`, `voice_ws.py`, `voice/qa.py`, `simulator/engine.py`, then the rest). For each finding write one line in `docs/review/findings.md`: file and line, checklist item, what is wrong, and one of **fixed** (commit hash), **won't fix** (reason, for example risk this close to the deadline) or **later** (moved to `tasks/todo.md`).
@@ -61,5 +64,5 @@ Only report something as done when you ran it and can show the evidence (test ou
 
 ## Done when
 
-- Items 1 to 3 are fixed with tests; the review pass is recorded in `docs/review/findings.md`; the five ADRs exist; the offline suite passes and the live suite result is reported.
+- Items 1 to 5 are fixed with tests; the review pass is recorded in `docs/review/findings.md`; the five ADRs exist; the offline suite passes and the live suite result is reported.
 - Report back: the branch, the commit list (one line each), the count of findings by status, anything moved to "later", and the test totals (offline and live).

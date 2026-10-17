@@ -10,6 +10,7 @@ import asyncio
 from collections.abc import Callable
 from typing import Any, Protocol
 
+from opentelemetry import trace
 from pydantic import BaseModel
 
 from app.agents.fact_check_rules import check_rendering, cited_evidence
@@ -104,34 +105,40 @@ class Producer:
         return ProducerOutput(moment_id=moment.moment_id, cue=cue, narratives=narratives, checks=checks, dropped_profiles=dropped, regenerated=regenerated)
 
     async def _render_cue(self, insight: Insight, moment: CandidateMoment, labels: dict[str, str], cited: dict[str, float]) -> tuple[OverlayCue | None, list[NumberCheck]]:
-        checks: list[NumberCheck] = []
-        feedback: list[str] = []
-        for _ in range(self.max_regenerations + 1):
-            draft = await self.renderer.cue(insight, moment, labels, feedback)
-            source = f"{draft.headline} {draft.metric_value or ''}"
-            metric = self._text(draft.metric_value, moment.moment_id, "broadcast", "en") if draft.metric_value is not None else None
-            headline = self._text(draft.headline, moment.moment_id, "broadcast", "en")[:60]
-            check = check_rendering(f"{headline} {metric or ''}", cited, source, moment_id=moment.moment_id, profile_key="broadcast", coverage="all", minute=moment.minute)
-            checks.append(check)
-            if check.ok:
-                priority = draft.priority if draft.priority in ("low", "normal", "high") else "normal"
-                cue = OverlayCue(moment_id=moment.moment_id, show_at_seq=moment.window[1], duration_s=8, priority=priority,
-                                 headline=headline, metric_label=draft.metric_label, metric_value=metric)
-                return cue, checks
-            feedback = check.mismatches
-        return None, checks
+        tracer = trace.get_tracer("app.agents.producer")
+        with tracer.start_as_current_span("producer.render") as span:
+            span.set_attribute("profile.key", "broadcast")
+            checks: list[NumberCheck] = []
+            feedback: list[str] = []
+            for _ in range(self.max_regenerations + 1):
+                draft = await self.renderer.cue(insight, moment, labels, feedback)
+                source = f"{draft.headline} {draft.metric_value or ''}"
+                metric = self._text(draft.metric_value, moment.moment_id, "broadcast", "en") if draft.metric_value is not None else None
+                headline = self._text(draft.headline, moment.moment_id, "broadcast", "en")[:60]
+                check = check_rendering(f"{headline} {metric or ''}", cited, source, moment_id=moment.moment_id, profile_key="broadcast", coverage="all", minute=moment.minute)
+                checks.append(check)
+                if check.ok:
+                    priority = draft.priority if draft.priority in ("low", "normal", "high") else "normal"
+                    cue = OverlayCue(moment_id=moment.moment_id, show_at_seq=moment.window[1], duration_s=8, priority=priority,
+                                     headline=headline, metric_label=draft.metric_label, metric_value=metric)
+                    return cue, checks
+                feedback = check.mismatches
+            return None, checks
 
     async def _render_narrative(self, insight: Insight, moment: CandidateMoment, labels: dict[str, str], cited: dict[str, float], profile: FanProfile) -> tuple[FanNarrative | None, list[NumberCheck]]:
-        checks: list[NumberCheck] = []
-        feedback: list[str] = []
-        coverage = "all" if profile.depth == "analyst" else "any"
-        labels = profile_labels(labels, profile.club_id, profile.player_id)
-        for _ in range(self.max_regenerations + 1):
-            text = await self.renderer.narrative(insight, moment, labels, profile, feedback)
-            text = self._text(text, moment.moment_id, profile.key(), profile.language)
-            check = check_rendering(text, cited, insight.claim, moment_id=moment.moment_id, profile_key=profile.key(), lang=profile.language, coverage=coverage, minute=moment.minute)
-            checks.append(check)
-            if check.ok:
-                return FanNarrative(moment_id=moment.moment_id, profile_key=profile.key(), text=text), checks
-            feedback = check.mismatches
-        return None, checks
+        tracer = trace.get_tracer("app.agents.producer")
+        with tracer.start_as_current_span("producer.render") as span:
+            span.set_attribute("profile.key", profile.key())
+            checks: list[NumberCheck] = []
+            feedback: list[str] = []
+            coverage = "all" if profile.depth == "analyst" else "any"
+            labels = profile_labels(labels, profile.club_id, profile.player_id)
+            for _ in range(self.max_regenerations + 1):
+                text = await self.renderer.narrative(insight, moment, labels, profile, feedback)
+                text = self._text(text, moment.moment_id, profile.key(), profile.language)
+                check = check_rendering(text, cited, insight.claim, moment_id=moment.moment_id, profile_key=profile.key(), lang=profile.language, coverage=coverage, minute=moment.minute)
+                checks.append(check)
+                if check.ok:
+                    return FanNarrative(moment_id=moment.moment_id, profile_key=profile.key(), text=text), checks
+                feedback = check.mismatches
+            return None, checks

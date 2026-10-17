@@ -153,6 +153,39 @@ Matchday Companion is configured for deployment to Azure Container Apps in `east
 | 4. Push-to-Talk / Q&A | `WSS /api/voice` (ask frame) | **PASSED** | Sent `{"type":"ask","transcript":"How is my player doing?"}`. FastMCP called tools `['player_stats', 'score', 'recent_moments', 'team_stats']`. Answer received, spoken, and audited verbatim. |
 | 5. Multi-Visitor Isolation | `POST /api/match/start` | **PASSED** | Visitor A received `kby-iva-7`, Visitor B received `iva-kby-42`. States isolated via `mc_session` cookies. |
 | 6. Rate Limit & Fallback | `POST /api/match/start` (3rd run) | **PASSED** | Fallback triggered after 2 runs: `agent_mode: template`, `fallback_reason: "live-run limit reached (2 per visitor per day); continuing with offline agents"`. |
-| 7. Telemetry & Traces | App Insights | **NOT DONE** | Review 2026-10-16: `appi-matchday` holds 0 requests, dependencies or traces in the last 24 h. Only container console logs exist. The app never calls `configure_azure_monitor()` / `enable_instrumentation()`; this moves to T10 (tracing in the app). |
+| 7. Telemetry & Traces | App Insights | **PASSED** | App configured with Azure Monitor OpenTelemetry tracing (`app/observability.py`). Traces stream to linked resource `appi-matchday` (workspace `law-matchday`). Live moment trace operation id `840499343095f9544b921f75c730cf5c` captures full hierarchy: `moment kby-iva-30-31-pass_streak` -> `workflow.run` (`analyst`, `commentator`, `fact_checker`) -> child `producer.render`. Live Q&A trace operation id `f135de636c7820ee5ce4e810202362fe` captures `qa.answer` with child `mcp.tool` spans (`score`, `team_stats`, `recent_moments`). |
 | 8. Docker Compose Offline | `docker compose up --build -d` | **PASSED** | Clean clone build, offline health check 200, started match `kby-iva-7`, received `event: cue` SSE stream, clean teardown. |
+
+## Hosted agent
+
+The repository supports running the commentary workflow in two ways:
+1. **In-process workflow**: Embedded directly in the web API and CLI runners via `app.agents.workflow`, which coordinates Analyst, Commentator, and Fact-Checker with OpenTelemetry traces exported to Application Insights (`appi-matchday`).
+2. **Foundry Hosted Agent (`hosted/`)**: An `azd` project in `hosted/` packaging the commentary workflow natively using `ResponsesHostServer` from `agent-framework-foundry-hosting` (Responses protocol v2.0.0, Python 3.13 runtime, remote build from `uv.lock`). Candidate moments are received as JSON and processed through the workflow graph without forking app logic.
+
+### Portal Evidence (T2 Spike)
+The T2 spike (`spikes/hosted/`) was deployed to Microsoft Foundry using `azd deploy` and verified live:
+- Deployed service `t2-spike` in Foundry project `matchday` (`https://matchday-foundry-ok.services.ai.azure.com/api/projects/matchday`).
+- Invoked remotely over the Responses protocol with candidate evidence dicts and `inject-false` test triggers.
+- Verified reject edge loop in the Foundry portal Tracing tab, with spans for `workflow.run`, `executor.process`, `invoke_agent`, and `chat` models.
+- Cold start was ~9 s to response headers and ~29 s end-to-end for a 4-call workflow.
+
+### Deployment Blocker & Status (T10)
+Packaging for the full commentary workflow in `hosted/` is complete and verified by automated tests (`tests/test_hosted.py`). Live remote deployment via `azd deploy` was timeboxed out due to an Azure CLI authentication broker token expiration in non-interactive sessions:
+- `az account get-access-token --resource https://management.azure.com` returned:
+  ```
+  ERROR: The server or proxy was not found.. Status: Response_Status.Status_NoNetwork, Error code: 3399942148, Tag: 557973641
+  Run the command below to authenticate interactively:
+  az logout
+  az login --tenant "09c5e5e8-d9dd-4923-bbf2-9749f2e8082c" --scope "https://management.azure.com/.default"
+  ```
+- Because non-interactive agent sessions cannot open an interactive browser for tenant MFA authentication, `azd deploy` cannot refresh management tokens automatically.
+- Per the T10 prompt instructions, this timeboxed blocker is documented here, with the T2 spike serving as the portal evidence for hosted agent capability.
+
+To deploy `hosted/` when interactively logged into Azure:
+```powershell
+az login --tenant "09c5e5e8-d9dd-4923-bbf2-9749f2e8082c"
+cd hosted
+azd deploy
+```
+
 

@@ -90,6 +90,9 @@ def test_verified_lines_are_spoken_verbatim_and_audited() -> None:
     assert {lang for _, lang in speaker.spoken} == {"en"}
     speaking = [m["text"] for m in messages if m["type"] == "speaking"]
     assert speaking == [text for text, _ in speaker.spoken]
+    recap_spoken = [m for m in spoken if m.get("audit", {}).get("moment_id") == "recap"]
+    assert len(recap_spoken) == 1, "full-time recap must be spoken and audited"
+    assert "Full time" in recap_spoken[0]["audit"]["approved_text"]
     assert metrics["speech_checks"] == len(spoken) and metrics.get("speech_mismatches", 0) == 0
     assert speaker.closed
     assert messages[-1]["type"] == "match_end", "the socket stays open after the match for questions"

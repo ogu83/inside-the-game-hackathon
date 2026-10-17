@@ -271,3 +271,89 @@ async def test_qa_endpoint_answers_text_first(client: httpx.AsyncClient) -> None
     assert state["qa_answer_p50_ms"] >= 0 and "qa_speech_p50_ms" not in state, "text-only questions are never spoken"
     assert (await client.post("/api/qa", json={"transcript": "x", "profile_key": "bad"})).status_code == 422
     assert (await client.get("/api/match/audits")).json() == {"audits": [], "exact": 0}
+
+
+async def test_timelines_returns_only_moments_on_air_at_playback_time() -> None:
+    events = simulate(seed=7)
+    moments = detect_all(events)
+    assert len(moments) >= 5
+    run = MatchRun(seed=7, speed=100.0, delay_s=10.0, minutes=90, precompute=True)
+    await run.start()
+
+    early_timelines = run.timelines(playback_t=100.0)
+    early_ids = {t["moment_id"] for t in early_timelines}
+
+    for m in moments:
+        m_closing_t = events[m.window[1] - 1].t
+        if m_closing_t > 100.0:
+            assert m.moment_id not in early_ids
+        else:
+            assert m.moment_id in early_ids
+
+    full_timelines = run.timelines(playback_t=6000.0)
+    assert len(full_timelines) == len(run.processed)
+
+    run.finished.set()
+    finished_timelines = run.timelines()
+    assert len(finished_timelines) == len(run.processed)
+    await run.stop()
+
+
+async def test_start_match_with_plant_forbidden_without_env_flag(client: httpx.AsyncClient, monkeypatch) -> None:
+    monkeypatch.delenv("DEMO_PLANT", raising=False)
+    health = (await client.get("/api/health")).json()
+    assert health["demo_plant"] is False
+    res = await client.post("/api/match/start", json={"seed": 30, "speed": FAST, "plant": 1})
+    assert res.status_code == 403
+    assert "Planted-claim demo disabled" in res.json()["detail"]
+
+
+async def test_planted_demo_moment_rejected_and_never_aired(client: httpx.AsyncClient, monkeypatch) -> None:
+    monkeypatch.setenv("DEMO_PLANT", "1")
+    health = (await client.get("/api/health")).json()
+    assert health["demo_plant"] is True
+
+    res = await client.post("/api/match/start", json={"seed": 30, "speed": FAST, "delay_s": 5, "minutes": 20, "plant": 1})
+    assert res.status_code == 200
+
+    cues = await read_sse(client, "/api/stream/cues")
+    aired_moment_ids = {data["cue"]["moment_id"] for event, data in cues if event == "cue" and "cue" in data}
+    assert "kby-iva-30-31-pass_streak" not in aired_moment_ids
+
+    moments_resp = await client.get("/api/match/moments")
+    moments_data = moments_resp.json()
+    planted_timeline = next((m for m in moments_data["moments"] if m["moment_id"] == "kby-iva-30-31-pass_streak"), None)
+    assert planted_timeline is not None
+    assert planted_timeline["verdict"]["status"] == "rejected"
+    assert planted_timeline["cue"] is None
+    assert planted_timeline["displayed"] == "rejected"
+    assert any("6 shots does not match the cited shots value (away_shots_last_10min = 0)" in r for r in planted_timeline["verdict"]["reasons"])
+    assert any("Ironvale have had 6 shots." in a["claim"] for a in planted_timeline["attempts"])
+
+
+async def test_recap_delivered_via_sse_and_get_endpoint(client: httpx.AsyncClient) -> None:
+    res = await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "delay_s": 5, "minutes": 4})
+    assert res.status_code == 200
+
+    profile_en = "-|-|casual|en"
+    fan_events = await read_sse(client, f"/api/stream/fan?profile={profile_en}")
+    recaps = [data for event, data in fan_events if event == "recap"]
+    assert len(recaps) == 1, "recap SSE event must arrive exactly once at full time"
+    recap_data = recaps[0]
+    assert recap_data["ok"] is True
+    assert recap_data["profile_key"] == profile_en
+    assert "Full time" in recap_data["text"]
+
+    recap_resp = await client.get(f"/api/match/recap?profile={profile_en}")
+    assert recap_resp.status_code == 200
+    recap_json = recap_resp.json()
+    assert recap_json["text"] == recap_data["text"]
+
+    profile_tr = "kby|-|analyst|tr"
+    recap_tr_resp = await client.get(f"/api/match/recap?profile={profile_tr}")
+    assert recap_tr_resp.status_code == 200
+    recap_tr = recap_tr_resp.json()
+    assert recap_tr["ok"] is True
+    assert "Maç sonu" in recap_tr["text"]
+
+
