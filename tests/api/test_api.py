@@ -270,9 +270,48 @@ async def test_live_run_limit_falls_back_to_offline_mode(client: httpx.AsyncClie
     assert first["agent_mode"] == "foundry" and first["live_runs_remaining"] == 0 and first["fallback_reason"] is None
     second = (await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "minutes": 4}, headers={"x-forwarded-for": "203.0.113.5"})).json()
     assert second["agent_mode"] == "template" and "limit reached" in second["fallback_reason"]
+    # A forged first entry with the same real ingress address is still blocked
+    forged = (await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "minutes": 4}, headers={"x-forwarded-for": "9.9.9.9, 203.0.113.5"})).json()
+    assert forged["agent_mode"] == "template" and "limit reached" in forged["fallback_reason"]
     other = (await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "minutes": 4}, headers={"x-forwarded-for": "203.0.113.9"})).json()
     assert other["agent_mode"] == "foundry"
     assert RunLimiter(per_day=0).allow("anyone") and RunLimiter(per_day=0).remaining("anyone") is None
+
+
+def test_visitor_id_uses_last_forwarded_entry_and_prevents_forgery() -> None:
+    from starlette.requests import Request
+    from app.api.main import visitor_id
+
+    def make_req(forwarded: str | None = None, client_host: str = "127.0.0.1") -> Request:
+        headers = []
+        if forwarded is not None:
+            headers.append((b"x-forwarded-for", forwarded.encode("latin-1")))
+        scope = {
+            "type": "http",
+            "headers": headers,
+            "client": (client_host, 12345),
+        }
+        return Request(scope)
+
+    # Forged first entry does not change visitor
+    req1 = make_req(forwarded="1.1.1.1, 203.0.113.5")
+    req2 = make_req(forwarded="2.2.2.2, 203.0.113.5")
+    assert visitor_id(req1) == "203.0.113.5"
+    assert visitor_id(req2) == "203.0.113.5"
+    assert visitor_id(req1) == visitor_id(req2)
+
+    # Two different real addresses are two visitors
+    req3 = make_req(forwarded="1.1.1.1, 203.0.113.6")
+    assert visitor_id(req3) == "203.0.113.6"
+    assert visitor_id(req1) != visitor_id(req3)
+
+    # Single entry
+    req4 = make_req(forwarded="203.0.113.7")
+    assert visitor_id(req4) == "203.0.113.7"
+
+    # Fallback to connecting address if header absent
+    req5 = make_req(forwarded=None, client_host="10.0.0.1")
+    assert visitor_id(req5) == "10.0.0.1"
 
 
 async def test_qa_endpoint_answers_text_first(client: httpx.AsyncClient) -> None:
