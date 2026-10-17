@@ -42,13 +42,17 @@ async def _feed(run: MatchRun, fan: FanProfile, waiting: asyncio.Queue, ws: WebS
     if latest is not None:
         waiting.put_nowait({**run.narrative_payload(latest, replay=True)})
     async for item in run.broadcast.drain(channel, queue):
+        if item["event"] == "recap":
+            data = json.loads(item["data"])
+            waiting.put_nowait({**data, "recap": True})
+            continue
         if item["event"] != "narrative":
             continue
         narrative = json.loads(item["data"])
         while not waiting.empty():
             stale = waiting.get_nowait()
-            if isinstance(stale, Answer):
-                waiting.put_nowait(stale)  # an answer is never stale
+            if isinstance(stale, Answer) or (isinstance(stale, dict) and stale.get("recap")):
+                waiting.put_nowait(stale)  # an answer or recap is never stale
                 break
             run.metrics["speech_skipped_stale"] += 1
             await ws.send_json({"type": "skipped", "moment_id": stale["moment_id"], "reason": "newer line waiting"})
@@ -69,6 +73,9 @@ async def _speak_loop(run: MatchRun, speaker: Speaker, fan: FanProfile, waiting:
                 item.timing.speech_started_at = time.time()
                 run.record_timing(item.timing)
             await ws.send_json({"type": "speaking", "question_id": question_id, "text": text, "lang": lang, "timing": item.timing.summary() if item.timing else None})
+        elif isinstance(item, dict) and item.get("recap"):
+            text, cited, moment_id, question_id = item["text"], item.get("evidence", {}), "recap", None
+            await ws.send_json({"type": "speaking", "moment_id": "recap", "text": text, "replay": False, "lang": lang})
         else:
             processed = run.processed[item["moment_id"]]
             cited, _ = cited_evidence(processed.result.verdict.insight, processed.moment)
@@ -111,7 +118,7 @@ async def _ask(run: MatchRun, ws: WebSocket, fan: FanProfile, transcript: str, w
     await _barge_in(run, ws, speaker, state, interrupting)
     while not waiting.empty():
         stale = waiting.get_nowait()
-        if isinstance(stale, Answer):
+        if isinstance(stale, Answer) or (isinstance(stale, dict) and stale.get("recap")):
             waiting.put_nowait(stale)
             break
         run.metrics["speech_skipped_stale"] += 1
@@ -135,7 +142,7 @@ async def _nothing_heard(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting:
     await ws.send_json({"type": "question", "question": None, "reason": text})
     while not waiting.empty():
         stale = waiting.get_nowait()
-        if isinstance(stale, Answer):
+        if isinstance(stale, Answer) or (isinstance(stale, dict) and stale.get("recap")):
             waiting.put_nowait(stale)
             break
         run.metrics["speech_skipped_stale"] += 1

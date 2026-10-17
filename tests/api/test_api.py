@@ -330,3 +330,30 @@ async def test_planted_demo_moment_rejected_and_never_aired(client: httpx.AsyncC
     assert any("6 shots does not match the cited shots value (away_shots_last_10min = 0)" in r for r in planted_timeline["verdict"]["reasons"])
     assert any("Ironvale have had 6 shots." in a["claim"] for a in planted_timeline["attempts"])
 
+
+async def test_recap_delivered_via_sse_and_get_endpoint(client: httpx.AsyncClient) -> None:
+    res = await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "delay_s": 5, "minutes": 4})
+    assert res.status_code == 200
+
+    profile_en = "-|-|casual|en"
+    fan_events = await read_sse(client, f"/api/stream/fan?profile={profile_en}")
+    recaps = [data for event, data in fan_events if event == "recap"]
+    assert len(recaps) == 1, "recap SSE event must arrive exactly once at full time"
+    recap_data = recaps[0]
+    assert recap_data["ok"] is True
+    assert recap_data["profile_key"] == profile_en
+    assert "Full time" in recap_data["text"]
+
+    recap_resp = await client.get(f"/api/match/recap?profile={profile_en}")
+    assert recap_resp.status_code == 200
+    recap_json = recap_resp.json()
+    assert recap_json["text"] == recap_data["text"]
+
+    profile_tr = "kby|-|analyst|tr"
+    recap_tr_resp = await client.get(f"/api/match/recap?profile={profile_tr}")
+    assert recap_tr_resp.status_code == 200
+    recap_tr = recap_tr_resp.json()
+    assert recap_tr["ok"] is True
+    assert "Maç sonu" in recap_tr["text"]
+
+

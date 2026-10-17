@@ -622,6 +622,10 @@ section h2 { font-size: 16px; color: var(--muted); margin: 0 0 10px; text-transf
 .narrative.replay {
   border-left: 3px solid var(--info);
 }
+.narrative.full-time-card {
+  border-left: 3px solid var(--verified);
+  background: var(--panel);
+}
 .speaking { color: var(--kby); font-size: 13px; margin-bottom: 8px; min-height: 18px; }
 .ask { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .ptt-row { display: flex; gap: 10px; align-items: center; }

@@ -169,3 +169,10 @@ class SpeechAudit(BaseModel):
     ok: bool
     mismatches: list[str]
     interrupted: bool = False      # the fan barged in; a cut-off transcript is expected and not counted as a mismatch
+
+
+class FullTimeRecap(BaseModel):
+    profile_key: str
+    text: str
+    evidence: dict[str, float] = Field(default_factory=dict)
+    ok: bool = True

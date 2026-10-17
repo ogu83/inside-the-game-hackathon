@@ -29,6 +29,7 @@ from app.api.sessions import (
 from app.ledger.mcp_server import LedgerTools, build_mcp_server
 from app.observability import flush_tracing, init_observability
 from app.voice.qa import QaPipeline, RuleQaAgent, new_question
+from app.agents.recap import TemplateRecapWriter, recap_writer_from_env
 from app.api.streams import MatchRun, producer_from_env, template_producer, template_workflow, workflow_factory_from_env
 from app.api.voice_ws import router as voice_router
 from app.simulator.league import CLUBS
@@ -97,6 +98,8 @@ async def lifespan(app: FastAPI):
     app.state.workflow_factory = getattr(app.state, "workflow_factory", None) or workflow_factory_from_env()
     if not hasattr(app.state, "producer") or app.state.producer is None:
         app.state.producer = producer_from_env()
+    if not hasattr(app.state, "recap_writer") or app.state.recap_writer is None:
+        app.state.recap_writer = recap_writer_from_env()
     if not hasattr(app.state, "limiter") or app.state.limiter is None:
         app.state.limiter = RunLimiter(live_runs_per_day())
     if not hasattr(app.state, "speaker_factory"):
@@ -284,16 +287,21 @@ async def start_match(request: StartRequest, http: Request) -> dict:
     session_id = get_session_id(http)
     mode, fallback_reason = agent_mode(), None
     workflow_factory, producer = app.state.workflow_factory, app.state.producer
+    recap_writer = getattr(app.state, "recap_writer", None) or recap_writer_from_env()
     if mode == "foundry" and not app.state.limiter.allow(visitor_id(http)):
         mode, fallback_reason = "template", f"live-run limit reached ({app.state.limiter.per_day} per visitor per day); continuing with offline agents"
         workflow_factory, producer = template_workflow, template_producer()
+        recap_writer = TemplateRecapWriter()
+    elif mode != "foundry":
+        recap_writer = TemplateRecapWriter()
     run = await app.state.registry.start_run(
         session_id,
         lambda: MatchRun(
             seed=request.seed, speed=request.speed, delay_s=request.delay_s if request.delay_s is not None else default_delay(),
             minutes=request.minutes, precompute=request.precompute, home=request.home, away=request.away,
             plant=request.plant,
-            workflow_factory=workflow_factory, producer=producer, agent_mode=mode, fallback_reason=fallback_reason,
+            workflow_factory=workflow_factory, producer=producer, recap_writer=recap_writer,
+            agent_mode=mode, fallback_reason=fallback_reason,
         ),
     )
     app.state.run = run
@@ -435,10 +443,22 @@ async def stream_fan(profile: str, http: Request) -> EventSourceResponse:
         latest = await run.render_latest(fan)
         if latest is not None:
             yield {"event": "narrative", "data": json.dumps(run.narrative_payload(latest, replay=True), ensure_ascii=False)}
+        if run.finished.is_set() and fan.key() in run.recaps:
+            yield {"event": "recap", "data": json.dumps(run.recaps[fan.key()].model_dump(), ensure_ascii=False)}
         async for item in run.broadcast.drain(channel, queue):
             yield item
 
     return EventSourceResponse(stream())
+
+
+@app.get("/api/match/recap")
+async def match_recap(profile: str, http: Request) -> dict:
+    run = get_run(http)
+    if run is None:
+        raise HTTPException(status_code=404, detail="no match running; POST /api/match/start first")
+    fan = parse_profile_key(profile)
+    recap = await run.render_recap(fan)
+    return recap.model_dump()
 
 
 @app.get("/")

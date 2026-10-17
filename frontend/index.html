@@ -360,6 +360,13 @@
         </article>
       </div>
       <div class="narrative-feed" role="feed" aria-label="Fan commentary feed">
+        <article class="narrative full-time-card" v-if="recap">
+          <div class="meta">
+            <span class="narrative-time">Full time</span>
+            <span class="replay-badge" style="background: rgba(61, 214, 140, 0.15); color: var(--verified)">Recap tailored to your profile</span>
+          </div>
+          <div class="text">{{ recap.text }}</div>
+        </article>
         <article v-for="n in narratives" :key="n.key" :class="['narrative', n.replay ? 'replay' : '']">
           <div class="meta">
             <span class="narrative-time">{{ n.time }}</span>
@@ -367,7 +374,7 @@
           </div>
           <div class="text">{{ n.text }}</div>
         </article>
-        <div v-if="!narratives.length" class="empty">Pick your club, player, depth and language, then follow. The latest moment is re-rendered for you at once.</div>
+        <div v-if="!narratives.length && !recap" class="empty">Pick your club, player, depth and language, then follow. The latest moment is re-rendered for you at once.</div>
       </div>
     </section>
   </main>
@@ -596,7 +603,7 @@ createApp({
     const state = reactive({
       form: { seed: 30, speed: 1, delay_s: 20, plant: 0 }, starting: false, running: false, clock: null, mode: null, agentMode: null, fallbackReason: null, busyMessage: '',
       teams: { home: 'Home', away: 'Away', homeId: 'kby' }, score: { home: 0, away: 0 }, league: { clubs: [] }, playerNames: {},
-      ticker: [], ball: null, trail: [], banner: null, narratives: [], metrics: null, timeline: [], drawerOpen: false, filter: 'all', selectedMomentId: null,
+      ticker: [], ball: null, trail: [], banner: null, narratives: [], recap: null, metrics: null, timeline: [], drawerOpen: false, filter: 'all', selectedMomentId: null,
       profile: { club_id: null, player_id: null, depth: 'casual', language: 'en' }, profileKey: null,
       askText: '', talking: false, transcribing: false, transcribingTranscript: '', answering: false, notHeard: false, notHeardReason: '',
       qa: [], micReady: false, interruptedLines: 0,
@@ -949,7 +956,7 @@ createApp({
     };
     const start = async () => {
       state.starting = true; closeSources();
-      state.ticker = []; state.ball = null; state.trail = []; state.banner = null; state.narratives = []; state.metrics = null; state.timeline = []; state.qa = [];
+      state.ticker = []; state.ball = null; state.trail = []; state.banner = null; state.narratives = []; state.recap = null; state.metrics = null; state.timeline = []; state.qa = [];
       state.score = { home: 0, away: 0 };
       state.speechChecks = 0; state.speechMismatches = 0; state.profileKey = null;
       if (!state.league.clubs.length) await loadLeague();
@@ -985,12 +992,15 @@ createApp({
       if (!state.running) return;
       const key = profileKeyOf(state.profile);
       if (state.fanSource) { state.fanSource.close(); state.fanSource = null; }
-      state.narratives = []; state.profileKey = key;
+      state.narratives = []; state.recap = null; state.profileKey = key;
       const es = new EventSource(`/api/stream/fan?profile=${encodeURIComponent(key)}`);
       es.addEventListener('narrative', e => {
         const n = JSON.parse(e.data);
         state.narratives.unshift({ key: n.moment_id + n.profile_key + (n.replay ? 'r' : ''), text: n.text, replay: n.replay, time: `${pad(n.minute)}:${pad(n.second)}` });
         state.narratives.splice(12);
+      });
+      es.addEventListener('recap', e => {
+        state.recap = JSON.parse(e.data);
       });
       es.addEventListener('match_end', () => es.close());
       state.fanSource = es;

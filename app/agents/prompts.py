@@ -131,3 +131,34 @@ def narrative_prompt(insight: Insight, moment: CandidateMoment, labels: dict[str
     if feedback:
         lines.append(f"Your previous rendering failed the number check: {feedback}. Fix it.")
     return "\n".join(lines)
+
+
+RECAP_INSTRUCTIONS = (
+    "You are an expert post-match analyst writing a full-time match recap tailored to a fan's profile. "
+    "Every number you write must come directly from the cited evidence. Use digits only for all numbers "
+    "(in Turkish use %62 or %68,5 forms). Never invent numbers or write number words (e.g. use '6' not 'six'). "
+    "Keep to the fan's chosen language and depth."
+)
+
+
+def recap_prompt(evidence: dict[str, float], labels: dict[str, str], profile: FanProfile, feedback: list[str]) -> str:
+    language = "English" if profile.language == "en" else "Turkish"
+    depth = (
+        "one or two engaging sentences summarizing the final score, possession share and shots for a casual fan"
+        if profile.depth == "casual"
+        else "a detailed analytical breakdown summarizing the final score, possession, shot totals and match context for an analyst"
+    )
+    focus = []
+    if profile.club_id and labels.get("fan_club"):
+        focus.append(f"the fan supports {labels['fan_club']}")
+    if profile.player_id and labels.get("player_name"):
+        focus.append(f"the fan's favourite player is {labels['player_name']} (include their stats from the evidence)")
+    lines = [
+        f"Match: {labels.get('home', 'Home')} vs {labels.get('away', 'Away')}.",
+        f"Full-time ledger evidence: {json.dumps(evidence_for_prompt(evidence))}",
+        f"Write the full-time recap in {language}: {depth}." + (f" Context: {'; '.join(focus)}." if focus else ""),
+        "Numbers as digits only, copied exactly from the evidence. Return only the recap text.",
+    ]
+    if feedback:
+        lines.append(f"Your previous attempt failed the number check: {feedback}. Fix the numbers.")
+    return "\n".join(lines)

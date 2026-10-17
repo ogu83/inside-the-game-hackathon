@@ -25,8 +25,15 @@ from opentelemetry import trace
 from app.agents.analyst import PacingTracker, RuleDirector
 from app.agents.fact_checker import FactChecker
 from app.agents.fakes import AlwaysVerifies, TemplateCommentator, TemplateRenderer
-from app.agents.models import FanNarrative, FanProfile, MomentResult, OverlayCue, QaTiming, SpeechAudit
+from app.agents.models import FanNarrative, FanProfile, FullTimeRecap, MomentResult, NumberCheck, OverlayCue, QaTiming, SpeechAudit
 from app.agents.producer import Producer
+from app.agents.recap import (
+    RecapWriter,
+    TemplateRecapWriter,
+    build_recap_evidence,
+    generate_recap,
+    recap_writer_from_env,
+)
 from app.agents.run_match import close_t
 from app.agents.workflow import build_workflow, run_moment
 from app.api.clock import BroadcastClock
@@ -158,10 +165,13 @@ class MatchRun:
     workflow_factory: WorkflowFactory = template_workflow
     producer: Producer = field(default_factory=lambda: Producer(TemplateRenderer()))
     profiles: list[FanProfile] = field(default_factory=lambda: list(DEFAULT_PROFILES))
+    recap_writer: RecapWriter = field(default_factory=TemplateRecapWriter)
     agent_mode: str = "template"
     fallback_reason: str | None = None
     audits: list[SpeechAudit] = field(default_factory=list, init=False)
     timings: list[QaTiming] = field(default_factory=list, init=False)
+    recaps: dict[str, FullTimeRecap] = field(default_factory=dict, init=False)
+    recap_checks: list[NumberCheck] = field(default_factory=list, init=False)
 
     events: list[MatchEvent] = field(default_factory=list, init=False)
     clock: BroadcastClock | None = field(default=None, init=False)
@@ -234,7 +244,17 @@ class MatchRun:
             self.broadcast.close("match_end", {"metrics": self.report()})
 
     def report(self) -> dict[str, Any]:
-        return {**dict(self.metrics), **self.latency_summary(), "mode": self.mode, "match_id": self.match_id, "agent_mode": self.agent_mode, "fallback_reason": self.fallback_reason}
+        total_cues = self.metrics["cues_shown"] + self.metrics.get("cues_dropped_late", 0)
+        ready_share = 1.0 if total_cues == 0 else self.metrics["cues_shown"] / total_cues
+        return {
+            **dict(self.metrics),
+            **self.latency_summary(),
+            "ready_before_display_share": round(ready_share, 4),
+            "mode": self.mode,
+            "match_id": self.match_id,
+            "agent_mode": self.agent_mode,
+            "fallback_reason": self.fallback_reason,
+        }
 
     def record_timing(self, timing: QaTiming) -> None:
         if timing not in self.timings:
@@ -316,6 +336,7 @@ class MatchRun:
         self.agent_mode, self.fallback_reason = "template", reason
         self.workflow_factory = self._wrap_planting(template_workflow) if self.plant > 0 else template_workflow
         self.producer = Producer(TemplateRenderer(), tamper=self.producer.tamper)
+        self.recap_writer = TemplateRecapWriter()
         data = {"reason": reason}
         self.broadcast.publish("cues", "fallback", data)
         self.broadcast.publish("verdicts", "fallback", data)
@@ -342,6 +363,35 @@ class MatchRun:
             existing = output.narratives[0]
             latest.narratives.append(existing)
         return existing
+
+    async def render_recap(self, profile: FanProfile, moments: list[CandidateMoment] | None = None) -> FullTimeRecap:
+        if profile.key() in self.recaps:
+            return self.recaps[profile.key()]
+        if moments is None:
+            moments = [p.moment for p in self.processed.values() if p.displayed == "shown"]
+        evidence, labels = build_recap_evidence(
+            self.events,
+            moments=moments,
+            home=self.home,
+            away=self.away,
+            profile=profile,
+        )
+        try:
+            recap, checks = await generate_recap(self.recap_writer, evidence, labels, profile)
+        except Exception as exc:
+            self._fall_back(f"recap error: {type(exc).__name__}")
+            recap, checks = await generate_recap(TemplateRecapWriter(), evidence, labels, profile)
+        self.recaps[profile.key()] = recap
+        self.recap_checks += checks
+        self.metrics["number_checks"] += len(checks)
+        self.metrics["number_checks_failed"] += sum(not c.ok for c in checks)
+        return recap
+
+    async def _deliver_recap(self) -> None:
+        moments = [p.moment for p in self.processed.values() if p.displayed == "shown"]
+        for profile in list(self.profiles):
+            recap = await self.render_recap(profile, moments=moments)
+            self.broadcast.publish(f"fan:{profile.key()}", "recap", recap.model_dump())
 
     def narrative_payload(self, narrative: FanNarrative, replay: bool) -> dict[str, Any]:
         done = self.processed[narrative.moment_id]
@@ -437,6 +487,7 @@ class MatchRun:
                 self.broadcast.publish("events", "event", self._event_payload(event))
                 for moment in self.pending_by_seq.pop(event.seq, []):
                     await self._show_or_drop(moment, event)
+            await self._deliver_recap()
         finally:
             self._finish()
 
