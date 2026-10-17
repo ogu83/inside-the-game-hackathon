@@ -160,8 +160,11 @@
           </div>
         </div>
       </div>
-      <div class="ticker">
-        <div v-for="e in ticker" :key="e.seq">{{ e.text }}</div>
+      <div class="ticker" role="region" aria-label="Match ticker">
+        <div class="ticker-card" v-for="e in ticker.slice(0, 3)" :key="e.seq">
+          <span class="ticker-time">{{ pad(e.minute) }}:{{ pad(e.second) }}</span>
+          <span class="ticker-text">{{ e.text }}</span>
+        </div>
         <div v-if="!ticker.length" class="empty">Start a match to see the feed. Seed 30 is the demo seed.</div>
       </div>
     </section>
@@ -319,12 +322,16 @@
           </div>
         </article>
       </div>
-      <div class="speaking" v-if="voice && speaking">speaking: {{ speaking }}</div>
-      <div v-for="n in narratives" :key="n.key" :class="['narrative', n.replay ? 'replay' : '']">
-        <div class="meta"><span>{{ n.time }}</span><span v-if="n.replay">latest moment, re-rendered for this profile</span></div>
-        <div class="text">{{ n.text }}</div>
+      <div class="narrative-feed" role="feed" aria-label="Fan commentary feed">
+        <article v-for="n in narratives" :key="n.key" :class="['narrative', n.replay ? 'replay' : '']">
+          <div class="meta">
+            <span class="narrative-time">{{ n.time }}</span>
+            <span class="replay-badge" v-if="n.replay">Re-rendered for your profile</span>
+          </div>
+          <div class="text">{{ n.text }}</div>
+        </article>
+        <div v-if="!narratives.length" class="empty">Pick your club, player, depth and language, then follow. The latest moment is re-rendered for you at once.</div>
       </div>
-      <div v-if="!narratives.length" class="empty">Pick your club, player, depth and language, then follow. The latest moment is re-rendered for you at once.</div>
     </section>
   </main>
   <!-- Agent Timeline Drawer -->

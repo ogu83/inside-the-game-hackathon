@@ -402,8 +402,47 @@ section h2 { font-size: 16px; color: var(--muted); margin: 0 0 10px; text-transf
   color: var(--muted);
   margin-top: 4px;
 }
-.ticker { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; color: #c8d0da; margin-top: 10px; max-height: 120px; overflow: hidden; }
-.ticker div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ticker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.ticker-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: 'Barlow', sans-serif;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.35;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  overflow: hidden;
+}
+.ticker-time {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--clock);
+  flex: 0 0 auto;
+}
+.ticker-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ticker .empty {
+  grid-column: 1 / -1;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
 .profile {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -541,10 +580,45 @@ section h2 { font-size: 16px; color: var(--muted); margin: 0 0 10px; text-transf
   padding: 4px 12px;
   width: fit-content;
 }
-.narrative { background: var(--panel2); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
-.narrative .meta { font-size: 11px; color: var(--muted); display: flex; gap: 8px; }
-.narrative .text { margin-top: 3px; font-size: 15px; line-height: 1.35; }
-.narrative.replay { border: 1px dashed var(--info); }
+.narrative {
+  background: var(--chrome);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.narrative .meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.narrative .narrative-time {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--clock);
+}
+.narrative .replay-badge {
+  font-size: 11px;
+  color: var(--info);
+  background: rgba(122, 180, 255, 0.12);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.narrative .text {
+  font-family: 'Barlow', sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.narrative.replay {
+  border-left: 3px solid var(--info);
+}
 .speaking { color: var(--kby); font-size: 13px; margin-bottom: 8px; min-height: 18px; }
 .ask { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .ptt-row { display: flex; gap: 10px; align-items: center; }
