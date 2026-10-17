@@ -12,6 +12,7 @@ Rendering corruptions (applied through the Producer's tamper hook, before the pr
 
 import random
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -145,7 +146,7 @@ class PlantingCommentator:
         return corrupted
 
 
-def make_tamper(plan: PlantPlan, seed: int = 0, log: list[tuple[str, str, str]] | None = None):
+def make_tamper(plan: PlantPlan, seed: int = 0, log: list[tuple[str, str, str]] | None = None) -> Callable[[str, str, str, str], str]:
     """A Producer tamper hook that corrupts every rendering of the planned moments."""
     rng = random.Random(seed)
 

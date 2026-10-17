@@ -32,7 +32,6 @@ from app.agents.recap import (
     TemplateRecapWriter,
     build_recap_evidence,
     generate_recap,
-    recap_writer_from_env,
 )
 from app.agents.run_match import close_t
 from app.agents.workflow import build_workflow, run_moment
@@ -201,7 +200,7 @@ class MatchRun:
         all_moments = detect_all(self.events)
         plan = PlantPlan.build_demo(all_moments, n=self.plant, seed=self.seed)
 
-        def planting_factory():
+        def planting_factory() -> Workflow:
             wf = factory()
             if "commentator" in wf.executors:
                 wf.executors["commentator"].writer = PlantingCommentator(
@@ -234,8 +233,10 @@ class MatchRun:
         for task in self._tasks:
             try:
                 await task
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError:
                 pass
+            except Exception as exc:
+                log.debug("error waiting for task on stop: %s", exc)
         self._finish()
 
     def _finish(self) -> None:

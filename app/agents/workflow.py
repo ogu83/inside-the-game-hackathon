@@ -5,7 +5,6 @@ each executor re-validates them into the SPEC models before doing anything with 
 runs first and may end the run with a skip decision (no Commentator call).
 """
 
-import asyncio
 import json
 from typing import Any
 

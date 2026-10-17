@@ -5,8 +5,10 @@ import json
 import os
 import secrets
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
@@ -21,13 +23,13 @@ from app.api.limits import RunLimiter, live_runs_per_day, live_runs_total_per_da
 from app.api.sessions import (
     MatchRegistry,
     SESSION_COOKIE,
-    attach_session_cookie,
     current_session_id,
     get_session_id,
     qa_pipeline_for_run,
 )
 from app.ledger.mcp_server import LedgerTools, build_mcp_server
 from app.observability import flush_tracing, init_observability
+from app.simulator.models import MatchEvent
 from app.voice.qa import QaPipeline, RuleQaAgent, new_question
 from app.agents.recap import TemplateRecapWriter, recap_writer_from_env
 from app.api.streams import MatchRun, producer_from_env, template_producer, template_workflow, workflow_factory_from_env
@@ -67,11 +69,11 @@ class _AppView:
             return self.app.state.registry.latest_run()
         return None
 
-    def events(self):
+    def events(self) -> list[MatchEvent]:
         run = self._get_run()
         return run.displayed_events() if run else []
 
-    def shown_moments(self):
+    def shown_moments(self) -> list[dict[str, Any]]:
         run = self._get_run()
         return run.shown_moments() if run else []
 
@@ -89,7 +91,7 @@ def qa_pipeline_from_env(app: FastAPI) -> QaPipeline:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_observability()
     app.state.registry = MatchRegistry()
     app.state.run = None
@@ -445,7 +447,7 @@ async def stream_fan(profile: str, http: Request) -> EventSourceResponse:
     run.add_profile(fan)
     channel = f"fan:{fan.key()}"
 
-    async def stream():
+    async def stream() -> AsyncIterator[dict[str, Any]]:
         queue = run.broadcast.open(channel)
         latest = await run.render_latest(fan)
         if latest is not None:

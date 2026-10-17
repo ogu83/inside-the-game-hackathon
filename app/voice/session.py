@@ -33,6 +33,7 @@ COMMIT_WAIT_S = 1.5
 SPEAK_IDLE_TIMEOUT_S = 15.0   # no event while speaking: the socket is silent, give up on the line
 TRANSCRIBE_TIMEOUT_S = 20.0   # whole transcription, from the last appended chunk to the transcript
 SESSION_UPDATE_TIMEOUT_S = 6.0
+AUDIO_CHUNK_BYTES = SAMPLE_RATE * 2  # 1.0 s chunk of 24 kHz pcm16 audio (48,000 bytes)
 
 
 class SpeechError(RuntimeError):
@@ -302,8 +303,8 @@ class VoiceLiveSpeaker:
         channel.drain()
         try:
             audio = pcm16 + b"\x00" * int(SAMPLE_RATE * 2 * SILENCE_TAIL_S)  # trailing silence lets the VAD close the turn
-            for offset in range(0, len(audio), 48000):
-                await channel.connection.send({"type": "input_audio_buffer.append", "audio": base64.b64encode(audio[offset:offset + 48000]).decode("ascii")})
+            for offset in range(0, len(audio), AUDIO_CHUNK_BYTES):
+                await channel.connection.send({"type": "input_audio_buffer.append", "audio": base64.b64encode(audio[offset:offset + AUDIO_CHUNK_BYTES]).decode("ascii")})
             committed = False
             loop = asyncio.get_running_loop()
             deadline = loop.time() + TRANSCRIBE_TIMEOUT_S
