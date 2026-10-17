@@ -10,6 +10,7 @@ from typing import Any, Protocol
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from opentelemetry import trace
 
 from app.ledger.metrics import in_window, player_stats, team_stats
 from app.simulator.league import CLUBS, PLAYERS
@@ -28,6 +29,9 @@ class LedgerView(Protocol):
         ...
 
 
+tracer = trace.get_tracer(__name__)
+
+
 class LedgerTools:
     def __init__(self, view: LedgerView) -> None:
         self.view = view
@@ -40,44 +44,49 @@ class LedgerTools:
 
     def score(self) -> dict[str, Any]:
         """Current score and match minute as displayed."""
-        events = self.view.events()
-        if not events:
-            return dict(NO_MATCH)
-        goals = {cid: float(sum(e.type == "goal" and e.team_id == cid for e in events)) for cid in CLUBS}
-        return {"minute": float(events[-1].minute), **{f"{cid}_goals": g for cid, g in goals.items()},
-                "teams": {cid: CLUBS[cid].short for cid in CLUBS}}
+        with tracer.start_as_current_span("mcp.tool score"):
+            events = self.view.events()
+            if not events:
+                return dict(NO_MATCH)
+            goals = {cid: float(sum(e.type == "goal" and e.team_id == cid for e in events)) for cid in CLUBS}
+            return {"minute": float(events[-1].minute), **{f"{cid}_goals": g for cid, g in goals.items()},
+                    "teams": {cid: CLUBS[cid].short for cid in CLUBS}}
 
     def team_stats(self, team_id: str, last_minutes: float | None = None) -> dict[str, Any]:
         """Possession share (pass attempts), pass accuracy, passes, shots, xG, goals, pressures and regains for a club
         (`kby` Kestrel Bay, `iva` Ironvale), over the whole match or the last N displayed minutes."""
-        if team_id not in CLUBS:
-            return {"error": f"unknown team {team_id}; use one of {sorted(CLUBS)}"}
-        events = self._events(last_minutes)
-        if not events:
-            return dict(NO_MATCH)
-        return {"team": CLUBS[team_id].short, "window_minutes": float(last_minutes) if last_minutes else round(events[-1].t / 60, 1), **team_stats(events, team_id)}
+        with tracer.start_as_current_span("mcp.tool team_stats"):
+            if team_id not in CLUBS:
+                return {"error": f"unknown team {team_id}; use one of {sorted(CLUBS)}"}
+            events = self._events(last_minutes)
+            if not events:
+                return dict(NO_MATCH)
+            return {"team": CLUBS[team_id].short, "window_minutes": float(last_minutes) if last_minutes else round(events[-1].t / 60, 1), **team_stats(events, team_id)}
 
     def player_stats(self, player_id: str, last_minutes: float | None = None) -> dict[str, Any]:
         """Passes, pass accuracy, forward progress, shots, goals, pressures, tackles, interceptions and a distance proxy
         for a player id such as `kby-07`, over the whole match or the last N displayed minutes."""
-        if player_id not in PLAYERS:
-            return {"error": f"unknown player {player_id}"}
-        events = self._events(last_minutes)
-        if not events:
-            return dict(NO_MATCH)
-        player = PLAYERS[player_id]
-        return {"player": player.name, "position": player.position, "team": CLUBS[player_id.split("-")[0]].short,
-                "window_minutes": float(last_minutes) if last_minutes else round(events[-1].t / 60, 1), **player_stats(events, player_id)}
+        with tracer.start_as_current_span("mcp.tool player_stats"):
+            if player_id not in PLAYERS:
+                return {"error": f"unknown player {player_id}"}
+            events = self._events(last_minutes)
+            if not events:
+                return dict(NO_MATCH)
+            player = PLAYERS[player_id]
+            return {"player": player.name, "position": player.position, "team": CLUBS[player_id.split("-")[0]].short,
+                    "window_minutes": float(last_minutes) if last_minutes else round(events[-1].t / 60, 1), **player_stats(events, player_id)}
 
     def recent_moments(self, limit: int = 3) -> dict[str, Any]:
         """The most recent verified moments that aired, newest first, each with its claim, why it matters and the
         ledger evidence behind it."""
-        moments = self.view.shown_moments()
-        return {"moments": list(reversed(moments))[: max(1, min(limit, 10))], "count": len(moments)}
+        with tracer.start_as_current_span("mcp.tool recent_moments"):
+            moments = self.view.shown_moments()
+            return {"moments": list(reversed(moments))[: max(1, min(limit, 10))], "count": len(moments)}
 
     def squads(self) -> dict[str, Any]:
         """Club ids and names with their players (id, name, shirt number, position)."""
-        return {cid: {"name": c.name, "players": [{"id": p.id, "name": p.name, "number": p.number, "position": p.position} for p in c.players]} for cid, c in CLUBS.items()}
+        with tracer.start_as_current_span("mcp.tool squads"):
+            return {cid: {"name": c.name, "players": [{"id": p.id, "name": p.name, "number": p.number, "position": p.position} for p in c.players]} for cid, c in CLUBS.items()}
 
 
 TOOL_NAMES = ("score", "team_stats", "player_stats", "recent_moments", "squads")

@@ -21,6 +21,7 @@ from app.agents.producer import FoundryRenderer, Producer
 from app.agents.workflow import build_workflow, run_moment
 from app.ledger.models import CandidateMoment
 from app.ledger.state import detect_all
+from app.observability import flush_tracing, init_observability
 from app.simulator.engine import simulate
 from app.simulator.models import MatchEvent
 
@@ -180,6 +181,9 @@ def summary(results: list[MomentResult]) -> dict[str, int]:
 
 
 async def run(seed: int, live: bool, jsonl: Path | None, limit: int | None) -> list[MomentResult]:
+    from opentelemetry import trace
+
+    tracer = trace.get_tracer("app.agents.run_match")
     events = simulate(seed)
     moments = detect_all(events)[:limit]
     workflow = live_workflow() if live else offline_workflow()
@@ -187,9 +191,23 @@ async def run(seed: int, live: bool, jsonl: Path | None, limit: int | None) -> l
     results = []
     for moment in moments:
         t = close_t(moment, events)
-        result = await run_moment(workflow, moment, pacing=pacing.state_for(moment, t))
-        pacing.record(result.decision, t)
-        results.append(result)
+        with tracer.start_as_current_span(f"moment {moment.moment_id}") as span:
+            span.set_attribute("match.id", f"seed-{seed}")
+            span.set_attribute("moment.id", moment.moment_id)
+            span.set_attribute("moment.kind", moment.kind)
+            span.set_attribute("moment.minute", float(moment.minute))
+            t_start = asyncio.get_running_loop().time()
+            result = await run_moment(workflow, moment, pacing=pacing.state_for(moment, t))
+            pacing.record(result.decision, t)
+            results.append(result)
+            latency_ms = round((asyncio.get_running_loop().time() - t_start) * 1000, 2)
+            span.set_attribute("moment.latency_ms", latency_ms)
+            if result.verdict is None:
+                span.set_attribute("cue.status", "skipped")
+            else:
+                span.set_attribute("cue.status", "aired" if result.verdict.status != "rejected" else "rejected")
+                span.set_attribute("factcheck.layer", result.verdict.layer)
+                span.set_attribute("factcheck.attempts", result.verdict.attempt)
     if jsonl:
         jsonl.parent.mkdir(parents=True, exist_ok=True)
         with jsonl.open("w", encoding="utf-8") as f:
@@ -199,29 +217,33 @@ async def run(seed: int, live: bool, jsonl: Path | None, limit: int | None) -> l
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--live", action="store_true", help="use Foundry agents from .env")
-    parser.add_argument("--jsonl", type=Path, default=None)
-    parser.add_argument("--limit", type=int, default=None, help="only the first N moments")
-    parser.add_argument("--plant", type=int, default=0, help="plant N insight and N rendering errors and report the catches")
-    args = parser.parse_args()
-    if args.plant:
-        results, report = asyncio.run(run_planted(args.seed, args.plant, args.live, limit=args.limit))
+    init_observability()
+    try:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--seed", type=int, default=7)
+        parser.add_argument("--live", action="store_true", help="use Foundry agents from .env")
+        parser.add_argument("--jsonl", type=Path, default=None)
+        parser.add_argument("--limit", type=int, default=None, help="only the first N moments")
+        parser.add_argument("--plant", type=int, default=0, help="plant N insight and N rendering errors and report the catches")
+        args = parser.parse_args()
+        if args.plant:
+            results, report = asyncio.run(run_planted(args.seed, args.plant, args.live, limit=args.limit))
+            print(json.dumps(summary(results)))
+            print(json.dumps(report.as_dict()))
+            print(report.headline())
+            for line in report.reached_air_detail:
+                print("REACHED AIR:", line)
+            return
+        results = asyncio.run(run(args.seed, args.live, args.jsonl, args.limit))
+        for r in results:
+            v = r.verdict
+            if v is None:
+                print(f"skipped   director: {r.decision.reason}")
+                continue
+            print(f"{v.status:9} L{'1' if v.layer == 'code' else '2'} attempt {v.attempt} [{r.decision.angle}]: {(v.insight.claim if v.insight else '')}  {v.reasons if v.reasons else ''}")
         print(json.dumps(summary(results)))
-        print(json.dumps(report.as_dict()))
-        print(report.headline())
-        for line in report.reached_air_detail:
-            print("REACHED AIR:", line)
-        return
-    results = asyncio.run(run(args.seed, args.live, args.jsonl, args.limit))
-    for r in results:
-        v = r.verdict
-        if v is None:
-            print(f"skipped   director: {r.decision.reason}")
-            continue
-        print(f"{v.status:9} L{'1' if v.layer == 'code' else '2'} attempt {v.attempt} [{r.decision.angle}]: {(v.insight.claim if v.insight else '')}  {v.reasons if v.reasons else ''}")
-    print(json.dumps(summary(results)))
+    finally:
+        flush_tracing()
 
 
 if __name__ == "__main__":

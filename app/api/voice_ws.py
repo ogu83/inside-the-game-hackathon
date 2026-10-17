@@ -118,7 +118,7 @@ async def _ask(run: MatchRun, ws: WebSocket, fan: FanProfile, transcript: str, w
     question = new_question(fan.key(), transcript, len(run.displayed_events()))
     await ws.send_json({"type": "question", "question": question.model_dump()})
     qa = qa_pipeline_for_run(run, ws.app)
-    answer = await qa.answer(question, fan)
+    answer = await qa.answer(question, fan, timing=timing)
     timing.answered_at = time.time()
     answer.timing = timing
     run.record_timing(timing)

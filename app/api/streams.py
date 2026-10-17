@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from agent_framework import Workflow
+from opentelemetry import trace
 
 from app.agents.analyst import PacingTracker, RuleDirector
 from app.agents.fact_checker import FactChecker
@@ -335,46 +336,60 @@ class MatchRun:
         self._tasks.append(asyncio.create_task(self._process(moment)))
 
     async def _process(self, moment: CandidateMoment) -> None:
-        labels = moment_labels(moment, (self.home, self.away))
-        t = close_t(moment, self.events)
-        pacing = self._pacing.state_for(moment, t)
-        fallback = False
-        try:
-            result = await run_moment(self.workflow_factory(), moment, labels, pacing)
-        except Exception as exc:  # a Foundry error must not take the broadcast down
-            self._fall_back(f"agent error: {type(exc).__name__}")
-            fallback = True
-            result = await run_moment(self.workflow_factory(), moment, labels, pacing)
-        self._pacing.record(result.decision, t)
-        verdict = result.verdict
-        self.metrics["number_checks"] += len(result.checks)
-        self.metrics["number_checks_failed"] += sum(not c.ok for c in result.checks)
-        cue, narratives = None, []
-        if verdict is None:
-            self.metrics["moments_skipped"] += 1
-            done = Processed(moment, result, None, [], asyncio.get_running_loop().time(), fallback=fallback)
-            self.processed[moment.moment_id] = done
-            self.broadcast.publish("verdicts", "skipped", done.timeline())
-            return
-        self.metrics[f"verdict_{verdict.status}"] += 1
-        producer_checks, dropped = [], []
-        if verdict.status != "rejected" and verdict.insight is not None:
+        tracer = trace.get_tracer("app.api.streams")
+        with tracer.start_as_current_span(f"moment {moment.moment_id}") as span:
+            span.set_attribute("match.id", self.match_id)
+            span.set_attribute("moment.id", moment.moment_id)
+            span.set_attribute("moment.kind", moment.kind)
+            span.set_attribute("moment.minute", float(moment.minute))
+            t_start = asyncio.get_running_loop().time()
+            labels = moment_labels(moment, (self.home, self.away))
+            t = close_t(moment, self.events)
+            pacing = self._pacing.state_for(moment, t)
+            fallback = False
             try:
-                output = await self.producer.render(verdict.insight, moment, labels, list(self.profiles))
-            except Exception as exc:
-                self._fall_back(f"producer error: {type(exc).__name__}")
+                result = await run_moment(self.workflow_factory(), moment, labels, pacing)
+            except Exception as exc:  # a Foundry error must not take the broadcast down
+                self._fall_back(f"agent error: {type(exc).__name__}")
                 fallback = True
-                output = await self.producer.render(verdict.insight, moment, labels, list(self.profiles))
-            cue, narratives, producer_checks, dropped = output.cue, output.narratives, output.checks, output.dropped_profiles
-            self.metrics["number_checks"] += len(output.checks)
-            self.metrics["number_checks_failed"] += sum(not c.ok for c in output.checks)
-            self.metrics["narratives_dropped"] += len(output.dropped_profiles)
-            self.metrics["producer_regenerated"] += output.regenerated
-        done = Processed(moment, result, cue, narratives, asyncio.get_running_loop().time(), producer_checks, dropped, fallback=fallback)
-        if moment.moment_id in self._late:
-            done.displayed = "late"
-        self.processed[moment.moment_id] = done
-        self.broadcast.publish("verdicts", "verdict", done.timeline())
+                result = await run_moment(self.workflow_factory(), moment, labels, pacing)
+            self._pacing.record(result.decision, t)
+            verdict = result.verdict
+            self.metrics["number_checks"] += len(result.checks)
+            self.metrics["number_checks_failed"] += sum(not c.ok for c in result.checks)
+            cue, narratives = None, []
+            latency_ms = round((asyncio.get_running_loop().time() - t_start) * 1000, 2)
+            span.set_attribute("moment.latency_ms", latency_ms)
+            if verdict is None:
+                span.set_attribute("cue.status", "skipped")
+                self.metrics["moments_skipped"] += 1
+                done = Processed(moment, result, None, [], asyncio.get_running_loop().time(), fallback=fallback)
+                self.processed[moment.moment_id] = done
+                self.broadcast.publish("verdicts", "skipped", done.timeline())
+                return
+            span.set_attribute("factcheck.layer", verdict.layer)
+            span.set_attribute("factcheck.attempts", verdict.attempt)
+            self.metrics[f"verdict_{verdict.status}"] += 1
+            producer_checks, dropped = [], []
+            if verdict.status != "rejected" and verdict.insight is not None:
+                try:
+                    output = await self.producer.render(verdict.insight, moment, labels, list(self.profiles))
+                except Exception as exc:
+                    self._fall_back(f"producer error: {type(exc).__name__}")
+                    fallback = True
+                    output = await self.producer.render(verdict.insight, moment, labels, list(self.profiles))
+                cue, narratives, producer_checks, dropped = output.cue, output.narratives, output.checks, output.dropped_profiles
+                self.metrics["number_checks"] += len(output.checks)
+                self.metrics["number_checks_failed"] += sum(not c.ok for c in output.checks)
+                self.metrics["narratives_dropped"] += len(output.dropped_profiles)
+                self.metrics["producer_regenerated"] += output.regenerated
+            cue_status = "aired" if cue is not None else ("rejected" if verdict.status == "rejected" else "rejected")
+            span.set_attribute("cue.status", cue_status)
+            done = Processed(moment, result, cue, narratives, asyncio.get_running_loop().time(), producer_checks, dropped, fallback=fallback)
+            if moment.moment_id in self._late:
+                done.displayed = "late"
+            self.processed[moment.moment_id] = done
+            self.broadcast.publish("verdicts", "verdict", done.timeline())
 
     async def _display_loop(self) -> None:
         assert self.clock is not None

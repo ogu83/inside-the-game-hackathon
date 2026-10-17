@@ -27,6 +27,7 @@ from app.api.sessions import (
     qa_pipeline_for_run,
 )
 from app.ledger.mcp_server import LedgerTools, build_mcp_server
+from app.observability import flush_tracing, init_observability
 from app.voice.qa import QaPipeline, RuleQaAgent, new_question
 from app.api.streams import MatchRun, producer_from_env, template_producer, template_workflow, workflow_factory_from_env
 from app.api.voice_ws import router as voice_router
@@ -87,6 +88,7 @@ def qa_pipeline_from_env(app: FastAPI) -> QaPipeline:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_observability()
     app.state.registry = MatchRegistry()
     app.state.run = None
     if not getattr(app.state, "qa", None):
@@ -123,6 +125,7 @@ async def lifespan(app: FastAPI):
             await app.state.run.stop()
         stop.set()
         await mcp_task
+        flush_tracing()
 
 
 app = FastAPI(title="Matchday Companion", lifespan=lifespan)
@@ -340,7 +343,7 @@ async def ask(request: AskRequest, http: Request) -> dict:
     question = new_question(profile.key(), request.transcript, seq)
     timing = QaTiming(pressed_at=time.time())
     qa = qa_pipeline_for_run(run, app)
-    answer = await qa.answer(question, profile)
+    answer = await qa.answer(question, profile, timing=timing)
     timing.answered_at = time.time()
     answer.timing = timing
     run.record_timing(timing)
