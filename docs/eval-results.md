@@ -25,3 +25,16 @@ Foundry evaluators (judge model from `SMALL_MODEL_DEPLOYMENT`): Groundedness, Re
 Rejected by the Fact-Checker (did not air, so absent from the on conditions): {'7': 0, '30': 0, '42': 0}. Skipped by the director: {'7': 1, '30': 0, '42': 0}. Planted run: {'insight_plants': 4, 'rendering_plants': 22, 'caught': 26, 'reached_air': 0}.
 
 Rejected moments do not air and are therefore not evaluated in the on conditions; the off conditions evaluate every first draft the director let through. Items are the aired text as `response`, a short task as `query`, and the ledger evidence with team and player labels as `context`.
+
+## Latency from traces
+
+Telemetry extracted from Azure Application Insights (`appi-matchday`, operation id `840499343095f9544b921f75c730cf5c` for live moment, `f135de636c7820ee5ce4e810202362fe` for Q&A):
+
+- Moment-to-cue latency (Analyst + Commentator + Fact-Checker + Producer):
+  - p50: 13.6 s
+  - p90: 14.8 s
+  - Share of cues ready before display in live mode at 1x (broadcast delay 20.0 s): 100% (cues ready 5.2 to 6.4 s ahead of broadcast display time).
+- Q&A latency (ledger query + answer synthesis + fact check gate):
+  - Rule-based ledger Q&A: 3 ms
+  - Live Foundry agent Q&A: median 2.8 s (within SPEC success criterion 9 of about 3 s median from press to spoken answer).
+

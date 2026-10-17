@@ -19,6 +19,7 @@ from app.agents.models import FanProfile, MomentResult
 from app.agents.planted_errors import PlantedReport, PlantingCommentator, PlantPlan, make_tamper, report_insights
 from app.agents.producer import FoundryRenderer, Producer
 from app.agents.workflow import build_workflow, run_moment
+from app.ledger.labels import moment_labels
 from app.ledger.models import CandidateMoment
 from app.ledger.state import detect_all
 from app.observability import flush_tracing, init_observability
@@ -189,6 +190,7 @@ async def run(seed: int, live: bool, jsonl: Path | None, limit: int | None) -> l
     workflow = live_workflow() if live else offline_workflow()
     pacing = PacingTracker()
     results = []
+    producer = live_producer() if live else offline_producer()
     for moment in moments:
         t = close_t(moment, events)
         with tracer.start_as_current_span(f"moment {moment.moment_id}") as span:
@@ -208,6 +210,9 @@ async def run(seed: int, live: bool, jsonl: Path | None, limit: int | None) -> l
                 span.set_attribute("cue.status", "aired" if result.verdict.status != "rejected" else "rejected")
                 span.set_attribute("factcheck.layer", result.verdict.layer)
                 span.set_attribute("factcheck.attempts", result.verdict.attempt)
+                if result.verdict.status != "rejected" and result.verdict.insight:
+                    labels = moment_labels(moment, ("kby", "iva"))
+                    await producer.render(result.verdict.insight, moment, labels, [FanProfile()])
     if jsonl:
         jsonl.parent.mkdir(parents=True, exist_ok=True)
         with jsonl.open("w", encoding="utf-8") as f:
