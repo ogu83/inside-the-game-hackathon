@@ -38,6 +38,10 @@ def test_page_has_the_t12_panels_and_keeps_the_voice_controls() -> None:
     assert "current-qa" in HTML, "answer card has current-qa article"
     assert "timing-bar" in HTML, "answer card has timing-bar element"
     assert "Spoken verbatim" in HTML, "answer card has Spoken verbatim chip"
+    assert "drawer-panel" in HTML, "agent timeline drawer has drawer-panel"
+    assert "Never aired: no overlay, no voice, no fan narrative" in HTML, "timeline explains rejected cues"
+    assert "Open timeline" in HTML, "timeline footer has Open timeline button"
+    assert "rejected-step" in HTML, "rejected steps have special highlight"
     css = (ROOT / "frontend" / "style.css").read_text(encoding="utf-8")
     assert 'href="/static/style.css"' in HTML and "@media (max-width: 900px)" in css
     phone = css.split("@media (max-width: 480px)")[1]

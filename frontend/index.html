@@ -306,46 +306,158 @@
       <div v-if="!narratives.length" class="empty">Pick your club, player, depth and language, then follow. The latest moment is re-rendered for you at once.</div>
     </section>
   </main>
-  <div class="drawer">
-    <h2 style="font-size:13px;color:var(--muted);margin:0 0 8px;text-transform:uppercase;letter-spacing:.04em;display:flex;gap:8px;align-items:center">
-      Agent timeline
-      <span class="right" style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400">{{ filtered.length }} of {{ timeline.length }} moments</span>
-      <button class="secondary" @click="drawerOpen = !drawerOpen">{{ drawerOpen ? 'hide' : 'show' }}</button>
-    </h2>
-    <div class="metrics" v-if="metrics">
-      <span v-for="k in metricKeys" :key="k">{{ k.replaceAll('_', ' ') }} <b>{{ metrics[k] }}</b></span>
-      <span v-if="speechChecks">speech audit <b>{{ speechChecks - speechMismatches }}/{{ speechChecks }}</b></span>
-    </div>
-    <template v-if="drawerOpen">
-      <div class="chips">
-        <span v-for="f in filters" :key="f" :class="['chip', filter === f ? 'on' : '']" @click="filter = f">{{ f }}</span>
-      </div>
-      <div class="row" v-for="m in filtered" :key="m.moment_id">
-        <div class="when">{{ String(m.minute).padStart(2, '0') }}' <br><span class="mono">{{ m.kind.replaceAll('_', ' ') }}</span><br>{{ teamName(m.team_id) }}</div>
-        <div>
-          <div class="step"><span class="who">Analyst</span>
-            <span :class="['tag', m.decision.say ? 'ok' : 'skip']">{{ m.decision.say ? 'say' : 'stay quiet' }}</span>
-            <span class="tag" v-if="m.decision.angle">angle: {{ m.decision.angle }}</span>
-            <span class="reason">{{ m.decision.reason }}</span></div>
-          <div class="step" v-for="(a, i) in m.attempts" :key="i"><span class="who">Commentator {{ i + 1 }}</span><span class="reason">{{ a.claim }}</span></div>
-          <div class="step" v-if="m.verdict"><span class="who">Fact-Checker</span>
-            <span :class="['tag', m.verdict.status === 'rejected' ? 'bad' : 'ok']">{{ m.verdict.status }}</span>
-            <span class="tag">{{ m.verdict.layer }} layer, attempt {{ m.verdict.attempt }}</span>
-            <span class="reason" v-if="m.verdict.reasons.length">{{ m.verdict.reasons.join('; ') }}</span></div>
-          <div class="step" v-for="(c, i) in m.checks.filter(c => !c.ok)" :key="'c' + i"><span class="who">{{ c.gate }} gate</span>
-            <span class="tag bad">failed</span><span class="reason mono">{{ c.mismatches.join('; ') }}</span></div>
-          <div class="step" v-if="m.verdict && m.verdict.status !== 'rejected'"><span class="who">Producer</span>
-            <span :class="['tag', m.cue ? 'ok' : 'bad']">{{ m.cue ? 'cue: ' + m.cue.headline : 'cue dropped' }}</span>
-            <span class="tag ok" v-for="n in m.narratives" :key="n.profile_key" :title="n.text">{{ n.profile_key }}</span>
-            <span class="tag bad" v-for="p in m.dropped_profiles" :key="'d' + p">dropped {{ p }}</span></div>
-          <div class="step"><span class="who">Air</span>
-            <span :class="['tag', m.displayed === 'shown' ? 'ok' : m.displayed === 'late' ? 'late' : m.displayed === 'skipped' ? 'skip' : m.displayed ? 'bad' : '']">{{ m.displayed || 'pending' }}</span>
-            <span class="tag warn" v-if="m.fallback">offline agents</span>
-            <span class="reason mono">{{ evidenceLine(m.evidence) }}</span></div>
+  <!-- Agent Timeline Drawer -->
+  <div class="drawer-container">
+    <section class="drawer-panel" aria-label="Agent timeline" v-if="drawerOpen">
+      <div class="drawer-handle"></div>
+      <div class="drawer-header">
+        <h2>Agent timeline</h2>
+        <span class="drawer-sub">every moment, every agent, every check</span>
+        <div class="filter-chips">
+          <button type="button" class="chip" :class="{ on: filter === 'all' }" @click="filter = 'all'">
+            All {{ filterCounts.all }}
+          </button>
+          <button type="button" class="chip" :class="{ on: filter === 'verified' }" @click="filter = 'verified'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#3DD68C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+            Verified {{ filterCounts.verified }}
+          </button>
+          <button type="button" class="chip" :class="{ on: filter === 'rewritten' }" @click="filter = 'rewritten'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg>
+            Rewritten {{ filterCounts.rewritten }}
+          </button>
+          <button type="button" class="chip" :class="{ on: filter === 'rejected' }" @click="filter = 'rejected'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FF5D6C" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+            Rejected {{ filterCounts.rejected }}
+          </button>
+          <button type="button" class="chip" :class="{ on: filter === 'skipped' }" @click="filter = 'skipped'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AA7BB" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"></path></svg>
+            Skipped {{ filterCounts.skipped }}
+          </button>
         </div>
+        <button type="button" aria-label="Close timeline" class="drawer-close" @click="drawerOpen = false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+        </button>
       </div>
-      <div v-if="!timeline.length" class="empty">Moments appear here as the agents work on them: the director's call, each Commentator attempt, the Fact-Checker verdict, every failed number check and what reached air.</div>
-    </template>
+
+      <div class="drawer-body">
+        <!-- Left Column: Moments List -->
+        <nav class="moments-list" aria-label="Moments">
+          <div v-for="m in filtered" :key="m.moment_id" class="moment-row"
+            :class="{ selected: selectedMoment && selectedMoment.moment_id === m.moment_id, rejected: m.verdict && m.verdict.status === 'rejected' }"
+            @click="selectedMomentId = m.moment_id">
+            <b class="moment-time">{{ pad(m.minute) }}:{{ pad(m.second || 0) }}</b>
+            <span class="moment-label">{{ momentTitle(m) }}</span>
+            <span class="v" :class="verdictClass(m)">{{ verdictText(m) }}</span>
+          </div>
+          <div v-if="!filtered.length" class="empty">No moments match the filter.</div>
+        </nav>
+
+        <!-- Right Column: Agent Steps for Selected Moment -->
+        <div class="moment-detail" v-if="selectedMoment">
+          <div class="moment-header">
+            <span class="moment-title">{{ pad(selectedMoment.minute) }}:{{ pad(selectedMoment.second || 0) }} {{ momentTitle(selectedMoment) }}</span>
+            <span class="mono moment-tag">moment {{ selectedMoment.moment_id }}<template v-if="selectedMoment.fallback"> &middot; offline agents</template></span>
+            <span class="moment-trace" v-if="selectedMoment.trace_id">trace <span class="mono" style="color: var(--info)">{{ selectedMoment.trace_id.slice(0, 4) }}...{{ selectedMoment.trace_id.slice(-4) }}</span> in Application Insights</span>
+          </div>
+
+          <!-- 1. Analyst Step -->
+          <div class="step" v-if="selectedMoment.decision">
+            <div class="who"><span class="dot" style="background: #7AB4FF"></span>Analyst</div>
+            <div class="txt">
+              <span :class="['tag', selectedMoment.decision.say ? 'ok' : 'skip']">{{ selectedMoment.decision.say ? 'Say it' : 'Stay quiet' }}</span>.
+              <template v-if="selectedMoment.decision.angle"> Angle: {{ selectedMoment.decision.angle }}.</template>
+              {{ selectedMoment.decision.reason }}
+              <span class="mono" v-if="selectedMoment.evidence && Object.keys(selectedMoment.evidence).length"> cites {{ evidenceLine(selectedMoment.evidence) }}</span>
+            </div>
+          </div>
+
+          <!-- 2. Commentator Attempts -->
+          <div class="step" v-for="(a, i) in (selectedMoment.attempts || [])" :key="i">
+            <div class="who"><span class="dot" style="background: #2F8FD8"></span>Commentator {{ i + 1 }}</div>
+            <div class="txt">
+              <template v-if="selectedMoment.verdict && selectedMoment.verdict.status === 'rejected' && (i + 1 === selectedMoment.verdict.attempt || i === selectedMoment.attempts.length - 1)">
+                Attempt {{ i + 1 }}: <span style="color: var(--text); text-decoration: line-through; text-decoration-color: var(--rejected)">"{{ a.claim }}"</span>
+              </template>
+              <template v-else>
+                Attempt {{ i + 1 }}: "{{ a.claim }}"
+              </template>
+            </div>
+          </div>
+
+          <!-- 3. Fact-Checker Verdict -->
+          <div class="step" :class="{ 'rejected-step': selectedMoment.verdict && selectedMoment.verdict.status === 'rejected' }" v-if="selectedMoment.verdict">
+            <div class="who" :style="{ color: selectedMoment.verdict.status === 'rejected' ? 'var(--rejected)' : 'var(--text)' }">
+              <span class="dot" :style="{ background: selectedMoment.verdict.status === 'rejected' ? 'var(--rejected)' : (selectedMoment.verdict.status === 'rewritten' ? 'var(--rewritten)' : 'var(--verified)') }"></span>
+              Fact-Checker
+            </div>
+            <div class="txt" style="display: flex; flex-direction: column; gap: 6px">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span class="v" :style="{ background: selectedMoment.verdict.status === 'rejected' ? 'var(--rejected)' : (selectedMoment.verdict.status === 'rewritten' ? 'var(--rewritten)' : 'var(--verified)'), color: 'var(--bg)' }">
+                  <svg v-if="selectedMoment.verdict.status === 'rejected'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                  <svg v-else-if="selectedMoment.verdict.status === 'verified'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+                  {{ selectedMoment.verdict.status }}
+                </span>
+                <span style="font-size: 13px; color: var(--text-2)">layer {{ selectedMoment.verdict.layer }}, attempt {{ selectedMoment.verdict.attempt }}</span>
+              </div>
+              <div class="mono" :style="{ color: selectedMoment.verdict.status === 'rejected' ? '#FFB3BA' : 'var(--text-2)' }" v-if="selectedMoment.verdict.reasons && selectedMoment.verdict.reasons.length">
+                {{ selectedMoment.verdict.reasons.join('; ') }}
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Failed Checks -->
+          <div class="step rejected-step" v-for="(c, i) in ((selectedMoment.checks || []).filter(c => !c.ok))" :key="'c' + i">
+            <div class="who" style="color: var(--rejected)"><span class="dot" style="background: var(--rejected)"></span>{{ c.gate }} gate</div>
+            <div class="txt">
+              <span class="tag bad">failed</span>
+              <span class="mono" style="color: #FFB3BA; margin-left: 8px">{{ c.mismatches.join('; ') }}</span>
+            </div>
+          </div>
+
+          <!-- 5. Producer Step -->
+          <div class="step" v-if="selectedMoment.verdict">
+            <div class="who"><span class="dot" style="background: var(--muted)"></span>Producer</div>
+            <div class="txt" v-if="selectedMoment.verdict.status === 'rejected'">
+              Nothing to package. <b>Never aired: no overlay, no voice, no fan narrative.</b>
+            </div>
+            <div class="txt" v-else>
+              <span :class="['tag', selectedMoment.cue ? 'ok' : 'bad']">{{ selectedMoment.cue ? 'cue: ' + selectedMoment.cue.headline : 'cue dropped' }}</span>
+              <span class="tag ok" v-for="n in selectedMoment.narratives" :key="n.profile_key" :title="n.text" style="margin-left: 6px">{{ n.profile_key }}</span>
+              <span class="tag bad" v-for="p in selectedMoment.dropped_profiles" :key="'d' + p" style="margin-left: 6px">dropped {{ p }}</span>
+            </div>
+          </div>
+
+          <!-- 6. Air Step -->
+          <div class="step">
+            <div class="who"><span class="dot" style="background: var(--text)"></span>Air</div>
+            <div class="txt">
+              <span :class="['tag', selectedMoment.displayed === 'shown' ? 'ok' : selectedMoment.displayed === 'late' ? 'late' : selectedMoment.displayed === 'skipped' ? 'skip' : 'bad']">
+                {{ selectedMoment.displayed || (selectedMoment.verdict && selectedMoment.verdict.status === 'rejected' ? 'rejected' : 'pending') }}
+              </span>
+              <span class="tag warn" v-if="selectedMoment.fallback" style="margin-left: 6px">offline agents</span>
+              <span class="mono" v-if="selectedMoment.evidence" style="margin-left: 10px">{{ evidenceLine(selectedMoment.evidence) }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty" style="padding: 24px">No moment selected. Moments appear here as agents work on them.</div>
+      </div>
+    </section>
+
+    <!-- Footer Summary Row Always Visible -->
+    <footer class="app-footer">
+      <span class="footer-title">Agent timeline</span>
+      <span><b class="stat-num">{{ metrics ? metrics.cues_shown : 0 }}</b> cues aired</span>
+      <span><b class="stat-num">{{ metrics ? metrics.moments_skipped : 0 }}</b> skipped by director</span>
+      <span><b class="stat-num stat-rejected">{{ metrics ? metrics.cues_rejected : 0 }}</b> rejected</span>
+      <span><b class="stat-num">{{ metrics ? metrics.number_checks : 0 }}</b> number checks, <b :class="metrics && metrics.number_checks_failed ? 'stat-rejected' : 'stat-ok'">{{ metrics ? metrics.number_checks_failed : 0 }}</b> failed</span>
+      <span>answer p50 <b class="stat-num">{{ metrics && metrics.qa_answer_p50_ms ? (metrics.qa_answer_p50_ms / 1000).toFixed(1) + ' s' : '-' }}</b></span>
+      <button type="button" @click="drawerOpen = !drawerOpen" class="footer-btn">
+        {{ drawerOpen ? 'Close timeline' : 'Open timeline' }}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path :d="drawerOpen ? 'M6 9l6 6 6-6' : 'M6 15l6-6 6 6'"></path>
+        </svg>
+      </button>
+    </footer>
   </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.5.13/vue.global.prod.min.js"></script>
@@ -405,7 +517,7 @@ createApp({
     const state = reactive({
       form: { seed: 30, speed: 1, delay_s: 20 }, starting: false, running: false, clock: null, mode: null, agentMode: null, fallbackReason: null, busyMessage: '',
       teams: { home: 'Home', away: 'Away', homeId: 'kby' }, score: { home: 0, away: 0 }, league: { clubs: [] }, playerNames: {},
-      ticker: [], ball: null, trail: [], banner: null, narratives: [], metrics: null, timeline: [], drawerOpen: true, filter: 'all',
+      ticker: [], ball: null, trail: [], banner: null, narratives: [], metrics: null, timeline: [], drawerOpen: true, filter: 'all', selectedMomentId: null,
       profile: { club_id: null, player_id: null, depth: 'casual', language: 'en' }, profileKey: null,
       askText: '', talking: false, transcribing: false, transcribingTranscript: '', answering: false, notHeard: false, notHeardReason: '',
       qa: [], micReady: false, interruptedLines: 0,
@@ -417,13 +529,50 @@ createApp({
     const playbackClock = computed(() => state.clock ? clockText(state.clock.playback_t) : '');
     const players = computed(() => { const c = state.league.clubs.find(c => c.id === state.profile.club_id); return c ? c.players : []; });
     const filtered = computed(() => state.timeline.filter(m => {
-      if (state.filter === 'said') return m.decision.say;
-      if (state.filter === 'skipped') return !m.decision.say;
+      if (state.filter === 'verified') return m.verdict && m.verdict.status === 'verified';
+      if (state.filter === 'rewritten') return m.verdict && m.verdict.status === 'rewritten';
+      if (state.filter === 'said') return m.decision && m.decision.say;
+      if (state.filter === 'skipped') return m.decision && !m.decision.say;
       if (state.filter === 'rejected') return m.verdict && m.verdict.status === 'rejected';
       if (state.filter === 'late') return m.displayed === 'late';
-      if (state.filter === 'failed checks') return m.checks.some(c => !c.ok);
+      if (state.filter === 'failed checks') return m.checks && m.checks.some(c => !c.ok);
       return true;
     }));
+    const selectedMoment = computed(() => {
+      if (state.selectedMomentId) {
+        const found = state.timeline.find(m => m.moment_id === state.selectedMomentId);
+        if (found) return found;
+      }
+      return filtered.value[0] || state.timeline[0] || null;
+    });
+    const filterCounts = computed(() => ({
+      all: state.timeline.length,
+      verified: state.timeline.filter(m => m.verdict && m.verdict.status === 'verified').length,
+      rewritten: state.timeline.filter(m => m.verdict && m.verdict.status === 'rewritten').length,
+      rejected: state.timeline.filter(m => m.verdict && m.verdict.status === 'rejected').length,
+      skipped: state.timeline.filter(m => m.decision && !m.decision.say).length,
+    }));
+    const momentTitle = (m) => {
+      if (!m) return '';
+      const team = teamName(m.team_id);
+      const kind = (m.kind || '').replaceAll('_', ' ');
+      return `${team} ${kind}`;
+    };
+    const verdictClass = (m) => {
+      if (m.verdict && m.verdict.status === 'rejected') return 'rejected';
+      if (m.verdict && m.verdict.status === 'rewritten') return 'rewritten';
+      if (m.displayed === 'shown' || (m.verdict && m.verdict.status === 'verified')) return 'verified';
+      if (m.decision && !m.decision.say) return 'skipped';
+      return 'pending';
+    };
+    const verdictText = (m) => {
+      if (m.verdict && m.verdict.status === 'rejected') return 'rejected';
+      if (m.verdict && m.verdict.status === 'rewritten') return 'rewritten';
+      if (m.displayed === 'shown') return 'aired';
+      if (m.verdict && m.verdict.status === 'verified') return 'verified';
+      if (m.decision && !m.decision.say) return 'skipped';
+      return m.displayed || 'pending';
+    };
     const teamName = id => { const c = state.league.clubs.find(c => c.id === id); return c ? c.short : id; };
     const evidenceLine = e => Object.entries(e || {}).map(([k, v]) => `${k}=${v}`).join('  ');
     watch(() => state.profile.club_id, () => { state.profile.player_id = null; });
@@ -780,7 +929,7 @@ createApp({
       };
     };
     loadLeague();
-    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, setSpeed, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk, qaTiming };
+    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, setSpeed, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk, qaTiming, selectedMoment, filterCounts, momentTitle, verdictClass, verdictText, pad };
   },
 }).mount('#app');
 </script>
