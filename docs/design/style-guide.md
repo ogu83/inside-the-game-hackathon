@@ -118,4 +118,4 @@ Layout left to right: a 92 px club-colour block with the crest (64 px), then hea
 - Kestrel Bay (KBY): bay blue, white, sand accent. Crest `frontend/assets/crest-kby-256.png`.
 - Ironvale (IVA): ember orange, charcoal, white. Crest `frontend/assets/crest-iva-256.png`.
 - Meridian League mark: `frontend/assets/league-mark-256.png` (header, favicon, video end card).
-- The 256 px PNGs are transparent cut-outs of the 2048 px P2 originals (same folder). All fictional.
+- The 256 px PNGs are transparent cut-outs of the 2048 px P2 originals in `docs/assets/`. All fictional.

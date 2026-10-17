@@ -15,4 +15,14 @@ All images are original, AI-generated assets for the fictional Meridian League. 
 | `hero.jpg` | 2752x1536 | full-size download (fresh Gemini chat) | Stadium at dusk, side-on, plain blue dugouts and track, two abstract broadcast graphics in the sky (ring, three bars); checked at full size for text: none. |
 | `thumbnail-bg.jpg` | 2752x1536 | full-size download (fresh Gemini chat) | Ball with a glowing voice waveform, bay blue and ember orange rim light, darker left side for the title; no text or logos. |
 
+Derived files (made 2026-10-17 from the originals above with Pillow; title text set in Bahnschrift, a font that ships with Windows):
+
+| File | Size | Made from | Use |
+| --- | --- | --- | --- |
+| `frontend/assets/crest-kby-256.png`, `crest-iva-256.png`, `league-mark-256.png` | 256x256 | the 2048 px crests and league mark, background removed by an edge flood fill | app header, scoreboard, cue banner, favicon |
+| `frontend/assets/og-image.jpg` | 1200x630 | `thumbnail-bg.jpg` plus title and pitch line | link preview of the public URL |
+| `docs/assets/innovation-studio-cover.jpg` | 1920x1072 | `thumbnail-bg.jpg` plus title and pitch line | Innovation Studio project cover, replaces the first cover from 2026-10-15 (old look and tagline, removed) |
+
+The originals live in `docs/assets/` (README, video, covers); the app only ships the derived files in `frontend/assets/`.
+
 Note: the first full-size downloads of the hero and thumbnail were corrupted (Gemini mixed in the previous image, the league mark); regenerating each in a fresh chat fixed it.
