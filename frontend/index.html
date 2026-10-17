@@ -67,11 +67,12 @@
             <rect x="99" y="24.84" width="5.5" height="18.32"/>
             <circle cx="52.5" cy="34" r="0.45" fill="#FFFFFF" fill-opacity="0.85"/>
           </g>
-          <polyline class="trail" v-if="trail.length > 1" :points="trail.map(p => p.join(',')).join(' ')"/>
-          <circle class="ball" v-if="ball" :cx="ball.x" :cy="ball.y" r="1.1" :fill="ball.home ? 'var(--home)' : 'var(--away)'"/>
-          <text class="label" v-if="ball && ball.label" :x="labelPos(ball, ball.label).x" :y="labelPos(ball, ball.label).y" text-anchor="middle">{{ ball.label }}</text>
+          <polyline class="trail" v-if="trail.length > 1" :points="trail.map(p => p.join(',')).join(' ')" :stroke="ball && !ball.home ? 'var(--away)' : 'var(--home)'"/>
+          <circle class="ball-glow" v-if="ball" :cx="ball.x" :cy="ball.y" r="3.2" fill="url(#glow)"/>
+          <circle class="ball" v-if="ball" :cx="ball.x" :cy="ball.y" r="1.05" fill="#FFFFFF" :stroke="ball.home ? 'var(--home)' : 'var(--away)'" stroke-width="0.35"/>
           <rect width="105" height="68" fill="url(#vig)" pointer-events="none"/>
         </svg>
+        <div class="player-label" v-if="ball && ball.label" :class="{ away: !ball.home }" :style="labelStyle(ball)">{{ ball.label }}</div>
         <div class="cuebanner" :class="{ away: !banner.home }" v-if="banner" :style="{ opacity: banner.visible ? 1 : 0 }">
           <div>
             <div class="headline">{{ banner.headline }}</div>
@@ -186,6 +187,14 @@ const labelPos = (ball, text) => {
   const y = ball.y + 4 <= 66.5 ? ball.y + 4 : ball.y - 2.4;
   return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
 };
+const labelStyle = (ball) => {
+  if (!ball) return {};
+  const pos = labelPos(ball, ball.label);
+  return {
+    left: `${(pos.x / 105 * 100).toFixed(2)}%`,
+    top: `${(pos.y / 68 * 100).toFixed(2)}%`,
+  };
+};
 const pad = n => String(n).padStart(2, '0');
 const clockText = t => `${pad(Math.floor(Math.max(0, t) / 60))}:${pad(Math.floor(Math.max(0, t) % 60))}`;
 // With the voice on a question always goes over the voice socket (reconnecting first if needed) so the answer is
@@ -211,7 +220,7 @@ class PlaybackGate {
   nextLine() { this.line++; this.muted = false; return this.line; }
   accept(chunk) { return !this.muted && !!chunk; }
 }
-if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clockText, labelPos, askRoute, PushToTalk, PlaybackGate, talkOutcome, MIN_TALK_BYTES };
+if (typeof module !== 'undefined') module.exports = { toPitch, profileKeyOf, clockText, labelPos, labelStyle, askRoute, PushToTalk, PlaybackGate, talkOutcome, MIN_TALK_BYTES };
 
 createApp({
   setup() {
@@ -523,7 +532,7 @@ createApp({
       try { const s = await (await fetch('/api/match/state')).json(); if (s.metrics) state.metrics = s.metrics; } catch (e) { /* offline between polls */ }
     }, 2000);
     loadLeague();
-    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, pendingKey, profilePending, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk };
+    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk };
   },
 }).mount('#app');
 </script>

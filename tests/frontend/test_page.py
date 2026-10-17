@@ -24,11 +24,12 @@ def test_page_has_the_t12_panels_and_keeps_the_voice_controls() -> None:
         assert needle in HTML, needle
     assert "@mousedown" not in HTML and "@touchstart" not in HTML, "pointer events only, so a touch is not also a mouse press"
     assert "\u2014" not in HTML
-    assert "font-size: 2.2px" in (ROOT / "frontend" / "style.css").read_text(encoding="utf-8"), "player label stays small"
+    assert "player-label" in HTML, "player label rendered as HTML pill over SVG"
+    assert "font-size: 13px" in (ROOT / "frontend" / "style.css").read_text(encoding="utf-8"), "player label is 13px Barlow pill"
     css = (ROOT / "frontend" / "style.css").read_text(encoding="utf-8")
     assert 'href="/static/style.css"' in HTML and "@media (max-width: 900px)" in css
     phone = css.split("@media (max-width: 480px)")[1]
-    for rule in (".profile { grid-template-columns: 1fr; }", ".row { grid-template-columns: 1fr;", ".pitch .label { display: none; }", "header h1 { font-size: 16px; width: 100%;"):
+    for rule in (".profile { grid-template-columns: 1fr; }", ".row { grid-template-columns: 1fr;", ".player-label { display: none; }", "header h1 { font-size: 16px; width: 100%;"):
         assert rule in phone, rule
     assert '<meta name="viewport" content="width=device-width, initial-scale=1">' in HTML
 
