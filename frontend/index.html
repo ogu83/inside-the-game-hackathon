@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Barlow:wght@400;500;600&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=p3">
+<link rel="stylesheet" href="/static/style.css?v=p3d">
 </head>
 <body>
 <div id="app" class="phone-live">
@@ -67,8 +67,8 @@
 
     <div class="header-actions">
       <div role="group" aria-label="Playback speed" class="speed-toggle">
-        <button type="button" @click="setSpeed(1)" :class="{ active: form.speed === 1 }" :aria-pressed="form.speed === 1">1x</button>
-        <button type="button" @click="setSpeed(4)" :class="{ active: form.speed === 4 }" :aria-pressed="form.speed === 4">4x</button>
+        <button type="button" @click="setSpeed(1)" :disabled="running" :title="running ? 'Speed is set when a match starts' : 'Live agents at 1x'" :class="{ active: form.speed === 1 }" :aria-pressed="form.speed === 1">1x</button>
+        <button type="button" @click="setSpeed(4)" :disabled="running" :title="running ? 'Speed is set when a match starts' : 'Precomputed at 4x'" :class="{ active: form.speed === 4 }" :aria-pressed="form.speed === 4">4x</button>
       </div>
 
       <details class="match-settings" v-if="!running">
@@ -87,8 +87,9 @@
         {{ starting ? 'Starting...' : 'Start match' }}
       </button>
 
-      <button type="button" class="icon-btn stop-btn" aria-label="Stop match" title="Stop match" @click="stop" v-if="running">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
+      <button type="button" class="stop-btn" aria-label="Stop match" title="Stop match" @click="stop" v-if="running">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
+        Stop
       </button>
 
       <button type="button" class="voice-btn" :class="{ 'voice-on': voice, secondary: !voice }" :aria-pressed="voice" @click="toggleVoice">
@@ -591,7 +592,7 @@ createApp({
     const state = reactive({
       form: { seed: 30, speed: 1, delay_s: 20 }, starting: false, running: false, clock: null, mode: null, agentMode: null, fallbackReason: null, busyMessage: '',
       teams: { home: 'Home', away: 'Away', homeId: 'kby' }, score: { home: 0, away: 0 }, league: { clubs: [] }, playerNames: {},
-      ticker: [], ball: null, trail: [], banner: null, narratives: [], metrics: null, timeline: [], drawerOpen: true, filter: 'all', selectedMomentId: null,
+      ticker: [], ball: null, trail: [], banner: null, narratives: [], metrics: null, timeline: [], drawerOpen: false, filter: 'all', selectedMomentId: null,
       profile: { club_id: null, player_id: null, depth: 'casual', language: 'en' }, profileKey: null,
       askText: '', talking: false, transcribing: false, transcribingTranscript: '', answering: false, notHeard: false, notHeardReason: '',
       qa: [], micReady: false, interruptedLines: 0,

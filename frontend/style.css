@@ -159,6 +159,9 @@ input, select {
 .settings-popover label { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
 .settings-popover input { width: 60px; padding: 4px 6px; border-radius: 6px; }
 .icon-btn { width: 44px; height: 44px; padding: 0; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--text); display: grid; place-items: center; }
+.stop-btn { height: 44px; border-radius: 10px; padding: 0 14px; font-weight: 600; font-size: 15px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(255,93,108,.55); background: var(--panel); color: var(--text); }
+.stop-btn svg { color: var(--rejected); }
+.speed-toggle button:disabled { opacity: .45; cursor: not-allowed; }
 .start-btn { height: 44px; border-radius: 10px; padding: 0 16px; font-weight: 600; font-size: 15px; background: var(--kby); color: #071422; }
 .voice-btn { height: 44px; border-radius: 10px; padding: 0 16px; font-weight: 600; font-size: 15px; }
 .voice-btn.voice-on { background: var(--kby); color: #071422; border: 0; }
@@ -1395,4 +1398,18 @@ section h2 { font-size: 16px; color: var(--muted); margin: 0 0 10px; text-transf
   .step .who { min-width: 0; width: 100%; }
   .metrics { font-size: 12px; gap: 4px 10px; }
   .reason.mono { word-break: break-word; }
+}
+
+/* Desktop: one screen like the P1 mockup. The app fills the window, the pitch takes the height that is left
+   (keeping 105:68), the fan panel scrolls inside itself, and the timeline opens as a panel above the footer. */
+@media (min-width: 901px) and (min-height: 620px) {
+  html, body { height: 100%; overflow: hidden; }
+  #app { height: 100vh; display: flex; flex-direction: column; }
+  #app > main { flex: 1 1 auto; min-height: 0; align-items: stretch; }
+  #app > main > section { min-height: 0; display: flex; flex-direction: column; }
+  #app > main > section:nth-of-type(2) { overflow-y: auto; }
+  /* header 64 + voice bar 44 + main padding 32 + section padding 32 + broadcast header 36 + ticker 64 + footer 56 */
+  .pitchwrap { width: min(100%, calc((100vh - 330px) * 105 / 68)); margin: 0 auto; flex: 0 0 auto; }
+  .drawer-container { position: relative; flex: 0 0 auto; z-index: 30; }
+  .drawer-panel { position: absolute; left: 0; right: 0; bottom: 100%; max-height: calc(100vh - 180px); }
 }
