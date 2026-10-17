@@ -17,18 +17,36 @@ SCRIPT = re.findall(r"<script>(.*?)</script>", HTML, re.S)[0]
 
 
 def test_page_has_the_t12_panels_and_keeps_the_voice_controls() -> None:
-    for needle in ("<svg class=\"pitch\"", "cuebanner", "Agent timeline", "follow", "toggleVoice", "speech audit", "/api/stream/fan", "/api/match/moments", "/api/voice?profile=",
-                   "hold to talk", "talk_start", "talk_end", "/api/qa", "getUserMedia", "webkitSpeechRecognition", "dropPlayback",
+    for needle in ("<svg class=\"pitch\"", "cuebanner", "Agent timeline", "follow", "toggleVoice", "Speech audit", "/api/stream/fan", "/api/match/moments", "/api/voice?profile=",
+                   "Hold to talk", "talk_start", "talk_end", "/api/qa", "getUserMedia", "webkitSpeechRecognition", "dropPlayback",
                    "ensureVoiceSocket", "reconnecting the voice", "text only (voice off)", "ws.onclose",
                    "@pointerdown.prevent=\"pressTalk\"", "@pointercancel=\"releaseTalk\"", "class PushToTalk", "isFinal", "class PlaybackGate", "bargeIn"):
         assert needle in HTML, needle
     assert "@mousedown" not in HTML and "@touchstart" not in HTML, "pointer events only, so a touch is not also a mouse press"
     assert "\u2014" not in HTML
-    assert "font-size: 2.2px" in (ROOT / "frontend" / "style.css").read_text(encoding="utf-8"), "player label stays small"
+    assert "player-label" in HTML, "player label rendered as HTML pill over SVG"
+    assert "font-size: 13px" in (ROOT / "frontend" / "style.css").read_text(encoding="utf-8"), "player label is 13px Barlow pill"
+    assert "crest-kby-256.png" in HTML and "crest-iva-256.png" in HTML, "cue banner renders 256px club crests"
+    assert "v-chip verified" in HTML, "cue banner has lower-third verdict chip"
+    assert "league-mark-256.png" in HTML, "header renders league mark"
+    assert "scoreboard-pill" in HTML, "header renders scoreboard pill"
+    assert "aria-label=\"Stop match\"" in HTML, "stop button has aria-label"
+    assert "waveform" in HTML, "voice bar has waveform glyph"
+    assert "Paused for you" in HTML, "voice bar has paused-for-you chip"
+    assert "ptt-btn" in HTML, "push-to-talk button has ptt-btn class"
+    assert "ask-submit" in HTML, "voice-off input has ask-submit button"
+    assert "current-qa" in HTML, "answer card has current-qa article"
+    assert "timing-bar" in HTML, "answer card has timing-bar element"
+    assert "Spoken verbatim" in HTML, "answer card has Spoken verbatim chip"
+    assert "drawer-panel" in HTML, "agent timeline drawer has drawer-panel"
+    assert "Never aired: no overlay, no voice, no fan narrative" in HTML, "timeline explains rejected cues"
+    assert "Open timeline" in HTML, "timeline footer has Open timeline button"
+    assert "rejected-step" in HTML, "rejected steps have special highlight"
     css = (ROOT / "frontend" / "style.css").read_text(encoding="utf-8")
-    assert 'href="/static/style.css"' in HTML and "@media (max-width: 900px)" in css
+    assert 'href="/static/style.css?v=' in HTML, "versioned so a redeploy is not hidden by a cached stylesheet"
+    assert "@media (max-width: 900px)" in css
     phone = css.split("@media (max-width: 480px)")[1]
-    for rule in (".profile { grid-template-columns: 1fr; }", ".row { grid-template-columns: 1fr;", ".pitch .label { display: none; }", "header h1 { font-size: 16px; width: 100%;"):
+    for rule in (".profile { grid-template-columns: 1fr; }", ".row { grid-template-columns: 1fr;", ".player-label { display: none; }", "header h1 { font-size: 16px; width: 100%;"):
         assert rule in phone, rule
     assert '<meta name="viewport" content="width=device-width, initial-scale=1">' in HTML
 
@@ -92,3 +110,12 @@ def test_page_script_parses_and_pure_helpers_behave(tmp_path: Path) -> None:
     assert away == {"x": pytest.approx(94.5), "y": pytest.approx(54.4), "home": False}, "the away team is mirrored into the home frame"
     assert key1 == "-|-|casual|en" and key2 == "iva|iva-06|analyst|tr"
     assert c0 == "00:00" and c125 == "02:05"
+
+
+def test_page_landmarks_are_closed_and_siblings() -> None:
+    """P3 review: a missing </header> nested main and the drawer inside the header's flex row and broke the layout."""
+    for tag in ("header", "main", "footer", "nav", "section", "article", "details"):
+        assert HTML.count(f"<{tag}") == HTML.count(f"</{tag}>"), tag
+    assert HTML.index("</header>") < HTML.index("<main"), "main must follow the header, not sit inside it"
+    assert '<div id="app" :' not in HTML, "#app is the Vue mount element; bindings on it are never compiled"
+    assert "document.getElementById('app').className = 'phone-' + tab" in HTML, "phone tabs swap content"
