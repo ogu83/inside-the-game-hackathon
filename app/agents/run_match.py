@@ -13,6 +13,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from agent_framework import Workflow
+
 from app.agents.analyst import PacingTracker, RuleDirector
 from app.agents.fact_checker import FactChecker
 from app.agents.fakes import AlwaysVerifies, TemplateCommentator, TemplateRenderer
@@ -33,7 +35,7 @@ def close_t(moment: CandidateMoment, events: list[MatchEvent]) -> int:
     return events[moment.window[1] - 1].t
 
 
-def offline_workflow(writer=None):
+def offline_workflow(writer=None) -> Workflow:
     return build_workflow(writer or TemplateCommentator(), FactChecker(AlwaysVerifies()), RuleDirector())
 
 
@@ -98,7 +100,7 @@ def moment_labels_for(moment: CandidateMoment) -> dict[str, str]:
     return moment_labels(moment)
 
 
-def live_agent(model_env: str, name: str, instructions: str):
+def live_agent(model_env: str, name: str, instructions: str) -> Any:
     import os
 
     from agent_framework_foundry import FoundryChatClient
@@ -120,7 +122,7 @@ def offline_producer(tamper=None) -> Producer:
     return Producer(TemplateRenderer(), tamper=tamper)
 
 
-def live_qa_agent(mcp_url: str):
+def live_qa_agent(mcp_url: str) -> Any:
     """Q&A agent over the ledger MCP server (live only). The MCP tool-call span is what the trace shows."""
     from agent_framework import MCPStreamableHTTPTool
 
@@ -137,11 +139,11 @@ class _ToolBoundAgent:
     def __init__(self, agent, tool) -> None:
         self.agent, self.tool = agent, tool
 
-    async def run(self, prompt: str, options=None):
+    async def run(self, prompt: str, options=None) -> Any:
         return await self.agent.run(prompt, tools=[self.tool], options=options)
 
 
-def live_workflow():
+def live_workflow() -> Workflow:
     import os
 
     from agent_framework_foundry import FoundryChatClient

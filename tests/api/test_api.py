@@ -66,7 +66,25 @@ async def client():
 async def test_health(client: httpx.AsyncClient) -> None:
     response = await client.get("/api/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["running"] is False
+    assert data["active_runs"] == 0
+    assert data["running"] == (data["active_runs"] > 0)
+
+    # Start a match, health reports running: True, active_runs == 1
+    started = await client.post("/api/match/start", json={"seed": 7, "speed": 100, "delay_s": 5, "minutes": 10})
+    assert started.status_code == 200
+    health_running = (await client.get("/api/health")).json()
+    assert health_running["running"] is True
+    assert health_running["active_runs"] == 1
+
+    # Stop match, health reverts to running: False, active_runs == 0
+    stopped = await client.post("/api/match/stop")
+    assert stopped.status_code == 200
+    health_stopped = (await client.get("/api/health")).json()
+    assert health_stopped["running"] is False
+    assert health_stopped["active_runs"] == 0
 
 
 async def test_streams_need_a_running_match(client: httpx.AsyncClient) -> None:
@@ -252,9 +270,48 @@ async def test_live_run_limit_falls_back_to_offline_mode(client: httpx.AsyncClie
     assert first["agent_mode"] == "foundry" and first["live_runs_remaining"] == 0 and first["fallback_reason"] is None
     second = (await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "minutes": 4}, headers={"x-forwarded-for": "203.0.113.5"})).json()
     assert second["agent_mode"] == "template" and "limit reached" in second["fallback_reason"]
+    # A forged first entry with the same real ingress address is still blocked
+    forged = (await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "minutes": 4}, headers={"x-forwarded-for": "9.9.9.9, 203.0.113.5"})).json()
+    assert forged["agent_mode"] == "template" and "limit reached" in forged["fallback_reason"]
     other = (await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "minutes": 4}, headers={"x-forwarded-for": "203.0.113.9"})).json()
     assert other["agent_mode"] == "foundry"
     assert RunLimiter(per_day=0).allow("anyone") and RunLimiter(per_day=0).remaining("anyone") is None
+
+
+def test_visitor_id_uses_last_forwarded_entry_and_prevents_forgery() -> None:
+    from starlette.requests import Request
+    from app.api.main import visitor_id
+
+    def make_req(forwarded: str | None = None, client_host: str = "127.0.0.1") -> Request:
+        headers = []
+        if forwarded is not None:
+            headers.append((b"x-forwarded-for", forwarded.encode("latin-1")))
+        scope = {
+            "type": "http",
+            "headers": headers,
+            "client": (client_host, 12345),
+        }
+        return Request(scope)
+
+    # Forged first entry does not change visitor
+    req1 = make_req(forwarded="1.1.1.1, 203.0.113.5")
+    req2 = make_req(forwarded="2.2.2.2, 203.0.113.5")
+    assert visitor_id(req1) == "203.0.113.5"
+    assert visitor_id(req2) == "203.0.113.5"
+    assert visitor_id(req1) == visitor_id(req2)
+
+    # Two different real addresses are two visitors
+    req3 = make_req(forwarded="1.1.1.1, 203.0.113.6")
+    assert visitor_id(req3) == "203.0.113.6"
+    assert visitor_id(req1) != visitor_id(req3)
+
+    # Single entry
+    req4 = make_req(forwarded="203.0.113.7")
+    assert visitor_id(req4) == "203.0.113.7"
+
+    # Fallback to connecting address if header absent
+    req5 = make_req(forwarded=None, client_host="10.0.0.1")
+    assert visitor_id(req5) == "10.0.0.1"
 
 
 async def test_qa_endpoint_answers_text_first(client: httpx.AsyncClient) -> None:
@@ -355,5 +412,30 @@ async def test_recap_delivered_via_sse_and_get_endpoint(client: httpx.AsyncClien
     recap_tr = recap_tr_resp.json()
     assert recap_tr["ok"] is True
     assert "Maç sonu" in recap_tr["text"]
+
+
+async def test_start_match_global_daily_cap_fallback(client: httpx.AsyncClient, monkeypatch) -> None:
+    from app.api.limits import RunLimiter
+    monkeypatch.setenv("AGENT_MODE", "foundry")
+    app.state.limiter = RunLimiter(per_day=10, total_per_day=1)
+
+    res1 = await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "delay_s": 5, "minutes": 4})
+    assert res1.status_code == 200
+    assert res1.json()["agent_mode"] == "foundry"
+    assert res1.json()["fallback_reason"] is None
+    await client.post("/api/match/stop")
+
+    res2 = await client.post(
+        "/api/match/start",
+        json={"seed": 7, "speed": FAST, "delay_s": 5, "minutes": 4},
+        headers={"x-forwarded-for": "10.0.0.99"},
+    )
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert data2["agent_mode"] == "template"
+    assert data2["fallback_reason"] == "Live runs for today are used up, playing with offline agents"
+    assert data2["live_runs_remaining"] == 0
+    await client.post("/api/match/stop")
+
 
 

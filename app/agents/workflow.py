@@ -5,7 +5,6 @@ each executor re-validates them into the SPEC models before doing anything with 
 runs first and may end the run with a skip decision (no Commentator call).
 """
 
-import asyncio
 import json
 from typing import Any
 
@@ -15,6 +14,7 @@ from app.agents.analyst import Director, RuleDirector
 from app.agents.commentator import InsightWriter
 from app.agents.fact_checker import FactChecker
 from app.agents.models import DirectorDecision, Insight, MomentResult, NumberCheck, PacingState, Verdict
+from app.agents.retry import retry_call
 from app.ledger.labels import moment_labels
 from app.ledger.models import CandidateMoment
 
@@ -101,15 +101,7 @@ def build_workflow(writer: InsightWriter, checker: FactChecker, director: Direct
 
 async def run_moment(workflow: Workflow, moment: CandidateMoment, labels: dict[str, str] | None = None, pacing: PacingState | None = None) -> MomentResult:
     request = json.dumps({"moment": moment.model_dump(), "labels": labels or moment_labels(moment), "pacing": (pacing or PacingState()).model_dump()})
-    result = None
-    for attempt in range(3):
-        try:
-            result = await workflow.run(request)
-            break
-        except Exception:
-            if attempt == 2:
-                raise
-            await asyncio.sleep(2 * (attempt + 1))
+    result = await retry_call(lambda: workflow.run(request))
     assert result is not None
     [output] = result.get_outputs()
     return MomentResult(

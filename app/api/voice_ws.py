@@ -205,6 +205,7 @@ async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asynci
             elif kind == "talk_end" and talking:
                 talking = False
                 pending = asyncio.create_task(_transcribe_then_ask(run, ws, fan, bytes(pcm), waiting, speaker, state, pressed_at))
+                pending.add_done_callback(_log_task_exception)
             elif kind == "talk_cancel" and talking:
                 talking = False  # the page caught a too-short press: nothing goes to Voice Live, the reply is spoken
                 await _nothing_heard(run, ws, fan, waiting)
@@ -213,6 +214,13 @@ async def _listen(run: MatchRun, ws: WebSocket, fan: FanProfile, waiting: asynci
     finally:
         if pending is not None and not pending.done():
             pending.cancel()
+
+
+def _log_task_exception(t: asyncio.Task) -> None:
+    if not t.cancelled():
+        exc = t.exception()
+        if exc is not None:
+            log.warning("unhandled exception in voice background task: %s", exc, exc_info=True)
 
 
 @router.websocket("/api/voice")

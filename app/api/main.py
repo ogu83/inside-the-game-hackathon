@@ -5,8 +5,10 @@ import json
 import os
 import secrets
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
@@ -17,17 +19,17 @@ from sse_starlette.sse import EventSourceResponse
 from app.agents.fact_checker import FactChecker
 from app.agents.fakes import AlwaysVerifies
 from app.agents.models import FanProfile, QaTiming
-from app.api.limits import RunLimiter, live_runs_per_day
+from app.api.limits import RunLimiter, live_runs_per_day, live_runs_total_per_day
 from app.api.sessions import (
     MatchRegistry,
     SESSION_COOKIE,
-    attach_session_cookie,
     current_session_id,
     get_session_id,
     qa_pipeline_for_run,
 )
 from app.ledger.mcp_server import LedgerTools, build_mcp_server
 from app.observability import flush_tracing, init_observability
+from app.simulator.models import MatchEvent
 from app.voice.qa import QaPipeline, RuleQaAgent, new_question
 from app.agents.recap import TemplateRecapWriter, recap_writer_from_env
 from app.api.streams import MatchRun, producer_from_env, template_producer, template_workflow, workflow_factory_from_env
@@ -67,11 +69,11 @@ class _AppView:
             return self.app.state.registry.latest_run()
         return None
 
-    def events(self):
+    def events(self) -> list[MatchEvent]:
         run = self._get_run()
         return run.displayed_events() if run else []
 
-    def shown_moments(self):
+    def shown_moments(self) -> list[dict[str, Any]]:
         run = self._get_run()
         return run.shown_moments() if run else []
 
@@ -89,7 +91,7 @@ def qa_pipeline_from_env(app: FastAPI) -> QaPipeline:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_observability()
     app.state.registry = MatchRegistry()
     app.state.run = None
@@ -101,7 +103,7 @@ async def lifespan(app: FastAPI):
     if not hasattr(app.state, "recap_writer") or app.state.recap_writer is None:
         app.state.recap_writer = recap_writer_from_env()
     if not hasattr(app.state, "limiter") or app.state.limiter is None:
-        app.state.limiter = RunLimiter(live_runs_per_day())
+        app.state.limiter = RunLimiter(live_runs_per_day(), live_runs_total_per_day())
     if not hasattr(app.state, "speaker_factory"):
         app.state.speaker_factory = speaker_factory_from_env()
     # The MCP transport is built per lifespan (a session manager runs once) and one task owns its cancel scope.
@@ -245,9 +247,14 @@ def agent_mode() -> str:
 
 
 def visitor_id(request: Request) -> str:
+    # Reverse proxies and Azure Container Apps ingress append the real client IP to the
+    # end of the X-Forwarded-For chain. The first entry is client-controlled and can be
+    # forged by a caller to bypass rate limits. We use the last entry added by the ingress.
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
     return request.client.host if request.client else "unknown"
 
 
@@ -266,7 +273,7 @@ def get_run(request: Request) -> MatchRun | None:
 async def health() -> dict:
     registry = getattr(app.state, "registry", None)
     active = registry.active_count() if registry else 0
-    running = active > 0 or (app.state.run is not None and not app.state.run.finished.is_set())
+    running = active > 0
     return {
         "status": "ok",
         "agent_mode": os.environ.get("AGENT_MODE", "template"),
@@ -288,10 +295,12 @@ async def start_match(request: StartRequest, http: Request) -> dict:
     mode, fallback_reason = agent_mode(), None
     workflow_factory, producer = app.state.workflow_factory, app.state.producer
     recap_writer = getattr(app.state, "recap_writer", None) or recap_writer_from_env()
-    if mode == "foundry" and not app.state.limiter.allow(visitor_id(http)):
-        mode, fallback_reason = "template", f"live-run limit reached ({app.state.limiter.per_day} per visitor per day); continuing with offline agents"
-        workflow_factory, producer = template_workflow, template_producer()
-        recap_writer = TemplateRecapWriter()
+    if mode == "foundry":
+        allowed, reason = app.state.limiter.check_allow(visitor_id(http))
+        if not allowed:
+            mode, fallback_reason = "template", reason
+            workflow_factory, producer = template_workflow, template_producer()
+            recap_writer = TemplateRecapWriter()
     elif mode != "foundry":
         recap_writer = TemplateRecapWriter()
     run = await app.state.registry.start_run(
@@ -438,7 +447,7 @@ async def stream_fan(profile: str, http: Request) -> EventSourceResponse:
     run.add_profile(fan)
     channel = f"fan:{fan.key()}"
 
-    async def stream():
+    async def stream() -> AsyncIterator[dict[str, Any]]:
         queue = run.broadcast.open(channel)
         latest = await run.render_latest(fan)
         if latest is not None:

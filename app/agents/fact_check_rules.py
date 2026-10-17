@@ -333,8 +333,9 @@ _EN_BEFORE = {
     "under", "at", "with", "than", "pressing", "pressed", "pressured", "pressure", "trapped", "trap", "caught", "forced", "forcing",
     "force", "forces", "denied", "stopped", "dispossessed", "robbed", "chasing", "pinned", "pin", "pins", "pinning", "outnumbered",
     "overran", "overrun", "squeezed", "hemmed", "leave", "leaves", "left", "leaving", "keep", "keeps", "kept", "keeping",
-    "push", "pushes", "pushed", "pushing", "put", "puts", "putting", "while", "as", "whilst", "for", "and", "so",
+    "push", "pushes", "pushed", "pushing", "put", "puts", "putting", "for",
 }
+_EN_CONJUNCTIONS = {"and", "but", "so", "or", "while", "as", "whilst", "because"}
 _EN_AFTER = {
     "chasing", "chase", "chased", "concede", "conceded", "conceding", "struggle", "struggled", "struggling", "pinned", "overrun",
     "could", "couldn't", "cannot", "can't", "failed", "fail", "lost", "lose", "losing", "defend", "defending", "defended",
@@ -401,8 +402,9 @@ def _as_object(tokens: list[str], start: int, length: int, lang: Lang) -> bool:
             or any(w in _TR_AFTER for w in after_tr[:2])
             or any(w in ("karsi", "karsisinda", "uzerinde") for w in before_tr)
         )
-    if any(w in _EN_BEFORE for w in before[-2:]):
-        return True
+    if before and before[-1] not in _EN_CONJUNCTIONS:
+        if any(w in _EN_BEFORE for w in before[-2:]):
+            return True
     if after and after[0] in _EN_AFTER:
         if after[0] in _EN_AFTER_SUBJECT:
             return any(w in _EN_PASSIVE for w in after[1:3])

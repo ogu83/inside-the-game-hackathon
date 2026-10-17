@@ -2,6 +2,7 @@
 
 import asyncio
 import contextvars
+import logging
 import os
 import secrets
 import time
@@ -12,6 +13,8 @@ from typing import Any
 from fastapi import HTTPException, Request, Response, WebSocket
 
 from app.api.streams import MatchRun
+
+log = logging.getLogger(__name__)
 
 SESSION_COOKIE = "mc_session"
 DEFAULT_MAX_CONCURRENT = 4
@@ -44,6 +47,12 @@ class MatchRegistry:
         )
         self._entries: dict[str, SessionEntry] = {}
         self._run_to_session: dict[str, str] = {}
+        self._background_tasks: set[asyncio.Task] = set()
+
+    def _schedule_stop(self, run: MatchRun) -> None:
+        task = asyncio.create_task(self._safe_stop(run))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
     def active_count(self) -> int:
         self.cleanup()
@@ -66,7 +75,7 @@ class MatchRegistry:
             entry = self._entries.pop(sid, None)
             if entry:
                 self._run_to_session.pop(entry.run.match_id, None)
-                asyncio.create_task(self._safe_stop(entry.run))
+                self._schedule_stop(entry.run)
         return to_remove
 
     @staticmethod
@@ -74,7 +83,7 @@ class MatchRegistry:
         try:
             await run.stop()
         except Exception:
-            pass
+            log.warning("error stopping run %s during session cleanup", run.match_id, exc_info=True)
 
     def get(self, session_id: str | None) -> MatchRun | None:
         if not session_id:
@@ -86,7 +95,7 @@ class MatchRegistry:
         if (time.time() - entry.last_active) > self.idle_ttl_s:
             self._entries.pop(session_id, None)
             self._run_to_session.pop(entry.run.match_id, None)
-            asyncio.create_task(self._safe_stop(entry.run))
+            self._schedule_stop(entry.run)
             return None
         entry.last_active = time.time()
         return entry.run
@@ -140,6 +149,8 @@ class MatchRegistry:
         self._run_to_session.clear()
         for e in entries:
             await self._safe_stop(e.run)
+        if self._background_tasks:
+            await asyncio.gather(*list(self._background_tasks), return_exceptions=True)
 
 
 def get_session_id(request: Request) -> str:

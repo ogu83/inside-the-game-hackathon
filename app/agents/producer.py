@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from app.agents.fact_check_rules import check_rendering, cited_evidence
 from app.agents.models import FanNarrative, FanProfile, Insight, NumberCheck, OverlayCue
 from app.agents.prompts import cue_prompt, narrative_prompt
+from app.agents.retry import retry_call
 from app.ledger.labels import profile_labels
 from app.ledger.models import CandidateMoment
 
@@ -42,29 +43,17 @@ class FoundryRenderer:
         self.agent = agent
 
     async def cue(self, insight: Insight, moment: CandidateMoment, labels: dict[str, str], feedback: list[str]) -> CueDraft:
-        response = None
-        for attempt in range(3):
-            try:
-                response = await self.agent.run(cue_prompt(insight, moment, labels, feedback), options={"response_format": CueDraft})
-                break
-            except Exception:
-                if attempt == 2:
-                    raise
-                await asyncio.sleep(2 * (attempt + 1))
+        response = await retry_call(
+            lambda: self.agent.run(cue_prompt(insight, moment, labels, feedback), options={"response_format": CueDraft})
+        )
         assert response is not None
         value = response.value
         return CueDraft.model_validate(value if isinstance(value, dict) else value.model_dump())
 
     async def narrative(self, insight: Insight, moment: CandidateMoment, labels: dict[str, str], profile: FanProfile, feedback: list[str]) -> str:
-        response = None
-        for attempt in range(3):
-            try:
-                response = await self.agent.run(narrative_prompt(insight, moment, labels, profile, feedback))
-                break
-            except Exception:
-                if attempt == 2:
-                    raise
-                await asyncio.sleep(2 * (attempt + 1))
+        response = await retry_call(
+            lambda: self.agent.run(narrative_prompt(insight, moment, labels, profile, feedback))
+        )
         assert response is not None
         return (response.text or "").strip()
 
