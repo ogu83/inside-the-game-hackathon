@@ -11,19 +11,68 @@
 </head>
 <body>
 <div id="app">
-  <header>
-    <h1>Matchday Companion</h1>
-    <label>seed <input type="number" v-model.number="form.seed"></label>
-    <label>speed <input type="number" step="0.5" min="0.5" v-model.number="form.speed"></label>
-    <label>delay s <input type="number" min="0" v-model.number="form.delay_s"></label>
-    <button @click="start" :disabled="starting">{{ starting ? 'starting' : 'start match' }}</button>
-    <button class="secondary" @click="stop" v-if="running">stop</button>
-    <button class="secondary" @click="toggleVoice">{{ voice ? 'voice on' : 'voice off' }}</button>
-    <span class="badge delay" v-if="clock">broadcast delay {{ clock.delay_s }} s</span>
-    <span class="badge" v-if="mode">{{ mode }} playback</span>
-    <span class="badge" :class="{ warn: agentMode === 'template' && fallbackReason }" v-if="agentMode" :title="fallbackReason || ''">{{ agentMode === 'foundry' ? 'Foundry agents' : 'offline agents' }}<span v-if="fallbackReason">: {{ fallbackReason }}</span></span>
-    <span class="badge warn" v-if="busyMessage">{{ busyMessage }}</span>
-    <span class="clock" v-if="clock">{{ playbackClock }}</span>
+  <header class="app-header">
+    <div class="brand">
+      <img src="/static/assets/league-mark-256.png" alt="" class="league-mark">
+      <div class="brand-text">
+        <h1>Matchday Companion</h1>
+        <span class="brand-sub">Meridian League &middot; demo seed {{ form.seed }}</span>
+      </div>
+    </div>
+
+    <div class="scoreboard-pill">
+      <img src="/static/assets/crest-kby-256.png" :alt="teams.home + ' crest'" class="score-crest">
+      <span class="club-name">{{ teams.home }}</span>
+      <span class="score-num">{{ score.home }} : {{ score.away }}</span>
+      <span class="club-name">{{ teams.away }}</span>
+      <img src="/static/assets/crest-iva-256.png" :alt="teams.away + ' crest'" class="score-crest">
+      <span class="clock-display">{{ playbackClock || '00:00' }}</span>
+    </div>
+
+    <div class="header-chips">
+      <span class="chip-badge" v-if="clock">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7AB4FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+        Broadcast delay {{ clock.delay_s }} s
+      </span>
+      <span class="chip-badge" :class="{ warn: agentMode === 'template' }" v-if="agentMode" :title="fallbackReason || ''">
+        <svg v-if="agentMode === 'foundry'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3DD68C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg>
+        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        {{ agentMode === 'foundry' ? 'Foundry agents live' : ('Offline agents' + (fallbackReason ? ': ' + fallbackReason : '')) }}
+      </span>
+      <span class="chip-badge warn" v-if="busyMessage">{{ busyMessage }}</span>
+    </div>
+
+    <div class="header-actions">
+      <div role="group" aria-label="Playback speed" class="speed-toggle">
+        <button type="button" @click="setSpeed(1)" :class="{ active: form.speed === 1 }" :aria-pressed="form.speed === 1">1x</button>
+        <button type="button" @click="setSpeed(4)" :class="{ active: form.speed === 4 }" :aria-pressed="form.speed === 4">4x</button>
+      </div>
+
+      <details class="match-settings" v-if="!running">
+        <summary aria-label="Match settings" title="Match settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </summary>
+        <div class="settings-popover">
+          <label>Seed <input type="number" v-model.number="form.seed"></label>
+          <label>Speed <input type="number" step="0.5" min="0.5" v-model.number="form.speed"></label>
+          <label>Delay s <input type="number" min="0" v-model.number="form.delay_s"></label>
+        </div>
+      </details>
+
+      <button type="button" class="start-btn" @click="start" :disabled="starting" v-if="!running">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        {{ starting ? 'Starting...' : 'Start match' }}
+      </button>
+
+      <button type="button" class="icon-btn stop-btn" aria-label="Stop match" title="Stop match" @click="stop" v-if="running">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
+      </button>
+
+      <button type="button" class="voice-btn" :class="{ 'voice-on': voice, secondary: !voice }" :aria-pressed="voice" @click="toggleVoice">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4z"></path><path d="M15.5 8.5a5 5 0 010 7"></path><path d="M18.5 5.5a9 9 0 010 13"></path></svg>
+        {{ voice ? 'Voice on' : 'Voice off' }}
+      </button>
+    </div>
   </header>
   <div class="voicebar" v-if="voice">
     <span v-if="voiceStatus">{{ voiceStatus }}</span>
@@ -243,7 +292,7 @@ createApp({
   setup() {
     const state = reactive({
       form: { seed: 30, speed: 1, delay_s: 20 }, starting: false, running: false, clock: null, mode: null, agentMode: null, fallbackReason: null, busyMessage: '',
-      teams: { home: 'Home', away: 'Away', homeId: 'kby' }, league: { clubs: [] }, playerNames: {},
+      teams: { home: 'Home', away: 'Away', homeId: 'kby' }, score: { home: 0, away: 0 }, league: { clubs: [] }, playerNames: {},
       ticker: [], ball: null, trail: [], banner: null, narratives: [], metrics: null, timeline: [], drawerOpen: true, filter: 'all',
       profile: { club_id: null, player_id: null, depth: 'casual', language: 'en' }, profileKey: null,
       askText: '', talking: false, qa: [], micReady: false, interruptedLines: 0,
@@ -488,12 +537,17 @@ createApp({
     const timelineTeam = id => { const t = state.timeline.find(t => t.moment_id === id); return t ? t.team_id : state.teams.homeId; };
     const onEvent = (e) => {
       state.ticker.unshift(e); state.ticker.splice(8);
+      if (e.type === 'goal') {
+        if (e.team_id === state.teams.homeId) state.score.home++;
+        else state.score.away++;
+      }
       if (e.type === 'half_time' || e.type === 'full_time' || e.type === 'substitution') return;
       const p = toPitch(e, state.teams.homeId);
       state.ball = { ...p, label: e.player_id ? (state.playerNames[e.player_id] || '') : '' };
       state.trail.push([p.x.toFixed(1), p.y.toFixed(1)]); if (state.trail.length > 8) state.trail.shift();
       if (e.type === 'kickoff' || e.type === 'possession_change') state.trail = [[p.x.toFixed(1), p.y.toFixed(1)]];
     };
+    const setSpeed = (s) => { state.form.speed = s; };
     const loadLeague = async () => {
       const data = await (await fetch('/api/profiles')).json();
       state.league = data;
@@ -502,6 +556,7 @@ createApp({
     const start = async () => {
       state.starting = true; closeSources();
       state.ticker = []; state.ball = null; state.trail = []; state.banner = null; state.narratives = []; state.metrics = null; state.timeline = []; state.qa = [];
+      state.score = { home: 0, away: 0 };
       state.speechChecks = 0; state.speechMismatches = 0; state.profileKey = null;
       if (!state.league.clubs.length) await loadLeague();
       const res = await fetch('/api/match/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.form) });
@@ -556,7 +611,7 @@ createApp({
       try { const s = await (await fetch('/api/match/state')).json(); if (s.metrics) state.metrics = s.metrics; } catch (e) { /* offline between polls */ }
     }, 2000);
     loadLeague();
-    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk };
+    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, setSpeed, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk };
   },
 }).mount('#app');
 </script>
