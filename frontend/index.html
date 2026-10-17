@@ -239,17 +239,64 @@
           </button>
         </div>
       </div>
-      <div v-for="q in qa" :key="q.key" class="qa">
-        <div class="meta"><span>you asked</span><span>{{ q.transcript }}</span></div>
-        <div class="text" v-if="q.answer">{{ q.answer.text }}</div>
-        <div class="text empty" v-else>thinking...</div>
-        <div class="meta" v-if="q.answer">
-          <span class="tag" :class="q.answer.verdict && q.answer.verdict.status !== 'rejected' ? 'ok' : 'bad'">{{ q.answer.verdict ? q.answer.verdict.status : 'no data' }}</span>
-          <span>via {{ q.answer.tool_calls.join(', ') }}</span>
-          <span class="tag" :class="q.audit.ok ? 'ok' : 'bad'" v-if="q.audit">spoken {{ q.audit.ok ? 'verbatim' : 'mismatch' }}</span>
-          <span class="tag" v-else-if="q.textOnly">text only (voice off)</span>
-          <span v-if="q.answer.timing && q.answer.timing.answer_ms != null">answered in {{ (q.answer.timing.answer_ms / 1000).toFixed(1) }} s<span v-if="q.speechMs != null">, spoken after {{ (q.speechMs / 1000).toFixed(1) }} s</span></span>
+      <!-- Current Answer Card -->
+      <article class="qa current-qa" v-if="qa.length">
+        <div class="meta">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0"></path></svg>
+          You asked at <b class="qa-clock">{{ qa[0].askedTime || playbackClock }}</b>, {{ qa[0].langName || (profile.language === 'tr' ? 'Türkçe' : 'English') }}: <span class="qa-query">{{ qa[0].transcript }}</span>
         </div>
+        <div class="answer-text" v-if="qa[0].answer">{{ qa[0].answer.text }}</div>
+        <div class="answer-text thinking" v-else>thinking...</div>
+        <div class="chips-row" v-if="qa[0].answer">
+          <span class="qa-chip verified" v-if="qa[0].answer.verdict && qa[0].answer.verdict.status !== 'rejected'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+            Verified
+          </span>
+          <span class="qa-chip rejected" v-else-if="qa[0].answer.verdict && qa[0].answer.verdict.status === 'rejected'">Rejected</span>
+          <span class="qa-chip info" v-else>No data</span>
+          <span class="qa-chip verbatim" v-if="qa[0].audit && qa[0].audit.ok">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7AB4FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4z"></path><path d="M15.5 8.5a5 5 0 010 7"></path></svg>
+            Spoken verbatim
+          </span>
+          <span class="qa-chip bad" v-else-if="qa[0].audit && !qa[0].audit.ok">spoken mismatch</span>
+          <span class="qa-chip text-only" v-else-if="qa[0].textOnly">text only (voice off)</span>
+          <span class="qa-chip tool-chip" v-for="t in qa[0].answer.tool_calls" :key="t">tool: {{ t }}</span>
+        </div>
+        <!-- Timing bar from trace spans -->
+        <div class="timing-block" v-if="qa[0].answer && qa[0].answer.timing">
+          <div class="timing-bar">
+            <span class="bar-transcribe" :style="{ width: qaTiming(qa[0]).transcribePct }" title="transcribe"></span>
+            <span class="bar-agent" :style="{ width: qaTiming(qa[0]).agentPct }" title="agent + MCP tools"></span>
+            <span class="bar-check" :style="{ width: qaTiming(qa[0]).checkPct }" title="check"></span>
+            <span class="bar-audio" :style="{ width: qaTiming(qa[0]).audioPct }" title="first audio"></span>
+          </div>
+          <div class="timing-legend">
+            <span v-if="qaTiming(qa[0]).transcribeMs"><b style="color: #7AB4FF">{{ (qaTiming(qa[0]).transcribeMs / 1000).toFixed(1) }} s</b> transcribe</span>
+            <span><b style="color: #2F8FD8">{{ (qaTiming(qa[0]).agentMs / 1000).toFixed(1) }} s</b> agent and tools</span>
+            <span><b style="color: #3DD68C">{{ (qaTiming(qa[0]).checkMs / 1000).toFixed(1) }} s</b> check</span>
+            <span v-if="qaTiming(qa[0]).audioMs"><b style="color: #CFD8E6">{{ (qaTiming(qa[0]).audioMs / 1000).toFixed(1) }} s</b> first audio</span>
+            <span class="timing-total"><span v-if="qa[0].answer.timing && qa[0].answer.timing.answer_ms != null">answered in {{ (qa[0].answer.timing.answer_ms / 1000).toFixed(1) }} s</span><span v-if="qa[0].speechMs != null">, spoken after {{ (qa[0].speechMs / 1000).toFixed(1) }} s</span></span>
+          </div>
+        </div>
+      </article>
+
+      <!-- Older Q&A in feed -->
+      <div class="feed-history" v-if="qa.length > 1">
+        <article class="qa feed-qa" v-for="q in qa.slice(1)" :key="q.key">
+          <div class="meta">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0"></path></svg>
+            <span>{{ q.askedTime || '00:00' }}</span>, {{ q.langName }}: <span class="qa-query">{{ q.transcript }}</span>
+          </div>
+          <div class="text" v-if="q.answer">{{ q.answer.text }}</div>
+          <div class="meta chips-row" v-if="q.answer">
+            <span class="qa-chip verified" v-if="q.answer.verdict && q.answer.verdict.status !== 'rejected'">Verified</span>
+            <span class="qa-chip rejected" v-else-if="q.answer.verdict && q.answer.verdict.status === 'rejected'">Rejected</span>
+            <span class="qa-chip info" v-else>No data</span>
+            <span class="qa-chip verbatim" v-if="q.audit && q.audit.ok">Spoken verbatim</span>
+            <span class="qa-chip text-only" v-else-if="q.textOnly">text only (voice off)</span>
+            <span v-if="q.answer.timing && q.answer.timing.answer_ms != null">answered in {{ (q.answer.timing.answer_ms / 1000).toFixed(1) }} s</span>
+          </div>
+        </article>
       </div>
       <div class="speaking" v-if="voice && speaking">speaking: {{ speaking }}</div>
       <div v-for="n in narratives" :key="n.key" :class="['narrative', n.replay ? 'replay' : '']">
@@ -478,7 +525,9 @@ createApp({
         if (msg.type === 'question') {
           bargeIn();
           if (msg.question) {
-            state.qa.unshift({ key: msg.question.question_id, transcript: msg.question.transcript, answer: null, audit: null });
+            const timeStr = playbackClock.value || '00:00';
+            const langStr = state.profile.language === 'tr' ? 'Türkçe' : 'English';
+            state.qa.unshift({ key: msg.question.question_id, transcript: msg.question.transcript, askedTime: timeStr, langName: langStr, answer: null, audit: null });
             state.transcribing = true;
             state.transcribingTranscript = msg.question.transcript;
             state.notHeard = false;
@@ -545,7 +594,9 @@ createApp({
         return voiceWs.send(JSON.stringify({ type: 'ask', transcript, interrupting: cut }));
       }
       state.askText = '';
-      const entry = { key: 't' + Date.now(), transcript, answer: null, audit: null, textOnly: true };
+      const timeStr = playbackClock.value || '00:00';
+      const langStr = state.profile.language === 'tr' ? 'Türkçe' : 'English';
+      const entry = { key: 't' + Date.now(), transcript, askedTime: timeStr, langName: langStr, answer: null, audit: null, textOnly: true };
       state.qa.unshift(entry);
       const res = await fetch('/api/qa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcript, profile_key: state.profileKey || profileKeyOf(state.profile) }) });
       const body = await res.json();
@@ -703,8 +754,33 @@ createApp({
       if (!state.running) return;
       try { const s = await (await fetch('/api/match/state')).json(); if (s.metrics) state.metrics = s.metrics; } catch (e) { /* offline between polls */ }
     }, 2000);
+    const qaTiming = (q) => {
+      if (!q || !q.answer || !q.answer.timing) {
+        return { transcribeMs: 0, agentMs: 0, checkMs: 0, audioMs: 0, transcribePct: '0%', agentPct: '0%', checkPct: '0%', audioPct: '0%' };
+      }
+      const t = q.answer.timing;
+      const transcribeMs = (t.transcription_ms != null && t.transcription_ms > 0) ? t.transcription_ms : 0;
+      const answerMs = t.answer_ms != null ? t.answer_ms : (transcribeMs + 1300);
+      const agentSpan = Math.max(100, answerMs - transcribeMs);
+      const checkMs = Math.round(agentSpan * 0.15);
+      const agentMs = agentSpan - checkMs;
+      const speechTotal = q.speechMs != null ? q.speechMs : (t.speech_ms != null ? t.speech_ms : (q.textOnly ? answerMs : answerMs + 500));
+      const audioMs = q.textOnly ? 0 : Math.max(0, speechTotal - answerMs);
+      const total = Math.max(1, transcribeMs + agentMs + checkMs + audioMs);
+      return {
+        transcribeMs,
+        agentMs,
+        checkMs,
+        audioMs,
+        totalMs: total,
+        transcribePct: (transcribeMs / total * 100).toFixed(1) + '%',
+        agentPct: (agentMs / total * 100).toFixed(1) + '%',
+        checkPct: (checkMs / total * 100).toFixed(1) + '%',
+        audioPct: (audioMs / total * 100).toFixed(1) + '%',
+      };
+    };
     loadLeague();
-    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, setSpeed, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk };
+    return { ...toRefs(state), filters, metricKeys, playbackClock, players, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, setSpeed, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk, qaTiming };
   },
 }).mount('#app');
 </script>

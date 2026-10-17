@@ -35,6 +35,9 @@ def test_page_has_the_t12_panels_and_keeps_the_voice_controls() -> None:
     assert "Paused for you" in HTML, "voice bar has paused-for-you chip"
     assert "ptt-btn" in HTML, "push-to-talk button has ptt-btn class"
     assert "ask-submit" in HTML, "voice-off input has ask-submit button"
+    assert "current-qa" in HTML, "answer card has current-qa article"
+    assert "timing-bar" in HTML, "answer card has timing-bar element"
+    assert "Spoken verbatim" in HTML, "answer card has Spoken verbatim chip"
     css = (ROOT / "frontend" / "style.css").read_text(encoding="utf-8")
     assert 'href="/static/style.css"' in HTML and "@media (max-width: 900px)" in css
     phone = css.split("@media (max-width: 480px)")[1]
