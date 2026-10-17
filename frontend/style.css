@@ -113,14 +113,112 @@ section h2 { font-size: 16px; color: var(--muted); margin: 0 0 10px; text-transf
 @media (prefers-reduced-motion: reduce) {
   .pitch .ball, .pitch .ball-glow, .player-label { transition: none; }
 }
-.cuebanner { position: absolute; left: 4%; right: 4%; bottom: 6%; background: rgba(10, 14, 20, .88); border-left: 6px solid var(--home); border-radius: 8px; padding: 10px 14px; display: flex; gap: 14px; align-items: center; transition: opacity .4s; }
-.cuebanner.away { border-left-color: var(--away); }
-.cuebanner .headline { font-size: clamp(14px, 2.2vw, 22px); font-weight: 700; }
-.cuebanner .metric { margin-left: auto; text-align: right; }
-.cuebanner .metric b { display: block; font-size: clamp(18px, 3vw, 32px); color: var(--home); line-height: 1; }
-.cuebanner.away .metric b { color: var(--away); }
-.cuebanner .metric span { font-size: 11px; color: var(--muted); text-transform: uppercase; }
-.cuebanner .verified { font-size: 11px; color: var(--muted); }
+.cuebanner {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  align-items: stretch;
+  background: rgba(11, 18, 32, 0.92);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transform: translateY(16px);
+  pointer-events: none;
+  transition: opacity 160ms ease-in, transform 160ms ease-in;
+  z-index: 10;
+}
+.cuebanner.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition: opacity 220ms ease-out, transform 220ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cuebanner { transform: none !important; transition: opacity 160ms ease-in; }
+  .cuebanner.show { transition: opacity 220ms ease-out; }
+}
+.cuebanner .crest-block {
+  width: 92px;
+  flex: 0 0 92px;
+  display: grid;
+  place-items: center;
+}
+.cuebanner .crest-block img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+.cuebanner .body {
+  flex: 1;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+.cuebanner .headline {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cuebanner .subline {
+  font-size: 15px;
+  color: var(--text-2);
+  line-height: 1.3;
+}
+.cuebanner .verdict-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.cuebanner .v-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--bg);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.cuebanner .v-chip.verified { background: var(--verified); }
+.cuebanner .v-chip.rewritten { background: var(--rewritten); }
+.cuebanner .detail { font-size: 13px; color: var(--muted); }
+.cuebanner .metric-col {
+  width: 150px;
+  flex: 0 0 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid var(--line);
+  padding: 8px 12px;
+}
+.cuebanner .metric-col .value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 60px;
+  line-height: 0.9;
+}
+.cuebanner .metric-col .label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 4px;
+}
 .ticker { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; color: #c8d0da; margin-top: 10px; max-height: 120px; overflow: hidden; }
 .ticker div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .profile { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
@@ -174,10 +272,16 @@ section h2 { font-size: 16px; color: var(--muted); margin: 0 0 10px; text-transf
   section { padding: 10px; }
   section h2 { flex-wrap: wrap; }
   section h2 .right { margin-left: 0; width: 100%; font-size: 11px; }
-  .cuebanner { left: 2%; right: 2%; bottom: 3%; padding: 6px 8px; gap: 8px; border-left-width: 4px; }
-  .cuebanner .headline { font-size: 13px; }
-  .cuebanner .verified { display: none; }
-  .cuebanner .metric b { font-size: 18px; }
+  .cuebanner { left: 12px; right: 12px; bottom: 12px; border-radius: 12px; }
+  .cuebanner .crest-block { width: 8px; flex: 0 0 8px; }
+  .cuebanner .crest-block img { display: none; }
+  .cuebanner .body { padding: 10px 12px; gap: 4px; }
+  .cuebanner .headline { font-size: 22px; }
+  .cuebanner .subline { font-size: 13px; }
+  .cuebanner .detail { display: none; }
+  .cuebanner .metric-col { width: 74px; flex: 0 0 74px; padding: 6px 8px; }
+  .cuebanner .metric-col .value { font-size: 38px; }
+  .cuebanner .metric-col .label { font-size: 11px; letter-spacing: 1.5px; }
   .player-label { display: none; }
   .ticker { font-size: 11px; max-height: 90px; }
   .profile { grid-template-columns: 1fr; }

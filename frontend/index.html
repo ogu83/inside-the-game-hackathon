@@ -73,12 +73,29 @@
           <rect width="105" height="68" fill="url(#vig)" pointer-events="none"/>
         </svg>
         <div class="player-label" v-if="ball && ball.label" :class="{ away: !ball.home }" :style="labelStyle(ball)">{{ ball.label }}</div>
-        <div class="cuebanner" :class="{ away: !banner.home }" v-if="banner" :style="{ opacity: banner.visible ? 1 : 0 }">
-          <div>
-            <div class="headline">{{ banner.headline }}</div>
-            <div class="verified">verified by {{ banner.layer }} layer, attempt {{ banner.attempt }} &middot; {{ banner.time }}</div>
+        <div class="cuebanner" :class="{ away: !banner.home, show: banner.visible }" v-if="banner">
+          <div class="crest-block" :style="{ background: banner.home ? 'var(--home)' : 'var(--away)' }">
+            <img :src="banner.home ? '/static/assets/crest-kby-256.png' : '/static/assets/crest-iva-256.png'" :alt="banner.home ? teams.home + ' crest' : teams.away + ' crest'">
           </div>
-          <div class="metric" v-if="banner.metric_value"><b>{{ banner.metric_value }}</b><span>{{ banner.metric_label }}</span></div>
+          <div class="body">
+            <div class="headline">{{ banner.headline }}</div>
+            <div class="subline" v-if="banner.subline">{{ banner.subline }}</div>
+            <div class="verdict-row">
+              <span class="v-chip rewritten" v-if="banner.status === 'rewritten' || banner.attempt > 1">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg>
+                Rewritten
+              </span>
+              <span class="v-chip verified" v-else>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+                Verified
+              </span>
+              <span class="detail">numbers by code, wording by model, attempt {{ banner.attempt }}</span>
+            </div>
+          </div>
+          <div class="metric-col" v-if="banner.metric_value">
+            <span class="value" :style="{ color: banner.home ? 'var(--home)' : 'var(--away)' }">{{ banner.metric_value }}</span>
+            <span class="label" v-if="banner.metric_label">{{ banner.metric_label }}</span>
+          </div>
         </div>
       </div>
       <div class="ticker">
@@ -452,14 +469,21 @@ createApp({
       if (i >= 0) state.timeline.splice(i, 1, { ...state.timeline[i], ...m }); else state.timeline.unshift(m);
     };
     const markDisplayed = (momentId, displayed) => { const t = state.timeline.find(t => t.moment_id === momentId); if (t) t.displayed = displayed; };
-    let bannerTimer = null;
     const showBanner = (c) => {
-      const team = c.cue.moment_id.split('-')[0];
-      state.banner = { headline: c.cue.headline, metric_label: c.cue.metric_label, metric_value: c.cue.metric_value, layer: c.verdict.layer, attempt: c.verdict.attempt,
-        time: `${pad(c.minute)}:${pad(c.second)}`, home: timelineTeam(c.cue.moment_id) === state.teams.homeId, visible: true };
+      state.banner = {
+        headline: c.cue.headline,
+        subline: c.cue.subline || (c.cue.supporting_fact || ''),
+        metric_label: c.cue.metric_label,
+        metric_value: c.cue.metric_value,
+        layer: c.verdict ? c.verdict.layer : 'code',
+        attempt: c.verdict ? c.verdict.attempt : 1,
+        status: c.verdict ? c.verdict.status : 'verified',
+        time: `${pad(c.minute)}:${pad(c.second)}`,
+        home: timelineTeam(c.cue.moment_id) === state.teams.homeId,
+        visible: true,
+      };
       clearTimeout(bannerTimer);
       bannerTimer = setTimeout(() => { if (state.banner) state.banner.visible = false; }, (c.cue.duration_s || 8) * 1000);
-      void team;
     };
     const timelineTeam = id => { const t = state.timeline.find(t => t.moment_id === id); return t ? t.team_id : state.teams.homeId; };
     const onEvent = (e) => {

@@ -26,6 +26,8 @@ def test_page_has_the_t12_panels_and_keeps_the_voice_controls() -> None:
     assert "\u2014" not in HTML
     assert "player-label" in HTML, "player label rendered as HTML pill over SVG"
     assert "font-size: 13px" in (ROOT / "frontend" / "style.css").read_text(encoding="utf-8"), "player label is 13px Barlow pill"
+    assert "crest-kby-256.png" in HTML and "crest-iva-256.png" in HTML, "cue banner renders 256px club crests"
+    assert "v-chip verified" in HTML, "cue banner has lower-third verdict chip"
     css = (ROOT / "frontend" / "style.css").read_text(encoding="utf-8")
     assert 'href="/static/style.css"' in HTML and "@media (max-width: 900px)" in css
     phone = css.split("@media (max-width: 480px)")[1]
