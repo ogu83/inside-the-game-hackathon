@@ -414,3 +414,28 @@ async def test_recap_delivered_via_sse_and_get_endpoint(client: httpx.AsyncClien
     assert "Maç sonu" in recap_tr["text"]
 
 
+async def test_start_match_global_daily_cap_fallback(client: httpx.AsyncClient, monkeypatch) -> None:
+    from app.api.limits import RunLimiter
+    monkeypatch.setenv("AGENT_MODE", "foundry")
+    app.state.limiter = RunLimiter(per_day=10, total_per_day=1)
+
+    res1 = await client.post("/api/match/start", json={"seed": 7, "speed": FAST, "delay_s": 5, "minutes": 4})
+    assert res1.status_code == 200
+    assert res1.json()["agent_mode"] == "foundry"
+    assert res1.json()["fallback_reason"] is None
+    await client.post("/api/match/stop")
+
+    res2 = await client.post(
+        "/api/match/start",
+        json={"seed": 7, "speed": FAST, "delay_s": 5, "minutes": 4},
+        headers={"x-forwarded-for": "10.0.0.99"},
+    )
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert data2["agent_mode"] == "template"
+    assert data2["fallback_reason"] == "Live runs for today are used up, playing with offline agents"
+    assert data2["live_runs_remaining"] == 0
+    await client.post("/api/match/stop")
+
+
+

@@ -143,6 +143,10 @@ Matchday Companion is configured for deployment to Azure Container Apps in `east
 - **Automated Workflow**: `.github/workflows/image.yml` builds and pushes multi-stage container images on merge to `main`.
 - **Deployment Execution**: Run `pwsh infra/deploy.ps1` to provision or roll forward the live Container App.
 
+### Environment Variables and Spend Protection
+- `PUBLIC_LIVE_RUNS_PER_DAY`: Max live runs allowed per visitor per day (default `2`, evaluated using trusted `X-Forwarded-For` client address).
+- `PUBLIC_LIVE_RUNS_TOTAL_PER_DAY`: Global daily cap across all visitors on the public instance (default `40`; `0` means unlimited). Protects against unexpected token spend during public demo judging. Once reached, all subsequent matches fall back to offline agents with the message: "Live runs for today are used up, playing with offline agents".
+
 ### Verification Results (2026-10-16)
 
 | Check | Target | Result | Evidence / Details |

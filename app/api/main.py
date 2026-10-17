@@ -17,7 +17,7 @@ from sse_starlette.sse import EventSourceResponse
 from app.agents.fact_checker import FactChecker
 from app.agents.fakes import AlwaysVerifies
 from app.agents.models import FanProfile, QaTiming
-from app.api.limits import RunLimiter, live_runs_per_day
+from app.api.limits import RunLimiter, live_runs_per_day, live_runs_total_per_day
 from app.api.sessions import (
     MatchRegistry,
     SESSION_COOKIE,
@@ -101,7 +101,7 @@ async def lifespan(app: FastAPI):
     if not hasattr(app.state, "recap_writer") or app.state.recap_writer is None:
         app.state.recap_writer = recap_writer_from_env()
     if not hasattr(app.state, "limiter") or app.state.limiter is None:
-        app.state.limiter = RunLimiter(live_runs_per_day())
+        app.state.limiter = RunLimiter(live_runs_per_day(), live_runs_total_per_day())
     if not hasattr(app.state, "speaker_factory"):
         app.state.speaker_factory = speaker_factory_from_env()
     # The MCP transport is built per lifespan (a session manager runs once) and one task owns its cancel scope.
@@ -293,10 +293,12 @@ async def start_match(request: StartRequest, http: Request) -> dict:
     mode, fallback_reason = agent_mode(), None
     workflow_factory, producer = app.state.workflow_factory, app.state.producer
     recap_writer = getattr(app.state, "recap_writer", None) or recap_writer_from_env()
-    if mode == "foundry" and not app.state.limiter.allow(visitor_id(http)):
-        mode, fallback_reason = "template", f"live-run limit reached ({app.state.limiter.per_day} per visitor per day); continuing with offline agents"
-        workflow_factory, producer = template_workflow, template_producer()
-        recap_writer = TemplateRecapWriter()
+    if mode == "foundry":
+        allowed, reason = app.state.limiter.check_allow(visitor_id(http))
+        if not allowed:
+            mode, fallback_reason = "template", reason
+            workflow_factory, producer = template_workflow, template_producer()
+            recap_writer = TemplateRecapWriter()
     elif mode != "foundry":
         recap_writer = TemplateRecapWriter()
     run = await app.state.registry.start_run(
