@@ -18,7 +18,7 @@ SCRIPT = re.findall(r"<script>(.*?)</script>", HTML, re.S)[0]
 
 def test_page_has_the_t12_panels_and_keeps_the_voice_controls() -> None:
     for needle in ("<svg class=\"pitch\"", "cuebanner", "Agent timeline", "follow", "toggleVoice", "Speech audit", "/api/stream/fan", "/api/match/moments", "/api/voice?profile=",
-                   "hold to talk", "talk_start", "talk_end", "/api/qa", "getUserMedia", "webkitSpeechRecognition", "dropPlayback",
+                   "Hold to talk", "talk_start", "talk_end", "/api/qa", "getUserMedia", "webkitSpeechRecognition", "dropPlayback",
                    "ensureVoiceSocket", "reconnecting the voice", "text only (voice off)", "ws.onclose",
                    "@pointerdown.prevent=\"pressTalk\"", "@pointercancel=\"releaseTalk\"", "class PushToTalk", "isFinal", "class PlaybackGate", "bargeIn"):
         assert needle in HTML, needle
@@ -33,6 +33,8 @@ def test_page_has_the_t12_panels_and_keeps_the_voice_controls() -> None:
     assert "aria-label=\"Stop match\"" in HTML, "stop button has aria-label"
     assert "waveform" in HTML, "voice bar has waveform glyph"
     assert "Paused for you" in HTML, "voice bar has paused-for-you chip"
+    assert "ptt-btn" in HTML, "push-to-talk button has ptt-btn class"
+    assert "ask-submit" in HTML, "voice-off input has ask-submit button"
     css = (ROOT / "frontend" / "style.css").read_text(encoding="utf-8")
     assert 'href="/static/style.css"' in HTML and "@media (max-width: 900px)" in css
     phone = css.split("@media (max-width: 480px)")[1]

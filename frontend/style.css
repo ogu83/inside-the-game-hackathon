@@ -413,10 +413,149 @@ section h2 { font-size: 16px; color: var(--muted); margin: 0 0 10px; text-transf
 .narrative .text { margin-top: 3px; font-size: 15px; line-height: 1.35; }
 .narrative.replay { border: 1px dashed var(--info); }
 .speaking { color: var(--kby); font-size: 13px; margin-bottom: 8px; min-height: 18px; }
-.ask { display: flex; gap: 8px; margin-bottom: 10px; }
-.ask input { flex: 1; min-width: 0; }
-.ask .talk { white-space: nowrap; user-select: none; -webkit-user-select: none; touch-action: none; }
-.ask .talk.held { background: var(--away); color: #211; }
+.ask { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.ptt-row { display: flex; gap: 10px; align-items: center; }
+.ptt-btn {
+  height: 56px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 14px;
+  background: var(--text);
+  color: var(--bg);
+  font: 700 16px Barlow, sans-serif;
+  padding: 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.ptt-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+.ptt-btn.listening, .ptt-btn.held {
+  background: var(--kby);
+  color: #071422;
+  box-shadow: 0 0 0 3px rgba(47, 143, 216, 0.4);
+}
+.ptt-btn.transcribing {
+  background: var(--chip);
+  color: var(--text-2);
+}
+.ptt-btn.answering {
+  background: var(--chip);
+  color: var(--text);
+}
+.ptt-btn.not-heard {
+  background: var(--text);
+  color: var(--bg);
+}
+.typed-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.typed-label input {
+  height: 40px;
+  box-sizing: border-box;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 12px;
+  color: var(--text);
+  font: 15px Barlow, sans-serif;
+}
+.typed-label input:focus {
+  outline: 2px solid var(--kby);
+  outline-offset: 1px;
+}
+.transcribe-preview {
+  font-size: 14px;
+  color: var(--text);
+  background: #0E1626;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.not-heard-notice {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+  color: var(--rewritten);
+}
+.voice-off-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.voice-off-row input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  box-sizing: border-box;
+  background: #0E1626;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 12px;
+  color: var(--text);
+  font: 15px Barlow, sans-serif;
+}
+.voice-off-row input:focus {
+  outline: 2px solid var(--kby);
+  outline-offset: 1px;
+}
+.ask-submit {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--text);
+  color: var(--bg);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.ask-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@keyframes pttWave {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+.live-bars rect, .live-bars-green rect {
+  transform-origin: center;
+  animation: pttWave 0.8s ease-in-out infinite;
+}
+.live-bars rect:nth-child(2), .live-bars-green rect:nth-child(2) { animation-delay: 0.1s; }
+.live-bars rect:nth-child(3), .live-bars-green rect:nth-child(3) { animation-delay: 0.2s; }
+.live-bars rect:nth-child(4), .live-bars-green rect:nth-child(4) { animation-delay: 0.15s; }
+.live-bars rect:nth-child(5), .live-bars-green rect:nth-child(5) { animation-delay: 0.25s; }
+.live-bars rect:nth-child(6), .live-bars-green rect:nth-child(6) { animation-delay: 0.05s; }
+.live-bars rect:nth-child(7), .live-bars-green rect:nth-child(7) { animation-delay: 0.18s; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-bars rect, .live-bars-green rect, .spin { animation: none; }
+}
 .qa { background: var(--panel2); border: 1px solid var(--info); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
 .qa .meta { font-size: 11px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .qa .text { margin: 3px 0; font-size: 15px; line-height: 1.35; }

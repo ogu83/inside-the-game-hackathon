@@ -184,8 +184,60 @@
         <div class="pending" v-if="profilePending">change pending: {{ pendingKey }} (applying...)</div>
       </div>
       <div class="ask">
-        <button class="talk" :class="{ held: talking }" :disabled="!running" @pointerdown.prevent="pressTalk" @pointerup.prevent="releaseTalk" @pointercancel="releaseTalk" @pointerleave="releaseTalk" @keydown.space.enter.prevent="pressTalk" @keyup.space.enter.prevent="releaseTalk" @contextmenu.prevent>{{ talking ? 'listening, release to ask' : 'hold to talk' }}</button>
-        <input type="text" v-model="askText" :disabled="!running" placeholder="or type a question: why does that matter? how is my player doing?" @keyup.enter="askTyped">
+        <div class="ptt-row" v-if="voice">
+          <button type="button" class="talk ptt-btn"
+            :class="{ listening: talking, transcribing: transcribing, answering: answering, 'not-heard': notHeard, held: talking }"
+            :aria-pressed="talking"
+            :disabled="!running || transcribing"
+            @pointerdown.prevent="pressTalk"
+            @pointerup.prevent="releaseTalk"
+            @pointercancel="releaseTalk"
+            @pointerleave="releaseTalk"
+            @keydown.space.enter.prevent="pressTalk"
+            @keyup.space.enter.prevent="releaseTalk"
+            @contextmenu.prevent>
+            <!-- State 2: Listening -->
+            <template v-if="talking">
+              <svg class="live-bars" width="40" height="20" viewBox="0 0 44 20" aria-hidden="true"><g fill="#071422"><rect x="0" y="7" width="3" height="6" rx="1.5"></rect><rect x="6" y="3" width="3" height="14" rx="1.5"></rect><rect x="12" y="0" width="3" height="20" rx="1.5"></rect><rect x="18" y="5" width="3" height="10" rx="1.5"></rect><rect x="24" y="2" width="3" height="16" rx="1.5"></rect><rect x="30" y="6" width="3" height="8" rx="1.5"></rect><rect x="36" y="8" width="3" height="4" rx="1.5"></rect></g></svg>
+              <span>Listening, release to ask</span>
+            </template>
+            <!-- State 3: Transcribing -->
+            <template v-else-if="transcribing">
+              <svg class="spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7AB4FF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 109 9"></path></svg>
+              <span>Got it</span>
+            </template>
+            <!-- State 4: Answering -->
+            <template v-else-if="answering">
+              <svg class="live-bars-green" width="40" height="20" viewBox="0 0 44 20" aria-hidden="true"><g fill="#3DD68C"><rect x="0" y="8" width="3" height="4" rx="1.5"></rect><rect x="6" y="5" width="3" height="10" rx="1.5"></rect><rect x="12" y="2" width="3" height="16" rx="1.5"></rect><rect x="18" y="6" width="3" height="8" rx="1.5"></rect><rect x="24" y="3" width="3" height="14" rx="1.5"></rect><rect x="30" y="7" width="3" height="6" rx="1.5"></rect><rect x="36" y="5" width="3" height="10" rx="1.5"></rect></g></svg>
+              <span>Speaking the answer</span>
+            </template>
+            <!-- State 5: Not heard -->
+            <template v-else-if="notHeard">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8"></path><path d="M3 3v5h5"></path></svg>
+              <span>Try again</span>
+            </template>
+            <!-- State 1: Idle -->
+            <template v-else>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0"></path><path d="M12 18v3"></path></svg>
+              <span>Hold to talk</span>
+            </template>
+          </button>
+          <label class="typed-label">Or type a question
+            <input type="text" v-model="askText" :disabled="!running" placeholder="Why does that matter?" @keyup.enter="askTyped">
+          </label>
+        </div>
+        <div class="transcribe-preview" v-if="voice && transcribing && transcribingTranscript">"{{ transcribingTranscript }}"</div>
+        <div class="not-heard-notice" v-if="voice && notHeard">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--rewritten)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: 0 0 auto"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01"></path></svg>
+          <span>{{ notHeardReason || "I didn't catch that, try again" }}</span>
+        </div>
+        <!-- State 6: Voice off -->
+        <div class="voice-off-row" v-if="!voice">
+          <input type="text" v-model="askText" :disabled="!running" placeholder="Type a question" aria-label="Type a question" @keyup.enter="askTyped">
+          <button type="button" class="ask-submit" :disabled="!running || !askText.trim()" @click="askTyped" aria-label="Ask">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+          </button>
+        </div>
       </div>
       <div v-for="q in qa" :key="q.key" class="qa">
         <div class="meta"><span>you asked</span><span>{{ q.transcript }}</span></div>
@@ -308,7 +360,8 @@ createApp({
       teams: { home: 'Home', away: 'Away', homeId: 'kby' }, score: { home: 0, away: 0 }, league: { clubs: [] }, playerNames: {},
       ticker: [], ball: null, trail: [], banner: null, narratives: [], metrics: null, timeline: [], drawerOpen: true, filter: 'all',
       profile: { club_id: null, player_id: null, depth: 'casual', language: 'en' }, profileKey: null,
-      askText: '', talking: false, qa: [], micReady: false, interruptedLines: 0,
+      askText: '', talking: false, transcribing: false, transcribingTranscript: '', answering: false, notHeard: false, notHeardReason: '',
+      qa: [], micReady: false, interruptedLines: 0,
       sources: [], fanSource: null, startedAt: null,
       voice: false, voiceStatus: '', speaking: '', speechChecks: 0, speechMismatches: 0,
     });
@@ -345,7 +398,7 @@ createApp({
     const dropPlayback = () => { scheduled.forEach(src => { try { src.stop(); } catch (e) { /* already ended */ } }); scheduled = []; playHead = 0; carry = null; };
     // Audible within a frame of the press: stop what is scheduled and mute whatever still arrives for this line.
     // Returns the id of the line that was cut off (null if nothing was playing), so the server can mark its audit.
-    const bargeIn = () => { const cut = stillPlaying() ? speakingId : null; gate.interrupt(); dropPlayback(); state.speaking = ''; speakingId = null; return cut; };
+    const bargeIn = () => { const cut = stillPlaying() ? speakingId : null; gate.interrupt(); dropPlayback(); state.speaking = ''; speakingId = null; state.answering = false; return cut; };
     const playPcm = (buffer) => {
       if (!gate.accept(buffer)) return;  // a chunk of the interrupted line
       let bytes = new Uint8Array(buffer);
@@ -404,7 +457,11 @@ createApp({
         const msg = JSON.parse(m.data);
         if (msg.type === 'speaking') {
           gate.nextLine(); state.speaking = msg.text; playHead = 0; speakingId = msg.question_id || msg.moment_id || null;
-          if (msg.question_id && msg.timing) { const q = state.qa.find(q => q.answer && q.answer.question_id === msg.question_id); if (q) q.speechMs = msg.timing.speech_ms; }
+          if (msg.question_id) {
+            state.transcribing = false;
+            state.answering = true;
+            if (msg.timing) { const q = state.qa.find(q => q.answer && q.answer.question_id === msg.question_id); if (q) q.speechMs = msg.timing.speech_ms; }
+          }
         }
         if (msg.type === 'audit_updated') {
           const a = msg.audit;
@@ -413,12 +470,25 @@ createApp({
         }
         if (msg.type === 'spoken') {
           state.speechChecks++; if (!msg.audit.ok) state.speechMismatches++;
-          if (msg.audit.question_id) { const q = state.qa.find(q => q.answer && q.answer.question_id === msg.audit.question_id); if (q) q.audit = msg.audit; }
+          if (msg.audit.question_id) {
+            state.answering = false;
+            const q = state.qa.find(q => q.answer && q.answer.question_id === msg.audit.question_id); if (q) q.audit = msg.audit;
+          }
         }
         if (msg.type === 'question') {
           bargeIn();
-          if (msg.question) state.qa.unshift({ key: msg.question.question_id, transcript: msg.question.transcript, answer: null, audit: null });
-          else state.voiceStatus = msg.reason;
+          if (msg.question) {
+            state.qa.unshift({ key: msg.question.question_id, transcript: msg.question.transcript, answer: null, audit: null });
+            state.transcribing = true;
+            state.transcribingTranscript = msg.question.transcript;
+            state.notHeard = false;
+          } else {
+            state.transcribing = false;
+            state.notHeard = true;
+            state.notHeardReason = msg.reason || "I didn't catch that, try again";
+            state.voiceStatus = msg.reason;
+            setTimeout(() => { if (state.notHeard) state.notHeard = false; }, 4000);
+          }
         }
         if (msg.type === 'answer') { const q = state.qa.find(q => q.key === msg.answer.question_id); if (q) { q.answer = msg.answer; if (msg.timing) q.answer.timing = msg.timing; } }
         if (msg.type === 'match_end') state.voiceStatus = 'match over, you can still ask questions';
@@ -466,6 +536,7 @@ createApp({
     // with the voice off they go to /api/qa and are shown as text only. There is no silent fallback between the two.
     const askTyped = async () => {
       const transcript = state.askText.trim(); if (!transcript) return;
+      state.notHeard = false; state.transcribing = false; state.answering = false;
       const route = askRoute(state.voice, socketOpen());
       if (route !== 'text') {
         const cut = bargeIn();  // a typed question interrupts too
@@ -489,6 +560,7 @@ createApp({
     const releaseTalk = () => { if (ptt.release()) stopTalk(); };
     const startTalk = async () => {
       if (!state.running || state.talking) return;
+      state.notHeard = false; state.notHeardReason = ''; state.transcribing = false; state.answering = false; state.transcribingTranscript = '';
       if (state.voice) {
         if (!(await ensureVoiceSocket())) { ptt.release(); return; }  // voice on but no socket: say so, never fall back to text
         if (!ptt.held) return;  // released while reconnecting
@@ -516,6 +588,14 @@ createApp({
       state.talking = false;  // the warm mic keeps running; frames stop here because onaudioprocess checks state.talking
       if (recognition) { recognition.stop(); recognition = null; return; }
       const ws = voiceWs, pressId = ptt.pressId;
+      const outcome = talkOutcome(talkBytes);
+      if (outcome === 'talk_cancel') {
+        state.notHeard = true;
+        state.notHeardReason = "I didn't catch that, try again";
+        setTimeout(() => { if (state.notHeard) state.notHeard = false; }, 4000);
+      } else {
+        state.transcribing = true;
+      }
       // A too-short press never reaches Voice Live: the server speaks "I didn't catch that" instead.
       if (ws && ws.readyState === 1) setTimeout(() => { if (ws.readyState === 1 && pressId === ptt.pressId) ws.send(JSON.stringify({ type: talkOutcome(talkBytes) })); }, 150);
     };
