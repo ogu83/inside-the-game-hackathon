@@ -33,21 +33,44 @@
   </div>
   <main>
     <section>
-      <h2>Broadcast <span class="right">{{ teams.home }} attack left to right, {{ teams.away }} right to left</span></h2>
+      <div class="broadcast-header">
+        <h2>Broadcast</h2>
+        <div class="legend" v-if="teams.home && teams.away">
+          <span class="legend-item"><span class="team-dot home"></span>{{ teams.home }} attack left to right</span>
+          <span class="legend-item"><span class="team-dot away"></span>{{ teams.away }} attack right to left</span>
+        </div>
+      </div>
       <div class="pitchwrap">
         <svg class="pitch" viewBox="0 0 105 68" aria-label="pitch">
-          <rect class="mark" x="0.5" y="0.5" width="104" height="67"/>
-          <line class="mark" x1="52.5" y1="0.5" x2="52.5" y2="67.5"/>
-          <circle class="mark" cx="52.5" cy="34" r="9.15"/>
-          <rect class="mark" x="0.5" y="13.84" width="16.5" height="40.32"/>
-          <rect class="mark" x="88" y="13.84" width="16.5" height="40.32"/>
-          <rect class="mark" x="0.5" y="24.84" width="5.5" height="18.32"/>
-          <rect class="mark" x="99" y="24.84" width="5.5" height="18.32"/>
-          <text class="teamname" x="2" y="66">{{ teams.home }}</text>
-          <text class="teamname" x="103" y="66" text-anchor="end">{{ teams.away }}</text>
+          <defs>
+            <pattern id="mow" width="10.5" height="68" patternUnits="userSpaceOnUse">
+              <rect width="5.25" height="68" fill="var(--pitch-a)"/>
+              <rect x="5.25" width="5.25" height="68" fill="var(--pitch-b)"/>
+            </pattern>
+            <radialGradient id="vig" cx="50%" cy="50%" r="75%">
+              <stop offset="60%" stop-color="#000" stop-opacity="0"/>
+              <stop offset="100%" stop-color="#000" stop-opacity="0.45"/>
+            </radialGradient>
+            <radialGradient id="glow">
+              <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9"/>
+              <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <rect width="105" height="68" fill="url(#mow)"/>
+          <g class="mark">
+            <rect x="0.5" y="0.5" width="104" height="67"/>
+            <line x1="52.5" y1="0.5" x2="52.5" y2="67.5"/>
+            <circle cx="52.5" cy="34" r="9.15"/>
+            <rect x="0.5" y="13.84" width="16.5" height="40.32"/>
+            <rect x="88" y="13.84" width="16.5" height="40.32"/>
+            <rect x="0.5" y="24.84" width="5.5" height="18.32"/>
+            <rect x="99" y="24.84" width="5.5" height="18.32"/>
+            <circle cx="52.5" cy="34" r="0.45" fill="#FFFFFF" fill-opacity="0.85"/>
+          </g>
           <polyline class="trail" v-if="trail.length > 1" :points="trail.map(p => p.join(',')).join(' ')"/>
           <circle class="ball" v-if="ball" :cx="ball.x" :cy="ball.y" r="1.1" :fill="ball.home ? 'var(--home)' : 'var(--away)'"/>
           <text class="label" v-if="ball && ball.label" :x="labelPos(ball, ball.label).x" :y="labelPos(ball, ball.label).y" text-anchor="middle">{{ ball.label }}</text>
+          <rect width="105" height="68" fill="url(#vig)" pointer-events="none"/>
         </svg>
         <div class="cuebanner" :class="{ away: !banner.home }" v-if="banner" :style="{ opacity: banner.visible ? 1 : 0 }">
           <div>

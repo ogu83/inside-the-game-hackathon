@@ -78,16 +78,21 @@ header input { width: 64px; margin-left: 4px; }
 .voicebar .audit { margin-left: auto; color: var(--verified); font-weight: 600; }
 main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; padding: 16px; }
 @media (max-width: 900px) { main { grid-template-columns: 1fr; } .clock { margin-left: 0; } }
-section { background: var(--panel); border-radius: 10px; padding: 12px 14px; min-width: 0; }
-section h2 { font-size: 13px; color: var(--muted); margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; display: flex; gap: 8px; align-items: center; }
-section h2 .right { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; }
-.pitchwrap { position: relative; }
-.pitch { width: 100%; height: auto; display: block; background: #16472c; border-radius: 8px; }
-.pitch .mark { fill: none; stroke: rgba(255,255,255,.55); stroke-width: .35; }
+section { background: var(--panel); border-radius: 14px; padding: 16px; min-width: 0; }
+section h2 { font-size: 16px; color: var(--muted); margin: 0 0 10px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.broadcast-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.broadcast-header h2 { margin: 0; font-size: 18px; letter-spacing: 1.5px; }
+.legend { margin-left: auto; display: inline-flex; align-items: center; gap: 16px; font-size: 13px; color: var(--text-2); }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.team-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.team-dot.home { background: var(--home); }
+.team-dot.away { background: var(--away); }
+.pitchwrap { position: relative; border-radius: 14px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+.pitch { width: 100%; height: auto; display: block; border-radius: 14px; }
+.pitch .mark { fill: none; stroke: rgba(255,255,255,.82); stroke-width: .3; }
 .pitch .trail { fill: none; stroke: rgba(255,255,255,.35); stroke-width: .4; stroke-linejoin: round; }
 .pitch .ball { stroke: #fff; stroke-width: .4; }
 .pitch .label { font-size: 2.2px; fill: #fff; opacity: .85; paint-order: stroke; stroke: rgba(0,0,0,.6); stroke-width: .5px; }
-.pitch .teamname { font-size: 3px; fill: rgba(255,255,255,.7); }
 .cuebanner { position: absolute; left: 4%; right: 4%; bottom: 6%; background: rgba(10, 14, 20, .88); border-left: 6px solid var(--home); border-radius: 8px; padding: 10px 14px; display: flex; gap: 14px; align-items: center; transition: opacity .4s; }
 .cuebanner.away { border-left-color: var(--away); }
 .cuebanner .headline { font-size: clamp(14px, 2.2vw, 22px); font-weight: 700; }
