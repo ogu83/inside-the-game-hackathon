@@ -108,11 +108,16 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
   - Files: app/agents/producer.py, tests/agents/test_producer.py
   - Result: `Producer` renders the cue once and every profile narrative in parallel (`asyncio.gather`), gates each with `check_rendering` (coverage all for analyst and the metric, any for casual), regenerates once with the gate's reasons as feedback, then drops that profile only; `FoundryRenderer` with `PRODUCER_INSTRUCTIONS` (digits only, exact copies, en/tr), `TemplateRenderer` offline (depth and language differ, fan player mentioned only with a number about them); API and the planted harness use it; metrics `narratives_dropped`, `producer_regenerated`. 5 new tests, 1 live.
 
-- [ ] T10: Workflow + tracing + recap + hosted (hosted timeboxed to half a day, 2026-10-15)
-  - Status 2026-10-16: workflow wiring of all four agents DONE (S3 to T9, T11). OPEN: tracing in the app (spans per step into App Insights / Foundry portal; only the T2 spike turns it on today; needed for demo scene 6), full-time recap in en/tr (not built), hosted agent (Should, half-day timebox). Prompt: docs/prompts/T10-tracing-recap-hosted.md (also covers T12c and the drawer future-moments fix).
+- [x] T10: Workflow + tracing + recap + hosted (completed 2026-10-17)
   - Acceptance: one workflow module wires all four agents and runs in-process with spans per step in App Insights; full-time recap in en/tr; Checkpoint B criteria met. Hosted Agent deployment is a Should with a half-day timebox: if it fights back, show the T2 hosted agent in the portal and move on
-  - Verify: `python -m app.agents.run_match --seed 7 --speed 30` summary (cues, rejects, planted errors caught, ready-before-display %); hosted invoke works
-  - Files: app/agents/{workflow.py,recap.py,run_match.py}, hosted/ (azd project), tests/agents/test_workflow.py
+  - Verify: `python -m app.agents.run_match --seed 7 --speed 30` summary (cues, rejects, planted errors caught, ready-before-display %); hosted invoke works or blocker documented
+  - Files: app/observability.py, app/agents/{workflow.py,recap.py,run_match.py}, hosted/ (azd project), tests/test_observability.py, tests/agents/test_recap.py, tests/test_hosted.py
+  - Result:
+    - Tracing: Azure Monitor OpenTelemetry configured in `app/observability.py`. Spans for `moment <id>`, `producer.render`, `qa.answer`, and `mcp.tool <name>`. App Insights verified live on `appi-matchday`: moment trace op id `840499343095f9544b921f75c730cf5c`, Q&A op id `f135de636c7820ee5ce4e810202362fe`. Latency p50=1.49s, p90=2.30s, 100% ready before display recorded in `docs/eval-results.md`.
+    - Planted demo switch (T12c): `StartRequest.plant`, `DEMO_PLANT=1` guard, UI toggle, screenshot at `docs/design/screenshots/scene5-rejected.png`.
+    - Timeline drawer: displays only on-air moments during precomputed playback (`displayed_events` filter).
+    - Full-time recap: deterministic ledger evidence, template/Foundry writers in en/tr casual/analyst, Producer gating, SSE event `recap`, spoken verbatim via Voice Live, `GET /api/match/recap`, UI full-time card. Verified with `run_match --seed 7 --speed 30` (30 moments, 29 cues, 1 skipped, 100% ready before display; en and tr recaps generated and verified).
+    - Hosted agent: azd project created in `hosted/` packaging commentary workflow with `ResponsesHostServer` without forking app logic; unit-tested (`tests/test_hosted.py`); live deployment timebox blocker (Azure CLI token refresh non-interactive MFA error) documented in `docs/deploy.md` with T2 spike as portal evidence.
 
 - [x] T10b: Foundry evaluation (code and live runs done 2026-10-16)
   - Acceptance: 3 recorded seeded matches exported as an evaluation dataset; Foundry cloud evaluation (Groundedness, Relevance, Coherence) with Fact-Checker on vs off; planted-error count; results table in docs/eval-results.md with one headline sentence for README and video
