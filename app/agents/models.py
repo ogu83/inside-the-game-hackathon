@@ -1,0 +1,178 @@
+"""Cross-module payloads for the agent pipeline (SPEC.md "Interfaces")."""
+
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+Gate = Literal["insight", "producer", "speech"]
+
+
+class Insight(BaseModel):
+    moment_id: str
+    claim: str
+    why_it_matters: str
+    evidence_refs: list[str]
+    confidence: float = Field(ge=0, le=1)
+
+
+class Verdict(BaseModel):
+    moment_id: str
+    status: Literal["verified", "rewritten", "rejected"]
+    insight: Insight | None
+    reasons: list[str]
+    layer: Literal["code", "llm"]
+    attempt: int
+
+
+class NumberCheck(BaseModel):
+    """One record per gate pass; logged and counted in the run report."""
+
+    gate: Gate
+    moment_id: str
+    profile_key: str | None = None
+    text: str
+    ok: bool
+    mismatches: list[str]
+
+
+class OverlayCue(BaseModel):
+    moment_id: str
+    show_at_seq: int
+    duration_s: int
+    priority: Literal["low", "normal", "high"]
+    headline: str = Field(max_length=60)
+    metric_label: str | None = None
+    metric_value: str | None = None
+
+
+class FanProfile(BaseModel):
+    club_id: str | None = None
+    player_id: str | None = None
+    depth: Literal["casual", "analyst"] = "casual"
+    language: Literal["en", "tr"] = "en"
+
+    def key(self) -> str:
+        return f"{self.club_id or '-'}|{self.player_id or '-'}|{self.depth}|{self.language}"
+
+    @classmethod
+    def from_key(cls, key: str) -> "FanProfile":
+        """Inverse of key(); raises ValueError on a malformed key."""
+        parts = key.split("|")
+        if len(parts) != 4:
+            raise ValueError(f"bad profile key {key!r}: expected club|player|depth|language")
+        club, player, depth, language = parts
+        return cls(club_id=None if club == "-" else club, player_id=None if player == "-" else player, depth=depth, language=language)  # type: ignore[arg-type]
+
+
+class FanNarrative(BaseModel):
+    moment_id: str
+    profile_key: str
+    text: str
+
+
+class WordingVerdict(BaseModel):
+    """Layer 2 (LLM) output: a judgment on wording only. Rewrites re-enter the code layer."""
+
+    status: Literal["verified", "rewritten", "rejected"]
+    reasons: list[str] = Field(default_factory=list)
+    claim: str | None = None
+    why_it_matters: str | None = None
+
+
+class DirectorDecision(BaseModel):
+    """The Analyst's call on one candidate moment: say it now, or stay quiet."""
+
+    moment_id: str
+    say: bool
+    angle: str | None = None      # "control", "chance", "player", "pressure"
+    reason: str
+
+
+class PacingState(BaseModel):
+    """Computed by code and handed to the director; the model never derives these numbers itself."""
+
+    seconds_since_last_cue: float | None = None
+    cues_last_2min: int = 0
+    moments_last_2min: int = 0
+    rank_among_recent: int = 1    # 1 = most interesting moment of the last 2 minutes
+    interest: float = 0.0
+
+
+class MomentResult(BaseModel):
+    """What one workflow run returns for one moment. `verdict` is None when the director skipped it."""
+
+    moment_id: str
+    decision: DirectorDecision
+    verdict: Verdict | None = None
+    attempts: list[Insight] = Field(default_factory=list)
+    checks: list[NumberCheck] = Field(default_factory=list)
+    rejections: list[Verdict] = Field(default_factory=list)  # verdicts of the attempts that were sent back for a retry
+
+
+class Question(BaseModel):
+    """A fan's spoken or typed question, transcribed."""
+
+    question_id: str
+    profile_key: str
+    transcript: str
+    asked_at_seq: int = 0
+
+
+class QaDraft(BaseModel):
+    """What a Q&A agent returns before the gates: text plus the ledger evidence it drew on."""
+
+    text: str
+    evidence: dict[str, float] = Field(default_factory=dict)
+    tool_calls: list[str] = Field(default_factory=list)
+    language: Literal["en", "tr"] = "en"
+
+
+class QaTiming(BaseModel):
+    """Wall-clock marks (epoch seconds, server side) for one question; criterion 9 measures pressed to spoken."""
+
+    pressed_at: float | None = None        # talk_start received (or the typed question received)
+    transcribed_at: float | None = None    # transcript available (push-to-talk only)
+    answered_at: float | None = None       # approved answer text ready
+    speech_started_at: float | None = None # first audio of the spoken answer sent to the page
+
+    def answer_ms(self) -> int | None:
+        return round((self.answered_at - self.pressed_at) * 1000) if self.pressed_at and self.answered_at else None
+
+    def speech_ms(self) -> int | None:
+        return round((self.speech_started_at - self.pressed_at) * 1000) if self.pressed_at and self.speech_started_at else None
+
+    def transcription_ms(self) -> int | None:
+        return round((self.transcribed_at - self.pressed_at) * 1000) if self.pressed_at and self.transcribed_at else None
+
+    def summary(self) -> dict[str, int | None]:
+        return {"transcription_ms": self.transcription_ms(), "answer_ms": self.answer_ms(), "speech_ms": self.speech_ms()}
+
+
+class Answer(BaseModel):
+    question_id: str
+    text: str                      # "I don't have data on that" when no evidence supports an answer
+    evidence_refs: list[str]
+    tool_calls: list[str]
+    verdict: Verdict | None = None
+    evidence: dict[str, float] = Field(default_factory=dict)  # the cited values, so the speech gate can re-check the spoken answer
+    timing: QaTiming | None = None
+
+
+class SpeechAudit(BaseModel):
+    """One per spoken response (narration or answer): was the approved text what came out?"""
+
+    moment_id: str | None = None
+    question_id: str | None = None
+    profile_key: str
+    approved_text: str
+    transcript: str
+    ok: bool
+    mismatches: list[str]
+    interrupted: bool = False      # the fan barged in; a cut-off transcript is expected and not counted as a mismatch
+
+
+class FullTimeRecap(BaseModel):
+    profile_key: str
+    text: str
+    evidence: dict[str, float] = Field(default_factory=dict)
+    ok: bool = True

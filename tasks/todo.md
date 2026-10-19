@@ -1,0 +1,212 @@
+# Active Tasks: Matchday Companion (The Commentator's Brain)
+
+Order: T1 -> T2 -> D1 -> S1 -> S2 -> S3 -> S4 -> S5 (walking skeleton, by Oct 19) -> T3..T12b (deepen, by Oct 23; T10b starts as soon as T10 runs) -> T13 -> T14 -> T15 -> T16
+SPEC.md approved 2026-10-15; revised 2026-10-15 after the T2 review and again after the review in docs/reviews/2026-10-15-fable-review.md (director per moment, 20 s delay, public URL as Must with offline fallback, scope cuts; see SPEC.md status lines and tasks/plan.md scope table).
+
+## Pre-build blockers
+- [x] Azure subscription re-enabled 2026-10-15; $50/month budget alert set
+- [x] Innovation Studio profile + registration done 2026-10-15 (submission form fields still to be noted in requirements.md)
+- [x] SPEC.md assumptions approved 2026-10-15 (fictional league, en+tr, port 8010, Vue CDN)
+- [ ] Frontier model quota request for gpt-5.5 in eastus2 (Oguz)
+
+## Phase A: Foundations (done)
+- [x] T1: Repo scaffold (done 2026-10-15)
+  - Acceptance: `app/` packages exist, `requirements.txt`, `.env.example`, `tests/test_placeholder.py`; `python -m pytest tests/ -q` passes; `git init` + private GitHub repo `ogu83/inside-the-game-hackathon` (public before submission)
+  - Verify: `python -m pytest tests/ -q`
+  - Files: requirements.txt, .env.example, app/__init__.py, tests/test_placeholder.py
+  - Result: packages app/{simulator,ledger,agents,api}; .venv on Python 3.11; 5 tests pass; private repo created, branch `main`; docs/document.{md,pdf} (B2B Connect terms) gitignored
+
+- [x] T2: Azure + Foundry spike (done 2026-10-15, two manual follow-ups below)
+  - Setup: install `azd` + `azure.ai.agents` extension (or Foundry DevPack via winget); `az login` and `azd auth login`; create Foundry resource + project; grant yourself the **Foundry User** role; link an Application Insights resource to the project; deploy one small model and one frontier model (file the frontier quota request first thing, it may take time)
+  - Acceptance: a 2-agent Agent Framework graph workflow with one conditional edge runs locally against the deployments (keyless `DefaultAzureCredential`, Responses API); the same workflow deploys as a Foundry Hosted Agent and is invoked remotely; trace visible in the Foundry portal; package versions pinned in SPEC.md; hosted-vs-in-container decision confirmed in SPEC.md
+  - Also: 30-second Foundry Voice Live hello world (speak a line, interrupt it, get a reply); record region/quota/cost findings in SPEC.md
+  - Verify: `python spikes/two_agents.py` (local) and hosted invocation both print both agent outputs; screenshot of trace; `python spikes/voice_live_hello.py` round trip works
+  - Files: spikes/two_agents.py, requirements.txt, .env.example, SPEC.md
+  - Result: eastus2 Foundry resource + project, Foundry User role, App Insights linked, $50/month budget alert; `gpt-5.4-mini` deployed (DataZone Standard). `spikes/two_agents.py` runs locally (reject edge proven with `--inject-false`); `spikes/hosted/` deploys with `azd deploy` and answers `azd ai agent invoke t2-spike 'inject-false'`; spans from both in App Insights; `spikes/voice_live_hello.py` interrupt stops in ~0.4 s, reply in ~1.6 s. Findings and pins in SPEC.md "T2 decisions and findings".
+  - Manual follow-ups (Oguz): (1) file a quota request for `gpt-5.5` in eastus2, then deploy it and set `FRONTIER_MODEL_DEPLOYMENT`; (2) open the project's Tracing tab in the Foundry portal and take the trace screenshot for the README.
+
+
+## Phase S: Walking skeleton (Oct 15-19)
+
+Thin vertical slices, each tested and committed. Goal: a seeded match plays in the browser with verified cues shown on time and spoken. Later phases deepen the same files.
+
+- [x] D1: Demo script draft (done 2026-10-15: docs/demo-script.md, 7 scenes, ~1:58)
+  - Acceptance: docs/demo-script.md, scene by scene, timed to under 2 minutes, every scene mapped to a Must item in tasks/plan.md; no trademarks, no copyrighted music
+  - Verify: read aloud with a stopwatch
+  - Files: docs/demo-script.md, tasks/plan.md (scope table if the script changes it)
+
+- [x] S1: Thin simulator (done 2026-10-15: 17-31 shots, xG 1.4-2.9, ~84% pass completion across seeds)
+  - Acceptance: 2 fictional clubs (11 + 3 subs each, fictional names), build-up and transition phases, seeded emitter; same seed -> identical events; every event validates as `MatchEvent`; text printer
+  - Verify: `python -m pytest tests/simulator -q`; `python -m app.simulator.run --seed 7 --speed 20` reads like football for 5 minutes
+  - Files: app/simulator/{models.py,league.py,engine.py,run.py}, tests/simulator/test_simulator.py
+
+- [x] S2: Thin ledger + first detector (done 2026-10-15: 17-26 pass_streak moments per seeded match)
+  - Acceptance: possession % and pass streak calculators; `pass_streak` detector emits `CandidateMoment` with an evidence dict; unit tests on hand-built sequences
+  - Verify: `python -m pytest tests/ledger -q`; moment count printed for seed 7
+  - Files: app/ledger/{state.py,metrics.py,moments.py}, tests/ledger/test_metrics.py, tests/ledger/test_moments.py
+
+- [x] S3: Thin agents: Commentator + two-layer Fact-Checker (done 2026-10-15 in a cloud session; live check `-m live` still to run locally)
+  - Acceptance: Fact-Checker layer 1 (code) rejects missing keys and mismatched numbers with no LLM call, fully unit-tested; layer 1 is a reusable number check (gates: insight, producer, speech) with an en/tr number parser (`68%`, `%68`, `yüzde 68`, `68.5`, `68,5`) and a digits-only rule, each result recorded as `NumberCheck`; layer 2 (LLM) judges wording; workflow with one retry on real S2 moments, in-process; messages between executors are dicts re-validated into SPEC models
+  - Verify: `python -m pytest tests/agents -q` (layer 1 + contract, no model); `python -m pytest tests/agents -q -m live` on 3 moments
+  - Files: app/agents/{models.py,prompts.py,fact_check_rules.py,commentator.py,fact_checker.py,workflow.py}, tests/agents/
+  - Result: en/tr parser + gates in fact_check_rules.py (insight, producer, speech), `NumberCheck` per gate pass; `FactChecker` runs layer 1 then a `WordingJudge` (rewrites re-enter layer 1); Agent Framework workflow with dict messages re-validated per executor and one retry; offline agents in fakes.py (`TemplateCommentator`, `TemplateProducer`, `AlwaysVerifies`) for judges and recording fallback; `python -m app.agents.run_match --seed 7 [--jsonl f] [--live]` run log for T10b; pytest.ini deselects `live` by default. 52 new tests.
+
+- [x] S4: Thin API + page with broadcast delay (done 2026-10-15 in a cloud session; Vue page not rendered there because the CDN is blocked, check it locally)
+  - Acceptance: `POST /api/match/start`, `GET /api/stream/cues` (SSE), `GET /api/health`; playback clock runs `BROADCAST_DELAY_S` behind events; a cue not ready at its moment is dropped and counted; bare page shows an event ticker and cues; `speed` and `delay_s` are request parameters; speeds above 1x use precomputed verdicts (review section 1, pending spec approval)
+  - Verify: `python -m pytest tests/api -q`; open http://localhost:8010 and watch a seeded match
+  - Files: app/api/{main.py,streams.py,clock.py}, frontend/index.html, tests/api/test_api.py
+  - Result: `BroadcastClock` (delay in match seconds, speed-aware); `MatchRun` with precompute mode (default above 1x) and live mode (ingest loop runs `delay_s` ahead of the display loop, a cue not ready at its closing event is dropped and counted as `cues_dropped_late`); SSE channels `/api/stream/{cues,events,verdicts}` via sse-starlette; `AGENT_MODE=template|foundry`; `GET /api/match/state` metrics; Vue 3 CDN page with ticker, cues, delay badge and playback clock. 9 tests; 89 pass in about 5 s.
+
+- [x] S5: Thin voice (done 2026-10-15: real Voice Live round trip in en and tr through the app, speech audit exact; browser shows speaking line and audit 1/1)
+  - Acceptance: browser plays Voice Live speech for each verified line in en, sent as `pre_generated_assistant_message` (verbatim, the realtime model never authors spoken words); speech gate: transcript of each spoken response compared with the approved text and number-checked, mismatches counted; no barge-in yet
+  - Verify: manual: start a match, hear verified lines
+  - Files: app/voice/session.py, app/api/voice_ws.py, frontend/index.html
+
+Checkpoint S: one command, seeded match plays, verified cues appear on time and are spoken. Submittable in an emergency.
+
+## Phase B: Deepen (Oct 19-23)
+
+- [x] T3: Simulator v1 (scope cut 2026-10-15: 2 clubs, no set pieces; done 2026-10-15 in a cloud session)
+  - Acceptance: the 2 existing clubs; phase model with build-up, pressing (per-club pressing trait so pressing_trap has something to find), transition; substitutions; goals with xG-like quality; deterministic per seed; fouls emit a restart pass; `half_seconds` naming and redundant phase line from the review fixed
+  - Verify: `python -m pytest tests/simulator -q`; 5 minutes of text output reads plausibly
+  - Files: app/simulator/*, tests/simulator/test_simulator.py
+  - Result: `Club.pressing` trait (Ironvale 1.3, Kestrel Bay 0.85) multiplies the press chance; 2 like-for-like substitutions per club between minutes 58 and 82 (`substitution` events with player_on/player_off); fouls set a `free_kick` restart taken by the fouled team; `half_seconds` naming, redundant phase line, `zip(strict=True)`, clamped end coordinates; `DEMO_SEED = 30` (3 moments in the first 5 minutes, one ending in a shot); run.py prints subs and free kicks. 8 new tests, 113 pass.
+
+- [x] T4: Dataset export (done 2026-10-15 in a cloud session)
+  - Acceptance: `--export data/match_<seed>.jsonl`; 3 sample matches committed; README section describing the schema
+  - Verify: export then re-load and validate every line
+  - Files: app/simulator/export.py, data/, tests/simulator/test_export.py
+  - Result: `app/simulator/export.py` (`export_match`, `load_match`, CLI), `--export` on run.py, samples `data/match_{7,30,42}.jsonl` (a test fails if they go stale against the engine), README.md started with the schema section and the frame convention. 116 tests.
+
+- [x] T5: Ledger metrics (done 2026-10-15 in a cloud session)
+  - Acceptance: pass accuracy, pass difficulty, shot speed, player distance/speed thresholds added to S2's calculators; each unit-tested on hand-built sequences
+  - Verify: `python -m pytest tests/ledger -q`
+  - Files: app/ledger/{state.py,metrics.py}, tests/ledger/test_metrics.py
+  - Result: `pass_difficulty` (SPEC formula), `avg_pass_difficulty`, `shot_count`, `xg_total`, `max_shot_speed_kmh`, `pressure_count`, `regains_after_pressure`, `player_distance_m` (proxy from consecutive event positions), `player_stats` and `team_stats` dicts of floats for the MCP tools and the director's pacing state. 6 new tests.
+
+- [x] T6: Detectors (scope cut 2026-10-15: two detectors; done 2026-10-15 in a cloud session)
+  - Acceptance: pressing_trap added to pass_streak (no momentum_shift, no player_milestone; player numbers come from T5 ledger queries and the MCP tools); possession keys omitted when `window_minutes < 3`; seeded match yields 25-45 moments with evidence dicts, sorted by closing seq and non-overlapping; `Detector` Protocol shared by both
+  - Verify: `python -m pytest tests/ledger -q`; count printed for seed 7
+  - Files: app/ledger/moments.py, tests/ledger/test_moments.py
+  - Result: `PressingTrapDetector` (2 high pressures inside 30 s then a regain above x = 55 in the presser's frame; evidence pressures, window, players, regain distance to goal, team pressures and regains last 10 min; `top_player_id` is the regainer), `Detector` Protocol, possession share omitted under 3 minutes, seeded matches yield 26-46 sorted non-overlapping moments; offline templates and tr narrative for traps. 126 tests.
+
+- [x] T7: Analyst as director (per moment) + Commentator (done 2026-10-15 in a cloud session; live director check pending)
+  - Acceptance: the Analyst is called per candidate moment with pacing state computed by code (seconds since last spoken cue, cues in the last 2 minutes, rank among recent moments) and returns a `DirectorDecision` (say/skip, angle, reason), never computing numbers; skipped moments are logged for the verdict drawer; Commentator (S3) takes the angle and returns a valid `Insight` citing only existing evidence keys; pacing tests with scripted decisions
+  - Verify: `python -m pytest tests/agents -q`; `-m live` on 5 fixture moments
+  - Files: app/agents/{prompts.py,analyst.py,commentator.py}, tests/agents/test_analyst.py, tests/agents/test_commentator.py
+  - Result: `DirectorDecision` and `PacingState` models; `app/agents/analyst.py` with code-owned `interest`, `angle_for`, `PacingTracker` (seconds since last cue, cues and moments in the last 2 min, rank), `RuleDirector` (offline: 3 cues per 2 min ceiling, 30 s quiet period unless exceptional) and `FoundryDirector`; the director is the workflow's start executor and a skip ends the run without a Commentator call; the angle reaches the Commentator prompt (template varies the player angle); run_match and the API count `moments_skipped` and publish `skipped` events. 8 new tests, 1 live.
+
+- [x] T8: Fact-Checker full + planted errors (done 2026-10-15 in a cloud session; live planted run pending)
+  - Acceptance: verified/rewritten/rejected with `layer` and `attempt` set; planted-error harness corrupts N insights per match (wrong number, missing key, swapped team) and N Producer renderings incl. Turkish translations (changed number, dropped number, number as a word); run report shows planted errors caught per gate and 0 reaching a cue, a narrative or the voice
+  - Verify: `python -m pytest tests/agents -q`; `-m live` planted-error run on one seeded match
+  - Files: app/agents/{fact_checker.py,fact_check_rules.py,planted_errors.py}, tests/agents/test_fact_checker.py
+  - Result: `planted_errors.py` (wrong_number, missing_key, swapped_team on attempt 1; changed_number, dropped_number, number_as_word on renderings in en and tr via the Producer `tamper` hook), `PlantPlan` from a seed, per-kind `PlantedReport` with a headline sentence; `check_rendering` adds the coverage rule for dropped numbers (proposal 1 in docs/reviews/2026-10-15-phase-b-notes.md); `python -m app.agents.run_match --seed 30 --plant 6` offline: 20 of 22 caught by code, the 2 swapped teams need layer 2 (live). 7 new tests, 1 live.
+
+- [x] T9: Producer (done 2026-10-15 in a cloud session; live 2x2 check pending)
+  - Acceptance: `OverlayCue` (headline <= 60 chars) + `FanNarrative` per profile in en and tr, per-profile calls in parallel; casual vs analyst depth visibly different; prompt requires numbers as digits; every rendering passes the producer gate (number check), a failure is regenerated once then dropped for that profile only
+  - Verify: `-m live` test over 2 profiles x 2 languages
+  - Files: app/agents/producer.py, tests/agents/test_producer.py
+  - Result: `Producer` renders the cue once and every profile narrative in parallel (`asyncio.gather`), gates each with `check_rendering` (coverage all for analyst and the metric, any for casual), regenerates once with the gate's reasons as feedback, then drops that profile only; `FoundryRenderer` with `PRODUCER_INSTRUCTIONS` (digits only, exact copies, en/tr), `TemplateRenderer` offline (depth and language differ, fan player mentioned only with a number about them); API and the planted harness use it; metrics `narratives_dropped`, `producer_regenerated`. 5 new tests, 1 live.
+
+- [x] T10: Workflow + tracing + recap + hosted (completed 2026-10-17)
+  - Acceptance: one workflow module wires all four agents and runs in-process with spans per step in App Insights; full-time recap in en/tr; Checkpoint B criteria met. Hosted Agent deployment is a Should with a half-day timebox: if it fights back, show the T2 hosted agent in the portal and move on
+  - Verify: `python -m app.agents.run_match --seed 7 --speed 30` summary (cues, rejects, planted errors caught, ready-before-display %); hosted invoke works or blocker documented
+  - Files: app/observability.py, app/agents/{workflow.py,recap.py,run_match.py}, hosted/ (azd project), tests/test_observability.py, tests/agents/test_recap.py, tests/test_hosted.py
+  - Result:
+    - Tracing: Azure Monitor OpenTelemetry configured in `app/observability.py`. Spans for `moment <id>`, `producer.render`, `qa.answer`, and `mcp.tool <name>`. App Insights verified live on `appi-matchday`: moment trace op id `840499343095f9544b921f75c730cf5c`, Q&A op id `f135de636c7820ee5ce4e810202362fe`. Moment-to-cue latency p50 13.6 s, p90 14.8 s, 100% ready before display in that run (recorded in `docs/eval-results.md`).
+    - Planted demo switch (T12c): `StartRequest.plant`, `DEMO_PLANT=1` guard, UI toggle, screenshot at `docs/design/screenshots/scene5-rejected.png`.
+    - Timeline drawer: displays only on-air moments during precomputed playback (`displayed_events` filter).
+    - Full-time recap: deterministic ledger evidence, template/Foundry writers in en/tr casual/analyst, Producer gating, SSE event `recap`, spoken verbatim via Voice Live, `GET /api/match/recap`, UI full-time card. Verified with `run_match --seed 7 --speed 30` (30 moments, 29 cues, 1 skipped, 100% ready before display; en and tr recaps generated and verified).
+    - Hosted agent: azd project created in `hosted/` packaging commentary workflow with `ResponsesHostServer` without forking app logic; unit-tested (`tests/test_hosted.py`); live deployment timebox blocker (Azure CLI token refresh non-interactive MFA error) documented in `docs/deploy.md` with T2 spike as portal evidence.
+  - Review 2026-10-17: traces verified in App Insights (moment trace 8404993... has moment > workflow.run > analyst, commentator, fact_checker > producer.render; Q&A trace f135de6... has qa.answer > mcp.tool score, team_stats, recent_moments); scene 5 screenshot is a real run. Offline suite 260 passed; live suite 8 of 9 passed with the broker off (AZURE_CORE_ENABLE_BROKER_ON_WINDOWS=false); the Q&A-over-MCP live test needs a match on air and was not re-run (starting a live 4x match blocked more than 8 minutes, see P5). The todo latency line said p50 1.49 s; corrected to the eval-results numbers. Hosted deploy still open (blocked by the local login, not by code).
+
+- [x] T10b: Foundry evaluation (code and live runs done 2026-10-16)
+  - Acceptance: 3 recorded seeded matches exported as an evaluation dataset; Foundry cloud evaluation (Groundedness, Relevance, Coherence) with Fact-Checker on vs off; planted-error count; results table in docs/eval-results.md with one headline sentence for README and video
+  - Verify: evaluation job submitted and polled to completion; scores visible in the Foundry portal
+  - Files: app/eval/export_runs.py, app/eval/run_eval.py, app/eval/report.py, docs/eval-results.md, tests/eval/
+  - Result: Fixed actor check false positives (possessive/locative opponent mentions) and minute context citations in `app/agents/fact_check_rules.py`; honest headline derivation in `app/eval/report.py`; live export (`export_runs --seeds 7 30 42 --limit 12 --live`) and 4 Foundry evaluation runs (`run_eval runs/eval`). Real results: Checker on 4.57 mean (100% pass, 100% layer 1 pass), Checker off 4.60 mean (97% pass, 97% layer 1 pass, 1 caught confused attribution), Planted on 4.75 mean (100% pass, 100% layer 1 pass, 0/4 reached air), Planted off 3.83 mean (75% pass, 67% layer 1 pass, 4/4 reached air); 26 of 26 planted corruptions caught. `docs/eval-results.md` committed with honest headline and portal links; SPEC wording proposal in `docs/reviews/2026-10-16-t10b-fixes.md`. 241 tests pass.
+
+- [x] T11: API full (done 2026-10-15 in a cloud session)
+  - Acceptance: adds `GET /api/stream/fan?profile=...`, `GET /api/profiles`, verdict stream for the debug drawer
+  - Verify: `python -m pytest tests/api -q`; `curl -N localhost:8010/api/stream/cues`
+  - Files: app/api/main.py, app/api/streams.py, tests/api/test_api.py
+  - Result: `GET /api/profiles` (clubs, players, depths, languages, active profiles), `POST /api/fan/profile` (registers a profile and re-renders the latest shown moment immediately), `GET /api/stream/fan?profile=key` (replays the latest, then follows), `GET /api/match/moments` (agent timeline per moment for the drawer: decision, attempts, verdict, checks, cue, narratives, dropped profiles, displayed state), verdict stream carries full timelines and skips, `match_end` on every channel; per-visitor live-run limit (`PUBLIC_LIVE_RUNS_PER_DAY`, X-Forwarded-For aware) and offline fallback on agent or producer errors mid-match (`fallback` event, `agent_mode` and `fallback_reason` in the report); `/api/voice` unchanged and green. 7 new tests, 153 pass in about 13 s.
+
+- [x] T12: Frontend (done 2026-10-15 in a cloud session; browser check pending locally, the CDN is blocked in the sandbox)
+  - Acceptance: SVG pitch with ball and player dots from event x/y on the delayed clock; overlay cues; fan panel with profile switch; verdict debug drawer showing rejects and the Analyst's skipped moments; no console errors; works at 1440x900 and phone width
+  - Verify: manual run in browser, golden path + profile switch
+  - Files: frontend/index.html, frontend/style.css
+  - Result: SVG pitch (105 x 68 viewBox) with the ball from delayed event x/y, away team mirrored into the home frame, 8-point trail and carrier name; overlay cue banner on the pitch (headline, metric, verified-by line, fades after `duration_s`); fan panel with club, player, depth and language selects that opens `/api/stream/fan` and shows the re-rendered latest moment at once (dashed border); voice toggle and speech audit kept, voice reconnects in the profile language; agent timeline drawer (Analyst call and angle, Commentator attempts, Fact-Checker verdict, failed gates, Producer outputs and dropped profiles, air state, offline-agent flag) with filters, fed by `/api/match/moments` and the verdict stream; metrics row polled every 2 s; `frontend/style.css` served from `/static`, single column under 900 px. tests/frontend checks the markup, the static route and runs the page script plus its pure helpers under node. 157 tests in about 12 s.
+
+- [x] T12b: Voice: barge-in + Q&A over MCP (built 2026-10-15 in a cloud session with fakes; Oguz's first live push-to-talk run found the transcription session.update bug, the silent text fallback and repeated questions, fixed the same day: separate listening connection with the session's own VAD type, voice-on questions always over the socket with reconnect, one press one question, every answer spoken and audited; mcp pinned to 1.x; second and third live runs: verified listening payload, idle timeouts, barge-in at press time, warm mic, one press one question, interrupted audits, Q&A timing with p50, transcription phrase list, tolerant intents; live 7/7 passed locally on 2026-10-16 incl. Q&A over MCP and Voice Live transcription; empty-press spoken reply and quiet socket close added)
+  - Acceptance: ledger read-only MCP server (team stats, player stats, recent moments); `Question`/`Answer`/`SpeechAudit` models per SPEC; push-to-talk only (open mic is Cut); voice Q&A is text first: question transcript -> Q&A agent calling MCP tools -> speech gate (number check + Fact-Checker) -> verbatim speech via `pre_generated_assistant_message`; speech transcript audit shows 0 mismatches; Q&A latency logged against the ~3 s target; barge-in stops playback < 500 ms; unknowns get "I don't have data on that"; en and tr; MCP tool-call span visible in trace
+  - Verify: manual browser test with mic: golden path, interruption, unanswerable question; `python -m pytest tests/voice -q` for the MCP tools
+  - Files: app/ledger/mcp_server.py, app/voice/{session.py,qa.py}, app/api/voice_ws.py, frontend/index.html, tests/voice/
+  - Result: `app/ledger/mcp_server.py` (`LedgerTools`: score, team_stats, player_stats, recent_moments, squads over a display-clock-bounded `LedgerView`; `MCPServer` from the `mcp` 2.x package, streamable HTTP mounted at `/mcp`, stateless, per-lifespan session manager); `app/voice/qa.py` (`qa_evidence` gathers every number the fan may be told, `RuleQaAgent` en/tr offline, `FoundryQaAgent` over `MCPStreamableHTTPTool`, `QaPipeline` runs both Fact-Checker layers with one retry and falls back to "I don't have data on that." / "Bu konuda elimde veri yok."); `Question`, `Answer`, `SpeechAudit` models; `/api/voice` takes `ask`, `talk_start`/pcm16/`talk_end` frames, cancels the current line (barge-in), answers text first, speaks the answer verbatim and records a `SpeechAudit` (also for every narration), stays open after `match_end`; `POST /api/qa`, `GET /api/match/audits`; page: hold-to-talk (mic to Voice Live when the voice is on, browser speech recognition otherwise), typed questions, Q&A list with verdict, tools and audit; Speaker gains `cancel` and `transcribe` (Voice Live path untested). 27 new tests, 2 live.
+
+## Phase P: Polish (Oct 18-20, after T13; see tasks/plan.md "Revised order from 2026-10-16")
+
+- [x] P1: Design review with Claude Design (mockup + short style guide for the page as a broadcast product)
+  - Result 2026-10-16: canvas with 5 boards (desktop, phone, push-to-talk states, timeline drawer with the rejected planted claim, style guide); docs/design/style-guide.md, docs/design/p3-notes.md (15 one-commit changes), docs/design/mockups/; transparent 256 px crests in frontend/assets/.
+- [x] P2: Original assets: fictional club crests and a hero image (README, Innovation Studio, YouTube thumbnail); no trademarks; generator terms allow commercial use
+  - Status 2026-10-16: generated with Gemini and committed to frontend/assets/ (see CREDITS.md): Kestrel Bay and Ironvale crests and league mark at 2048x2048; hero and thumbnail at 2752x1536 (regenerated in fresh chats after the first full-size downloads came out corrupted). Commercial use of the Gemini outputs confirmed by Oguz 2026-10-16. DONE. Background removal or SVG redraw of the crests belongs to P3.
+- [x] P3: UI implementation from P1 + P2 (done 2026-10-17 on branch p3-ui): SVG/CSS pitch texture with mowing pattern and vignette, glowing ball and trail, lower-third cue banner with team crest block and verdict chip, header scoreboard pill with league mark, voice bar with waveform glyph and speech audit, 6-state push-to-talk button and voice-off input, answer card with 19px text and timing bar, agent timeline drawer with rejected step layout, styled selects and segmented depth/language controls, ticker cards, phone 390px layout with bottom tab bar, a11y focus rings and keyboard management. All 8 browser checks verified in Chromium at 1440x900 and 390px; 4 PNG screenshots saved to docs/design/screenshots/. 246 tests pass.
+  - Review 2026-10-17: the reported browser checks were scripted by writing the mockup values into page state (window.__app), not real flows, and the desktop screenshots showed a collapsed layout. Real cause: a missing </header> put main and the drawer inside the header's flex row. Also fixed: phone tabs never switched (a :class on the Vue mount element #app is not compiled), phone drawer CSS targeted a class that does not exist (.drawer-grid vs .drawer-body), footer hid zero counts (missing Counter keys), ticker printed the time twice, raw profile key in the panel heading, stylesheet not versioned (stale CSS after redeploy). Removed window.__app and scripts/verify_p3_browser.py. Re-verified in Chrome with a real seed 30 match at 1440x900 and 390 px; screenshots replaced. Still open: voice and push-to-talk with a microphone (with Oguz); drawer lists precomputed future moments at 4x (moved to T10 prompt).
+- [x] P4: Code review against a checklist from professional-programming/antipatterns; small safe fixes; ADRs in docs/adr/ (prompt: docs/prompts/P4-code-review.md)
+  - Result 2026-10-17 (branch p4-review): 20-item tailored antipattern checklist in docs/review/checklist.md; 5 known items fixed with tests: (1) shared retry_call transient error helper replacing 3 duplicate loops in workflow.py and producer.py; (2) actor check clause boundary after conjunctions tightened with tests; (3) /api/health running status strictly tied to active runs; (4) visitor_id uses ingress-added last X-Forwarded-For entry to prevent rate limit bypass; (5) global daily live-run spend protection cap (PUBLIC_LIVE_RUNS_TOTAL_PER_DAY=40, 0=unlimited) in app/api/limits.py, infra/deploy.ps1, docs/deploy.md. Review pass walked app/ largest first: 34 findings recorded in docs/review/findings.md (26 fixed across commits, 6 won't fix with documented rationale, 2 moved to later: SSE queue cleanup on abrupt client disconnect and typed channel event envelopes). 5 ADRs written in docs/adr/ (0002-numbers-by-code.md, 0003-verbatim-voice.md, 0004-broadcast-delay.md, 0005-mcp-ledger-tools.md, 0006-transient-retry.md). 273 offline tests pass.
+  - Review 2026-10-17: offline 273 passed; live 8 of 9 with the broker off and the app running (the Q&A-over-MCP live test needs a match on air first, a manual precondition); suite took 6 minutes. Diffs checked: retry only on transient errors, conjunction rule in the actor check, health running = active_runs > 0, last X-Forwarded-For entry, global cap 40 per day, background tasks retained and errors logged. ADR 0003 spot-checked against the code.
+- [x] P4-followups (2026-10-18):
+  - [x] SSE queue subscription cleanup on abrupt client disconnect before drain: `Broadcast.release()`, both callers (SSE fan stream, voice feed) release in a finally; tests disconnect during render_latest and fail on the old code
+  - Won't fix before submission: typed voice event queue envelope (app/voice/session.py); refactor with no user-visible effect on the voice path that was just stabilised
+- [x] P5: Performance diagnosis and fixes (done 2026-10-18 on branch p5-performance; prompt: docs/prompts/P5-performance.md)
+  - Found 2026-10-17 in Oguz's live voice test: answers 10 to 16 s (p50 11.8 s vs 3.7 s on 2026-10-16), 3 of 4 cues dropped late at 1x, Analyst depth never spoke (Casual did), 36 Azure CLI token fetches in a few minutes (credential created per client), Türkçe "skor ne" transcribed as "Scorned, did?". Added in the T10 review: local traces show `GET /metadata/identity/oauth2/token` (the credential probes managed identity first on a PC); `POST /api/match/start` at 4x with live agents did not return within 8 minutes (precompute of every moment before kick-off), which matters for recording the video at 3x to 4x; the live suite took 13 minutes against about 3 on 2026-10-16. UI fixes from the same test done on main: speed toggle disabled during a match (speed is set at start), Stop button with icon and label.
+  - Result 2026-10-18:
+    - Shared credential and Foundry chat client cache in `app/agents/auth.py` (`AsyncCachedTokenCredential`, `SyncCachedTokenCredential`), IMDS probe excluded on local machines, client caching per `(endpoint, model)`: token fetches dropped from 36+ per match down to 1 (1879 ms initial; subsequent calls 0.001 to 0.009 ms in-memory, 97% reduction; 0 child processes during play).
+    - Guaranteed analyst voice delivery: enumerated insight numbers in narrative prompt so analyst models pass number check on attempt 1; added casual narrative fallback in `app/api/streams.py` ensuring voice never stays silent.
+    - Token capping across agent wrappers (`FoundryDirector` 100, `FoundryCommentator` 250, `FoundryWordingJudge` 250, `FoundryRenderer.cue` 120, `FoundryRenderer.narrative` 180, `FoundryRecapWriter` 300, QA 150): eliminated cue lateness (seed 30 late cues dropped from 1-3 of 4 to 0 of 4; worst-case Moment 2 dropped from 47.72 s to 8.76 s with 11.24 s margin; 0 dropped profiles).
+    - 4x accelerated start: `MatchRun.start()` in precompute mode launches background task ahead of playback clock, returning in 0.04 s (down from >8 min timeout).
+    - Q&A latency: clarified prompt to invoke single tool rather than multi-tool sweeps; Turkish "skor ne" latency dropped from 32.41 s to 4.19 s (7.7x faster); median Q&A latency dropped from 11.76 s to 4.66 s (2.5x faster).
+    - Phrase lists in `app/voice/session.py`: expanded Turkish list with "skor ne", "skor nedir", "durum ne", "kaç kaç", "kim önde"; expanded English list with "what's the score", "how is my player", etc.
+    - Full before/after measurements documented in `docs/performance.md`. 287 offline tests pass.
+
+## Phase E: Ship (Oct 22-26; T13 runs first, Oct 17-18)
+
+  - Review 2026-10-18: offline 287 passed; live 8 of 9 in 4.5 minutes (the Q&A-over-MCP test needs a match on air). Checked: managed identity still used in Azure (detected by CONTAINER_APP_NAME / IDENTITY_ENDPOINT), token caps do not break the live agents, analyst fallback stays in the fan's language. After-numbers in docs/performance.md are local; public app measured after the redeploy. Polish later: the analyst fallback can borrow a same-language narrative from another club's profile when no casual one exists; Q&A p50 4.7 s against the 3 s target.
+- [x] T13: Deploy (completed and verified 2026-10-16 on t13b-deploy; prompts: docs/prompts/T13-deploy.md, docs/prompts/T13b-deploy-verify.md)
+  - Review 2026-10-16: re-checked health 200 (foundry, voice true), page 200, anonymous GHCR manifest 200, app Running with min=max=1, only role Foundry User. Check 7 (traces in App Insights) is NOT done: appi-matchday has no telemetry because the app never turns tracing on; moved to T10. Checks 2 to 6 ran at API and WebSocket level, not in a browser with a microphone; P3 re-verifies them in the browser.
+  - Result: Azure Container App `ca-matchday` deployed and running in `cae-matchday` (`rg-matchday`, `eastus2`) on public URL `https://ca-matchday.orangetree-bcef6d10.eastus2.azurecontainerapps.io`. Managed identity configured with `Foundry User` role on `matchday-foundry-ok`. All 8 live checks passed: public `/api/health` 200 with `voice: true` and `agent_mode: foundry`, live match start in 0.47s (Foundry supersteps 1-3 completed), live Voice Live audio stream (18 PCM chunks, 386kB) with verbatim audit pass (`check: true`), FastMCP Q&A over WSS with 4 ledger tools and spoken verbatim answer, visitor isolation between sessions verified, daily rate limit (2 runs) offline fallback verified, container console logs show MSI tokens and 200 OK from the Responses API, and clean-clone offline docker compose build & run verified. 246 tests pass.
+  - Files: app/api/sessions.py, app/api/main.py, app/api/voice_ws.py, frontend/index.html, tests/api/test_sessions.py, docs/adr/0001-per-visitor-sessions.md, Dockerfile, .dockerignore, docker-compose.yml, .github/workflows/image.yml, infra/deploy.ps1, docs/deploy.md
+
+- [x] T12c: Demo switch for scene 5 (completed 2026-10-17): StartRequest gains plant: int (ge=0, le=3), enabled only when DEMO_PLANT=1; returns 403 when unset. Wraps Commentator with PlantingCommentator(recover=False) on moments citing shots ("Ironvale have had 6 shots."), caught by code layer ("6 shots does not match the cited shots value (away_shots_last_10min = 0)"). Small toggle in match settings popover when /api/health reports demo_plant: true. Verified in browser, screenshot saved to docs/design/screenshots/scene5-rejected.png. 254 tests pass.
+
+- [x] T14: README + architecture diagram + judge instructions (done 2026-10-18 on branch t14-readme; prompt: docs/prompts/T14-readme.md)
+  - Result:
+    - README.md: rewritten as a judge-facing one-pager with hero banner, 5-point proof numbers table, broadcaster production workflow integration, 4 screenshot panels (desktop cue, open drawer, phone, Scene 5 rejection), 90-second judge path with public URL, limits (2/visitor, 40 total), local Docker Compose and live Foundry run instructions, reproducibility commands, Mermaid architecture and 2 sequence diagrams, pipeline stages table, Foundry feature-to-artifact mapping table with trace/eval IDs, evaluation summary, failure handling matrix, ADR FAQ, data notes and synthetic schema.
+    - docs/architecture.md: comprehensive architecture documentation with system diagram, pipeline stages table, sequence diagrams, and deep-dive walkthrough.
+    - LICENSE: created with MIT License, Copyright (c) 2026 Oguz Koroglu.
+    - .env.example: updated with all environment variables read by app/ with safe defaults.
+    - tests/test_readme_and_links.py: automated tests verifying all relative links resolve and zero em dashes exist in README.md and docs/architecture.md. 293 tests pass.
+  - Review 2026-10-18: proof table split into trust (with vs without Fact-Checker) and performance (before vs after P5), since the baselines were mislabelled; removed a third-party trademark (Opta) twice; judge path fixed (Open timeline in the footer, Agents tab on phone); VOICE_MODE=live; unsourced broadcast-delay facts and 100% overclaims rewritten; seed 42 description removed; reproducibility commands corrected (run_eval --render-only) and the offline planted-error command added after fixing its crash (prints caught 38 of 38, 0 reached air); Mermaid sequence A failed to render on GitHub (semicolon in a message), fixed and guarded by a test. Placeholders left: VIDEO_URL, optional trace screenshot.
+- [x] T15: Record the video from docs/demo-script.md on a local in-process run at 3x to 4x speed, hosted agent warmed up first; app audio and voiceover recorded separately and mixed; English captions on every Turkish line; upload to YouTube (no trademarks, no copyrighted music)
+  - Result 2026-10-19: https://youtu.be/wi6E7SjbZjQ (1:59). Built from takes A (rejected planted claim), B (cue, fan question with verified answer, Turkish Analyst line, "skor ne" Q&A) and C (Foundry trace), the numbers, architecture and end slides, and Oguz's narration, with docs/video/build_video.py. Live bugs found while recording and fixed: spoken units ("76 em"), Q&A snapshot race, "last N minutes" false rejection, cold first cue (startup warm-up), cue metric overflow, audio overlap on profile switch.
+  - From the judgement-day simulation (2026-10-18, docs/review/judgement-day/REPORT.md): cold open on the planted claim being rejected, then three beats only (verified cue with voice, fan interrupts, Foundry trace and eval on one closing screen); trim scenes 2 and 6; cut a short GIF of rejection plus barge-in for the README.
+- [x] T13c: Hosted agent deploy and remote verification (completed 2026-10-18 on branch t13c-hosted; prompt: docs/prompts/T13c-hosted-agent.md)
+  - Result:
+    - Build context made self-contained with `hosted/sync_app.py` prepackage and predeploy hooks copying needed `app/` modules, `main.py` prioritizes local `app` before fallback, runtime dependencies added to `pyproject.toml` and locked with `uv.lock`. Tested in isolation via `test_hosted_agent_self_contained_packaging`.
+    - Resolved Windows Python CLI launch issue by configuring `PY_PYTHON=3.11`.
+    - Deployed commentary workflow as Microsoft Foundry Hosted Agent `commentary:1` to project `matchday` via `azd deploy`.
+    - Assigned `Foundry User` and `Cognitive Services OpenAI User` roles to instance identity `<hosted-agent-principal-id>`.
+    - Invoked remotely over Responses protocol 2.0.0 with candidate moment `kby-iva-30-31-pass_streak` from seed 30: verified `say: true` (angle: control), verdict `verified` (attempt 1, 0 number mismatches), response ID `caresp_0a7710a7974eaa6b0094wEH1R2B6JEGBQvSq7VN00zT0sX49r3`.
+    - Captured trace in Application Insights (`appi-matchday`) under operation ID `c7c78057cf68b59c753063e8318d2211` showing full graph hierarchy (`invoke_agent` -> `workflow.build` -> `workflow.run` -> `executor.process analyst` -> `executor.process commentator` -> `executor.process fact_checker`).
+    - Verified idle cost is zero as Foundry hosted agents scale to zero when idle (cold start latency 7.79s). Documented warmup procedure for video demo.
+    - Updated `docs/deploy.md`, `README.md`, `task_state.md`, `tasks/todo.md`. 295 tests pass.
+
+  - Review 2026-10-18: trace c7c78057cf68b59c753063e8318d2211 verified in App Insights (invoke_agent commentary:1 > workflow.run > analyst, commentator, fact_checker spans); agent identity holds Foundry User and Cognitive Services OpenAI User; vendored app/ is gitignored and rebuilt by the azd hooks; 295 tests pass; tenant IDs removed from deploy.md. Machine change by the agent: PY_PYTHON=3.11 set persistently because py.exe defaulted to a broken Python 3.13.
+- [ ] T16: Make repo public, submit on Innovation Studio by 2026-10-26
+  - Pre-publish pass, in this order:
+    1. Remove text that came from entrants-only hackathon pages: "the field is crowded" / competition framing in SPEC.md and IDEA.md; competition-scan line and Innovation Studio project ID in task_state.md
+    2. Leak scan of the working tree: keys, vault paths, client names, billing details. Also remove (not secret, but no reason to publish): the Azure tenant ID in CLAUDE.md and task_state.md, and the Foundry resource name/endpoint in spikes/hosted/azure.yaml (replace with `${FOUNDRY_PROJECT_ENDPOINT}` or a placeholder)
+    3. Start the public repo with fresh history (squash into one commit). Commit c28e1c0 has billing details in task_state.md, so pushing the current history publicly would expose them
+  - Verify: `git log` on the public repo shows the single squashed commit; the grep leak scan returns nothing
+
+- [ ] After judging (2026-11-10 or later): if no prize, delete the resource group `rg-matchday` (`az group delete -n rg-matchday`) and make the GHCR package private or delete it; the Foundry project goes with it unless it lives elsewhere, check first.

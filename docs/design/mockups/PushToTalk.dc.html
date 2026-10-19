@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Push-to-talk states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Barlow:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B1220}
+.st{background:#121B2E;border:1px solid #26324A;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.st h3{margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:1.5px;text-transform:uppercase;color:#9AA7BB}
+.st p{margin:0;font-size:13px;line-height:1.4;color:#9AA7BB}
+.ptt{height:60px;border:0;border-radius:14px;font:700 16px Barlow,sans-serif;display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
+.num{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:#0B1220;background:#9AA7BB;border-radius:6px;padding:1px 7px}
+</style>
+</helmet>
+<div style="width: 1440px; height: 620px; box-sizing: border-box; background: #0B1220; color: #EEF2F7; font-family: Barlow, sans-serif; padding: 28px 32px; display: flex; flex-direction: column; gap: 20px">
+
+  <div style="display: flex; align-items: baseline; gap: 16px">
+    <h2 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 30px">Push-to-talk, one press from left to right</h2>
+    <span style="font-size: 14px; color: #9AA7BB">Pressing drops the commentator's audio at once (barge-in). Every state has a label, not only a colour.</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px">
+
+    <div class="st">
+      <h3><span class="num">1</span> Idle</h3>
+      <button type="button" class="ptt" style="background: #EEF2F7; color: #0B1220">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0"></path><path d="M12 18v3"></path></svg>
+        Hold to talk
+      </button>
+      <p>Space bar works too. Hint below the button on first visit only.</p>
+    </div>
+
+    <div class="st" style="border-color: #2F8FD8; box-shadow: 0 0 0 3px rgba(47,143,216,0.25)">
+      <h3><span class="num" style="background: #2F8FD8">2</span> Listening</h3>
+      <button type="button" class="ptt" aria-pressed="true" style="background: #2F8FD8; color: #071422">
+        <svg width="40" height="20" viewBox="0 0 44 20" aria-hidden="true"><g fill="#071422"><rect x="0" y="7" width="3" height="6" rx="1.5"></rect><rect x="6" y="3" width="3" height="14" rx="1.5"></rect><rect x="12" y="0" width="3" height="20" rx="1.5"></rect><rect x="18" y="5" width="3" height="10" rx="1.5"></rect><rect x="24" y="2" width="3" height="16" rx="1.5"></rect><rect x="30" y="6" width="3" height="8" rx="1.5"></rect><rect x="36" y="8" width="3" height="4" rx="1.5"></rect></g></svg>
+        Listening, release to ask
+      </button>
+      <p>Live mic level bars. Commentator audio already stopped; a "Paused for you" chip shows on the voice bar.</p>
+    </div>
+
+    <div class="st">
+      <h3><span class="num" style="background: #7AB4FF">3</span> Transcribing</h3>
+      <button type="button" class="ptt" disabled style="background: #182339; color: #CFD8E6">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7AB4FF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 109 9"></path></svg>
+        Got it
+      </button>
+      <div style="font-size: 15px; color: #EEF2F7; background: #0E1626; border-radius: 10px; padding: 8px 10px">"How is my player doing?"</div>
+      <p>The transcript appears as soon as Voice Live returns it, so the fan sees they were heard.</p>
+    </div>
+
+    <div class="st">
+      <h3><span class="num" style="background: #3DD68C">4</span> Answering</h3>
+      <button type="button" class="ptt" style="background: #182339; color: #EEF2F7">
+        <svg width="40" height="20" viewBox="0 0 44 20" aria-hidden="true"><g fill="#3DD68C"><rect x="0" y="8" width="3" height="4" rx="1.5"></rect><rect x="6" y="5" width="3" height="10" rx="1.5"></rect><rect x="12" y="2" width="3" height="16" rx="1.5"></rect><rect x="18" y="6" width="3" height="8" rx="1.5"></rect><rect x="24" y="3" width="3" height="14" rx="1.5"></rect><rect x="30" y="7" width="3" height="6" rx="1.5"></rect><rect x="36" y="5" width="3" height="10" rx="1.5"></rect></g></svg>
+        Speaking the answer
+      </button>
+      <p>Pressing again interrupts the answer and starts a new question.</p>
+    </div>
+
+    <div class="st" style="border-color: #F2B33D">
+      <h3><span class="num" style="background: #F2B33D">5</span> Not heard</h3>
+      <button type="button" class="ptt" style="background: #EEF2F7; color: #0B1220">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8"></path><path d="M3 3v5h5"></path></svg>
+        Try again
+      </button>
+      <div style="display: flex; gap: 8px; align-items: flex-start; font-size: 14px; color: #F2B33D">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: 0 0 auto; margin-top: 2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01"></path></svg>
+        I didn't catch that, try again
+      </div>
+      <p>Empty or too-short press. Spoken and shown; no question card is created.</p>
+    </div>
+
+    <div class="st">
+      <h3><span class="num">6</span> Voice off</h3>
+      <div style="display: flex; gap: 8px">
+        <input type="text" value="skor ne" aria-label="Type a question" style="flex: 1; min-width: 0; height: 44px; box-sizing: border-box; background: #0E1626; border: 1px solid #26324A; border-radius: 10px; padding: 0 10px; color: #EEF2F7; font: 15px Barlow, sans-serif">
+        <button type="button" aria-label="Ask" style="width: 44px; height: 44px; border: 0; border-radius: 10px; background: #EEF2F7; display: grid; place-items: center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+        </button>
+      </div>
+      <p>Without a microphone or with voice off, the text box is the main input and answers are text only.</p>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 560px minmax(0, 1fr); gap: 24px; align-items: start">
+    <article style="background: #121B2E; border: 1px solid #26324A; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #9AA7BB">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9AA7BB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0"></path></svg>
+        You asked at <b style="color: #E0B04F">19:02</b>, Türkçe: <span style="color: #CFD8E6">skor ne</span>
+      </div>
+      <div style="font-size: 20px; line-height: 1.35">Skor Kestrel Bay 0, Ironvale 0, 19. dakika.</div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #0B1220; background: #3DD68C; border-radius: 999px; padding: 3px 10px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Verified</span>
+        <span style="font-size: 13px; color: #CFD8E6; background: #182339; border-radius: 999px; padding: 3px 10px">Spoken verbatim</span>
+        <span style="font-size: 13px; color: #CFD8E6; background: #182339; border-radius: 999px; padding: 3px 10px">tool: score</span>
+      </div>
+      <div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: #0E1626">
+        <span style="width: 22%; background: #7AB4FF" title="transcribe"></span>
+        <span style="width: 48%; background: #2F8FD8" title="agent + MCP tools"></span>
+        <span style="width: 10%; background: #3DD68C" title="check"></span>
+        <span style="width: 20%; background: #9AA7BB" title="first audio"></span>
+      </div>
+      <div style="display: flex; gap: 14px; font-size: 12px; color: #9AA7BB">
+        <span><b style="color: #7AB4FF">0.6 s</b> transcribe</span>
+        <span><b style="color: #2F8FD8">1.3 s</b> agent and tools</span>
+        <span><b style="color: #3DD68C">0.2 s</b> check</span>
+        <span><b style="color: #CFD8E6">0.5 s</b> first audio</span>
+        <span style="margin-left: auto; color: #EEF2F7; font-weight: 600">2.6 s total</span>
+      </div>
+    </article>
+
+    <div style="display: flex; flex-direction: column; gap: 10px; font-size: 14px; color: #CFD8E6; line-height: 1.45">
+      <div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 1.5px; text-transform: uppercase; color: #9AA7BB">Rules for the answer card</div>
+      <div>One card per press. A new press replaces the "current" card and pushes the old one into the feed.</div>
+      <div>The answer text is exactly what is spoken. The "Spoken verbatim" chip only appears after the speech audit matched.</div>
+      <div>The timing bar is the demo proof for "answered in under 3 seconds". Segments come from the trace spans, not from estimates.</div>
+      <div>"I don't have data on that" is a valid answer: shown with an info chip, never as an error.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":620}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

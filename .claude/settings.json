@@ -1,0 +1,41 @@
+{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "PreCompact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NonInteractive -File \"$CLAUDE_PROJECT_DIR/.hooks/compaction_save.ps1\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NonInteractive -File \"$CLAUDE_PROJECT_DIR/.hooks/test_gate.ps1\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python *)",
+      "Bash(py *)",
+      "Bash(pytest *)",
+      "Bash(pip *)",
+      "Bash(uvicorn *)",
+      "Bash(docker *)",
+      "Bash(docker compose *)",
+      "Bash(git *)",
+      "PowerShell(docker *)",
+      "PowerShell(git *)"
+    ]
+  }
+}

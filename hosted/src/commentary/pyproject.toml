@@ -1,0 +1,18 @@
+[project]
+name = "commentary-agent"
+version = "0.1.0"
+description = "Commentary workflow hosted on Microsoft Foundry"
+requires-python = ">=3.13"
+dependencies = [
+    "agent-framework-core==1.21.0",
+    "agent-framework-foundry==1.14.1",
+    "agent-framework-foundry-hosting==1.0.0b261008",
+    "azure-identity>=1.19.0",
+    "azure-core>=1.30.0",
+    "httpx>=0.27.0",
+    "mcp>=1.2.0,<2",
+    "opentelemetry-api>=1.20.0",
+    "pydantic>=2.10.0",
+    "python-dotenv",
+    "debugpy",
+]

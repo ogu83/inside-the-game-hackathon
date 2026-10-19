@@ -1,0 +1,23 @@
+services:
+  matchday-companion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: matchday-companion:latest
+    container_name: matchday-companion
+    ports:
+      - "8010:8010"
+    environment:
+      - PORT=8010
+      - AGENT_MODE=${AGENT_MODE:-template}
+      - VOICE_MODE=${VOICE_MODE:-off}
+      - BROADCAST_DELAY_S=${BROADCAST_DELAY_S:-20}
+      - MAX_CONCURRENT_RUNS=${MAX_CONCURRENT_RUNS:-4}
+      - RUN_IDLE_TTL_S=${RUN_IDLE_TTL_S:-600}
+      - AZURE_AI_PROJECT_ENDPOINT=${AZURE_AI_PROJECT_ENDPOINT:-}
+      - MODEL_DEPLOYMENT_NAME=${MODEL_DEPLOYMENT_NAME:-}
+      - APPLICATIONINSIGHTS_CONNECTION_STRING=${APPLICATIONINSIGHTS_CONNECTION_STRING:-}
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped

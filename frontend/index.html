@@ -1,0 +1,1082 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matchday Companion</title>
+<link rel="icon" type="image/png" href="/static/assets/league-mark-256.png">
+<meta property="og:title" content="Matchday Companion">
+<meta property="og:description" content="A live co-commentator you can interrupt, and that can't lie. Four Microsoft Foundry agents, every number checked by code before it is spoken.">
+<meta property="og:image" content="https://ca-matchday.orangetree-bcef6d10.eastus2.azurecontainerapps.io/static/assets/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://ca-matchday.orangetree-bcef6d10.eastus2.azurecontainerapps.io/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Matchday Companion">
+<meta name="twitter:image" content="https://ca-matchday.orangetree-bcef6d10.eastus2.azurecontainerapps.io/static/assets/og-image.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Barlow:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css?v=p3e">
+</head>
+<body>
+<div id="app" class="phone-live">
+  <header class="app-header">
+    <div class="brand">
+      <img src="/static/assets/league-mark-256.png" alt="" class="league-mark">
+      <div class="brand-text">
+        <h1>Matchday Companion</h1>
+        <span class="brand-sub">Meridian League &middot; demo seed {{ form.seed }}</span>
+      </div>
+    </div>
+
+    <div class="scoreboard-pill">
+      <img src="/static/assets/crest-kby-256.png" :alt="teams.home + ' crest'" class="score-crest">
+      <span class="club-name">{{ teams.home }}</span>
+      <span class="score-num">{{ score.home }} : {{ score.away }}</span>
+      <span class="club-name">{{ teams.away }}</span>
+      <img src="/static/assets/crest-iva-256.png" :alt="teams.away + ' crest'" class="score-crest">
+      <span class="clock-display">{{ playbackClock || '00:00' }}</span>
+    </div>
+
+    <div class="header-chips">
+      <span class="chip-badge" v-if="clock">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7AB4FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+        Broadcast delay {{ clock.delay_s }} s
+      </span>
+      <span class="chip-badge warn" v-if="liveLimitReached">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        Live runs used for today, playing with offline agents
+      </span>
+      <span class="chip-badge" :class="{ warn: agentMode === 'template' }" v-else-if="agentMode" :title="fallbackReason || ''">
+        <svg v-if="agentMode === 'foundry'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3DD68C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg>
+        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        {{ agentMode === 'foundry' ? 'Foundry agents live' : ('Offline agents' + (fallbackReason ? ': ' + fallbackReason : '')) }}
+      </span>
+      <span class="chip-badge warn" v-if="busyMessage">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        {{ busyMessage }}
+      </span>
+      <span class="chip-badge warn" v-if="voiceUnavailable">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+        Voice unavailable, text answers still work
+      </span>
+      <span class="chip-badge warn" v-if="micBlocked">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line></svg>
+        Microphone blocked, type your question instead
+      </span>
+    </div>
+
+    <div class="header-actions">
+      <div role="group" aria-label="Playback speed" class="speed-toggle">
+        <button type="button" @click="setSpeed(1)" :disabled="running" :title="running ? 'Speed is set when a match starts' : 'Live agents at 1x'" :class="{ active: form.speed === 1 }" :aria-pressed="form.speed === 1">1x</button>
+        <button type="button" @click="setSpeed(4)" :disabled="running" :title="running ? 'Speed is set when a match starts' : 'Precomputed at 4x'" :class="{ active: form.speed === 4 }" :aria-pressed="form.speed === 4">4x</button>
+      </div>
+
+      <details class="match-settings" v-if="!running">
+        <summary aria-label="Match settings" title="Match settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </summary>
+        <div class="settings-popover">
+          <label>Seed <input type="number" v-model.number="form.seed"></label>
+          <label>Speed <input type="number" step="0.5" min="0.5" v-model.number="form.speed"></label>
+          <label>Delay s <input type="number" min="0" v-model.number="form.delay_s"></label>
+          <label v-if="demoPlant" style="cursor: pointer">
+            <span>Plant a false claim</span>
+            <input type="checkbox" v-model="form.plant" :true-value="1" :false-value="0" style="width: auto; cursor: pointer">
+          </label>
+        </div>
+      </details>
+
+      <button type="button" class="start-btn" @click="start" :disabled="starting" v-if="!running">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        {{ starting ? 'Starting...' : 'Start match' }}
+      </button>
+
+      <button type="button" class="stop-btn" aria-label="Stop match" title="Stop match" @click="stop" v-if="running">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
+        Stop
+      </button>
+
+      <button type="button" class="voice-btn" :class="{ 'voice-on': voice, secondary: !voice }" :aria-pressed="voice" @click="toggleVoice">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4z"></path><path d="M15.5 8.5a5 5 0 010 7"></path><path d="M18.5 5.5a9 9 0 010 13"></path></svg>
+        {{ voice ? 'Voice on' : 'Voice off' }}
+      </button>
+    </div>
+  </header>
+  <div class="voicebar" v-if="voice" aria-live="polite">
+    <div class="waveform" :class="{ live: !!speaking }" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <span class="voice-state" v-if="speaking">Speaking, {{ profile.language }}</span>
+    <span class="voice-state" v-else-if="voiceStatus">{{ voiceStatus }}</span>
+    <span class="voice-state" v-else>Voice ready</span>
+
+    <span class="voice-text" v-if="speaking">{{ speaking }}</span>
+    <span class="voice-text muted" v-else>waiting for the next verified line</span>
+
+    <div class="voice-right">
+      <span class="paused-chip" v-if="talking">Paused for you</span>
+      <span class="voice-audit" v-if="speechChecks > 0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3DD68C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg>
+        Speech audit {{ speechChecks - speechMismatches }} of {{ speechChecks }} exact
+      </span>
+      <span class="voice-interrupted" v-if="interruptedLines">{{ interruptedLines }} interrupted</span>
+    </div>
+  </div>
+  <main>
+    <section>
+      <div class="broadcast-header">
+        <h2>Broadcast</h2>
+        <div class="legend" v-if="teams.home && teams.away">
+          <span class="legend-item"><span class="team-dot home"></span>{{ teams.home }} attack left to right</span>
+          <span class="legend-item"><span class="team-dot away"></span>{{ teams.away }} attack right to left</span>
+        </div>
+      </div>
+      <div class="pitchwrap">
+        <svg class="pitch" viewBox="0 0 105 68" aria-label="pitch">
+          <defs>
+            <pattern id="mow" width="10.5" height="68" patternUnits="userSpaceOnUse">
+              <rect width="5.25" height="68" fill="var(--pitch-a)"/>
+              <rect x="5.25" width="5.25" height="68" fill="var(--pitch-b)"/>
+            </pattern>
+            <radialGradient id="vig" cx="50%" cy="50%" r="75%">
+              <stop offset="60%" stop-color="#000" stop-opacity="0"/>
+              <stop offset="100%" stop-color="#000" stop-opacity="0.45"/>
+            </radialGradient>
+            <radialGradient id="glow">
+              <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9"/>
+              <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <rect width="105" height="68" fill="url(#mow)"/>
+          <g class="mark">
+            <rect x="0.5" y="0.5" width="104" height="67"/>
+            <line x1="52.5" y1="0.5" x2="52.5" y2="67.5"/>
+            <circle cx="52.5" cy="34" r="9.15"/>
+            <rect x="0.5" y="13.84" width="16.5" height="40.32"/>
+            <rect x="88" y="13.84" width="16.5" height="40.32"/>
+            <rect x="0.5" y="24.84" width="5.5" height="18.32"/>
+            <rect x="99" y="24.84" width="5.5" height="18.32"/>
+            <circle cx="52.5" cy="34" r="0.45" fill="#FFFFFF" fill-opacity="0.85"/>
+          </g>
+          <polyline class="trail" v-if="trail.length > 1" :points="trail.map(p => p.join(',')).join(' ')" :stroke="ball && !ball.home ? 'var(--away)' : 'var(--home)'"/>
+          <circle class="ball-glow" v-if="ball" :cx="ball.x" :cy="ball.y" r="3.2" fill="url(#glow)"/>
+          <circle class="ball" v-if="ball" :cx="ball.x" :cy="ball.y" r="1.05" fill="#FFFFFF" :stroke="ball.home ? 'var(--home)' : 'var(--away)'" stroke-width="0.35"/>
+          <rect width="105" height="68" fill="url(#vig)" pointer-events="none"/>
+        </svg>
+        <div class="player-label" v-if="ball && ball.label" :class="{ away: !ball.home }" :style="labelStyle(ball)">{{ ball.label }}</div>
+        <div class="cuebanner" :class="{ away: !banner.home, show: banner.visible }" v-if="banner">
+          <div class="crest-block" :style="{ background: banner.home ? 'var(--home)' : 'var(--away)' }">
+            <img :src="banner.home ? '/static/assets/crest-kby-256.png' : '/static/assets/crest-iva-256.png'" :alt="banner.home ? teams.home + ' crest' : teams.away + ' crest'">
+          </div>
+          <div class="body">
+            <div class="headline">{{ banner.headline }}</div>
+            <div class="subline" v-if="banner.subline">{{ banner.subline }}</div>
+            <div class="verdict-row">
+              <span class="v-chip rewritten" v-if="banner.status === 'rewritten' || banner.attempt > 1">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg>
+                Rewritten
+              </span>
+              <span class="v-chip verified" v-else>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+                Verified
+              </span>
+              <span class="detail">numbers by code, wording by model, attempt {{ banner.attempt }}</span>
+            </div>
+          </div>
+          <div class="metric-col" v-if="banner.metric_value">
+            <span class="value" :style="{ color: banner.home ? 'var(--home)' : 'var(--away)' }">{{ banner.metric_value }}</span>
+            <span class="label" v-if="banner.metric_label">{{ banner.metric_label }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="ticker" role="region" aria-label="Match ticker">
+        <div class="ticker-card" v-for="e in ticker.slice(0, 3)" :key="e.seq">
+          <span class="ticker-time">{{ pad(e.minute) }}:{{ pad(e.second) }}</span>
+          <span class="ticker-text">{{ e.text.replace(/^\d+:\d\d\s+/, '') }}</span>
+        </div>
+        <div v-if="!ticker.length" class="empty">Start a match to see the feed. Seed 30 is the demo seed.</div>
+      </div>
+    </section>
+    <section aria-label="Your co-commentator">
+      <h2>Your co-commentator</h2>
+      <div class="profile">
+        <label class="profile-field">Club
+          <div class="styled-select-wrap">
+            <img v-if="profile.club_id" :src="'/static/assets/crest-' + profile.club_id + '-256.png'" alt="" class="select-prefix-crest">
+            <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="select-prefix-icon" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 000 20 14.5 14.5 0 000-20M2 12h20"></path></svg>
+            <select v-model="profile.club_id" aria-label="Club">
+              <option :value="null">No club</option>
+              <option v-for="c in league.clubs" :key="c.id" :value="c.id">{{ c.short }}</option>
+            </select>
+            <svg class="select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+          </div>
+        </label>
+        <label class="profile-field">Player
+          <div class="styled-select-wrap">
+            <span v-if="selectedPlayer" class="select-prefix-num" :style="{ color: profile.club_id === 'kby' ? 'var(--kby)' : 'var(--iva)' }">{{ selectedPlayer.number }}</span>
+            <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="select-prefix-icon" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            <select v-model="profile.player_id" :disabled="!players.length" aria-label="Player">
+              <option :value="null">{{ players.length ? 'No player' : 'Select club first' }}</option>
+              <option v-for="p in players" :key="p.id" :value="p.id">#{{ p.number }} {{ p.name }}</option>
+            </select>
+            <svg class="select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+          </div>
+        </label>
+        <div role="group" aria-label="Depth" class="segmented-control">
+          <button type="button" :aria-pressed="profile.depth === 'casual'" :class="{ active: profile.depth === 'casual' }" @click="profile.depth = 'casual'" class="segment-btn">Casual</button>
+          <button type="button" :aria-pressed="profile.depth === 'analyst'" :class="{ active: profile.depth === 'analyst' }" @click="profile.depth = 'analyst'" class="segment-btn">Analyst</button>
+        </div>
+        <div role="group" aria-label="Language" class="segmented-control">
+          <button type="button" :aria-pressed="profile.language === 'en'" :class="{ active: profile.language === 'en' }" @click="profile.language = 'en'" class="segment-btn">English</button>
+          <button type="button" :aria-pressed="profile.language === 'tr'" :class="{ active: profile.language === 'tr' }" @click="profile.language = 'tr'" class="segment-btn">Türkçe</button>
+        </div>
+        <button type="button" class="follow-btn secondary" @click="follow" :disabled="!running">{{ profileKey ? (profilePending ? 'apply profile change' : 'profile applied') : 'follow the match for me' }}</button>
+        <div class="profile-pending-chip pending" v-if="profilePending">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>change pending: {{ pendingKey }} (applying...)</span>
+        </div>
+      </div>
+      <div class="ask">
+        <div class="ptt-row" v-if="voice">
+          <button type="button" class="talk ptt-btn"
+            :class="{ listening: talking, transcribing: transcribing, answering: answering, 'not-heard': notHeard, held: talking }"
+            :aria-pressed="talking"
+            :disabled="!running || transcribing"
+            @pointerdown.prevent="pressTalk"
+            @pointerup.prevent="releaseTalk"
+            @pointercancel="releaseTalk"
+            @pointerleave="releaseTalk"
+            @keydown.space.enter.prevent="pressTalk"
+            @keyup.space.enter.prevent="releaseTalk"
+            @contextmenu.prevent>
+            <!-- State 2: Listening -->
+            <template v-if="talking">
+              <svg class="live-bars" width="40" height="20" viewBox="0 0 44 20" aria-hidden="true"><g fill="#071422"><rect x="0" y="7" width="3" height="6" rx="1.5"></rect><rect x="6" y="3" width="3" height="14" rx="1.5"></rect><rect x="12" y="0" width="3" height="20" rx="1.5"></rect><rect x="18" y="5" width="3" height="10" rx="1.5"></rect><rect x="24" y="2" width="3" height="16" rx="1.5"></rect><rect x="30" y="6" width="3" height="8" rx="1.5"></rect><rect x="36" y="8" width="3" height="4" rx="1.5"></rect></g></svg>
+              <span>Listening, release to ask</span>
+            </template>
+            <!-- State 3: Transcribing -->
+            <template v-else-if="transcribing">
+              <svg class="spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7AB4FF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 109 9"></path></svg>
+              <span>Got it</span>
+            </template>
+            <!-- State 4: Answering -->
+            <template v-else-if="answering">
+              <svg class="live-bars-green" width="40" height="20" viewBox="0 0 44 20" aria-hidden="true"><g fill="#3DD68C"><rect x="0" y="8" width="3" height="4" rx="1.5"></rect><rect x="6" y="5" width="3" height="10" rx="1.5"></rect><rect x="12" y="2" width="3" height="16" rx="1.5"></rect><rect x="18" y="6" width="3" height="8" rx="1.5"></rect><rect x="24" y="3" width="3" height="14" rx="1.5"></rect><rect x="30" y="7" width="3" height="6" rx="1.5"></rect><rect x="36" y="5" width="3" height="10" rx="1.5"></rect></g></svg>
+              <span>Speaking the answer</span>
+            </template>
+            <!-- State 5: Not heard -->
+            <template v-else-if="notHeard">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8"></path><path d="M3 3v5h5"></path></svg>
+              <span>Try again</span>
+            </template>
+            <!-- State 1: Idle -->
+            <template v-else>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0"></path><path d="M12 18v3"></path></svg>
+              <span>Hold to talk</span>
+            </template>
+          </button>
+          <label class="typed-label">Or type a question
+            <input type="text" v-model="askText" :disabled="!running" placeholder="Why does that matter?" @keyup.enter="askTyped">
+          </label>
+        </div>
+        <div class="transcribe-preview" v-if="voice && transcribing && transcribingTranscript">"{{ transcribingTranscript }}"</div>
+        <div class="not-heard-notice" v-if="voice && notHeard">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--rewritten)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: 0 0 auto"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01"></path></svg>
+          <span>{{ notHeardReason || "I didn't catch that, try again" }}</span>
+        </div>
+        <div class="mic-blocked-notice" v-if="voice && micBlocked">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--rewritten)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: 0 0 auto"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line></svg>
+          <span>Microphone blocked, type your question instead</span>
+        </div>
+        <div class="mic-blocked-notice" v-if="voice && voiceUnavailable">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--rewritten)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: 0 0 auto"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+          <span>Voice unavailable, text answers still work</span>
+        </div>
+        <!-- State 6: Voice off -->
+        <div class="voice-off-row" v-if="!voice">
+          <input type="text" v-model="askText" :disabled="!running" placeholder="Type a question" aria-label="Type a question" @keyup.enter="askTyped">
+          <button type="button" class="ask-submit" :disabled="!running || !askText.trim()" @click="askTyped" aria-label="Ask">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+          </button>
+        </div>
+      </div>
+      <!-- Current Answer Card -->
+      <article class="qa current-qa" v-if="qa.length" aria-live="polite">
+        <div class="meta">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0"></path></svg>
+          You asked at <b class="qa-clock">{{ qa[0].askedTime || playbackClock }}</b>, {{ qa[0].langName || (profile.language === 'tr' ? 'Türkçe' : 'English') }}: <span class="qa-query">{{ qa[0].transcript }}</span>
+        </div>
+        <div class="answer-text" v-if="qa[0].answer">{{ qa[0].answer.text }}</div>
+        <div class="answer-text thinking" v-else>thinking...</div>
+        <div class="chips-row" v-if="qa[0].answer">
+          <span class="qa-chip verified" v-if="qa[0].answer.verdict && qa[0].answer.verdict.status !== 'rejected'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+            Verified
+          </span>
+          <span class="qa-chip rejected" v-else-if="qa[0].answer.verdict && qa[0].answer.verdict.status === 'rejected'">Rejected</span>
+          <span class="qa-chip info" v-else>No data</span>
+          <span class="qa-chip verbatim" v-if="qa[0].audit && qa[0].audit.ok">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7AB4FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4z"></path><path d="M15.5 8.5a5 5 0 010 7"></path></svg>
+            Spoken verbatim
+          </span>
+          <span class="qa-chip bad" v-else-if="qa[0].audit && !qa[0].audit.ok">spoken mismatch</span>
+          <span class="qa-chip text-only" v-else-if="qa[0].textOnly">text only (voice off)</span>
+          <span class="qa-chip tool-chip" v-for="t in qa[0].answer.tool_calls" :key="t">tool: {{ t }}</span>
+        </div>
+        <!-- Timing bar from trace spans -->
+        <div class="timing-block" v-if="qa[0].answer && qa[0].answer.timing">
+          <div class="timing-bar">
+            <span class="bar-transcribe" :style="{ width: qaTiming(qa[0]).transcribePct }" title="transcribe"></span>
+            <span class="bar-agent" :style="{ width: qaTiming(qa[0]).agentPct }" title="agent + MCP tools"></span>
+            <span class="bar-check" :style="{ width: qaTiming(qa[0]).checkPct }" title="check"></span>
+            <span class="bar-audio" :style="{ width: qaTiming(qa[0]).audioPct }" title="first audio"></span>
+          </div>
+          <div class="timing-legend">
+            <span v-if="qaTiming(qa[0]).transcribeMs"><b style="color: #7AB4FF">{{ (qaTiming(qa[0]).transcribeMs / 1000).toFixed(1) }} s</b> transcribe</span>
+            <span><b style="color: #2F8FD8">{{ (qaTiming(qa[0]).agentMs / 1000).toFixed(1) }} s</b> agent and tools</span>
+            <span><b style="color: #3DD68C">{{ (qaTiming(qa[0]).checkMs / 1000).toFixed(1) }} s</b> check</span>
+            <span v-if="qaTiming(qa[0]).audioMs"><b style="color: #CFD8E6">{{ (qaTiming(qa[0]).audioMs / 1000).toFixed(1) }} s</b> first audio</span>
+            <span class="timing-total"><span v-if="qa[0].answer.timing && qa[0].answer.timing.answer_ms != null">answered in {{ (qa[0].answer.timing.answer_ms / 1000).toFixed(1) }} s</span><span v-if="qa[0].speechMs != null">, spoken after {{ (qa[0].speechMs / 1000).toFixed(1) }} s</span></span>
+          </div>
+        </div>
+      </article>
+
+      <!-- Older Q&A in feed -->
+      <div class="feed-history" v-if="qa.length > 1">
+        <article class="qa feed-qa" v-for="q in qa.slice(1)" :key="q.key">
+          <div class="meta">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0"></path></svg>
+            <span>{{ q.askedTime || '00:00' }}</span>, {{ q.langName }}: <span class="qa-query">{{ q.transcript }}</span>
+          </div>
+          <div class="text" v-if="q.answer">{{ q.answer.text }}</div>
+          <div class="meta chips-row" v-if="q.answer">
+            <span class="qa-chip verified" v-if="q.answer.verdict && q.answer.verdict.status !== 'rejected'">Verified</span>
+            <span class="qa-chip rejected" v-else-if="q.answer.verdict && q.answer.verdict.status === 'rejected'">Rejected</span>
+            <span class="qa-chip info" v-else>No data</span>
+            <span class="qa-chip verbatim" v-if="q.audit && q.audit.ok">Spoken verbatim</span>
+            <span class="qa-chip text-only" v-else-if="q.textOnly">text only (voice off)</span>
+            <span v-if="q.answer.timing && q.answer.timing.answer_ms != null">answered in {{ (q.answer.timing.answer_ms / 1000).toFixed(1) }} s</span>
+          </div>
+        </article>
+      </div>
+      <div class="narrative-feed" role="feed" aria-label="Fan commentary feed">
+        <article class="narrative full-time-card" v-if="recap">
+          <div class="meta">
+            <span class="narrative-time">Full time</span>
+            <span class="replay-badge" style="background: rgba(61, 214, 140, 0.15); color: var(--verified)">Recap tailored to your profile</span>
+          </div>
+          <div class="text">{{ recap.text }}</div>
+        </article>
+        <article v-for="n in narratives" :key="n.key" :class="['narrative', n.replay ? 'replay' : '']">
+          <div class="meta">
+            <span class="narrative-time">{{ n.time }}</span>
+            <span class="replay-badge" v-if="n.replay">Re-rendered for your profile</span>
+          </div>
+          <div class="text">{{ n.text }}</div>
+        </article>
+        <div v-if="!narratives.length && !recap" class="empty">Pick your club, player, depth and language, then follow. The latest moment is re-rendered for you at once.</div>
+      </div>
+    </section>
+  </main>
+  <!-- Agent Timeline Drawer -->
+  <div class="drawer-container">
+    <section id="timeline-drawer" class="drawer-panel" aria-label="Agent timeline" v-if="drawerOpen">
+      <div class="drawer-handle"></div>
+      <div class="drawer-header">
+        <h2>Agent timeline</h2>
+        <span class="drawer-sub">every moment, every agent, every check</span>
+        <div class="filter-chips" role="group" aria-label="Moment filters">
+          <button type="button" class="chip" :class="{ on: filter === 'all' }" :aria-pressed="filter === 'all'" @click="filter = 'all'">
+            All {{ filterCounts.all }}
+          </button>
+          <button type="button" class="chip" :class="{ on: filter === 'verified' }" :aria-pressed="filter === 'verified'" @click="filter = 'verified'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#3DD68C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+            Verified {{ filterCounts.verified }}
+          </button>
+          <button type="button" class="chip" :class="{ on: filter === 'rewritten' }" :aria-pressed="filter === 'rewritten'" @click="filter = 'rewritten'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg>
+            Rewritten {{ filterCounts.rewritten }}
+          </button>
+          <button type="button" class="chip" :class="{ on: filter === 'rejected' }" :aria-pressed="filter === 'rejected'" @click="filter = 'rejected'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FF5D6C" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+            Rejected {{ filterCounts.rejected }}
+          </button>
+          <button type="button" class="chip" :class="{ on: filter === 'skipped' }" :aria-pressed="filter === 'skipped'" @click="filter = 'skipped'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AA7BB" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"></path></svg>
+            Skipped {{ filterCounts.skipped }}
+          </button>
+        </div>
+        <button type="button" aria-label="Close timeline" class="drawer-close" @click="drawerOpen = false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+        </button>
+      </div>
+
+      <div class="drawer-body">
+        <!-- Left Column: Moments List -->
+        <nav class="moments-list" aria-label="Moments">
+          <div v-for="m in filtered" :key="m.moment_id" class="moment-row"
+            :class="{ selected: selectedMoment && selectedMoment.moment_id === m.moment_id, rejected: m.verdict && m.verdict.status === 'rejected' }"
+            @click="selectedMomentId = m.moment_id">
+            <b class="moment-time">{{ pad(m.minute) }}:{{ pad(m.second || 0) }}</b>
+            <span class="moment-label">{{ momentTitle(m) }}</span>
+            <span class="v" :class="verdictClass(m)">{{ verdictText(m) }}</span>
+          </div>
+          <div v-if="!filtered.length" class="empty">No moments match the filter.</div>
+        </nav>
+
+        <!-- Right Column: Agent Steps for Selected Moment -->
+        <div class="moment-detail" v-if="selectedMoment">
+          <div class="moment-header">
+            <span class="moment-title">{{ pad(selectedMoment.minute) }}:{{ pad(selectedMoment.second || 0) }} {{ momentTitle(selectedMoment) }}</span>
+            <span class="mono moment-tag">moment {{ selectedMoment.moment_id }}<template v-if="selectedMoment.fallback"> &middot; offline agents</template></span>
+            <span class="moment-trace" v-if="selectedMoment.trace_id">trace <span class="mono" style="color: var(--info)">{{ selectedMoment.trace_id.slice(0, 4) }}...{{ selectedMoment.trace_id.slice(-4) }}</span> in Application Insights</span>
+          </div>
+
+          <!-- 1. Analyst Step -->
+          <div class="step" v-if="selectedMoment.decision">
+            <div class="who"><span class="dot" style="background: #7AB4FF"></span>Analyst</div>
+            <div class="txt">
+              <span :class="['tag', selectedMoment.decision.say ? 'ok' : 'skip']">{{ selectedMoment.decision.say ? 'Say it' : 'Stay quiet' }}</span>.
+              <template v-if="selectedMoment.decision.angle"> Angle: {{ selectedMoment.decision.angle }}.</template>
+              {{ selectedMoment.decision.reason }}
+              <span class="mono" v-if="selectedMoment.evidence && Object.keys(selectedMoment.evidence).length"> cites {{ evidenceLine(selectedMoment.evidence) }}</span>
+            </div>
+          </div>
+
+          <!-- 2. Commentator Attempts -->
+          <div class="step" v-for="(a, i) in (selectedMoment.attempts || [])" :key="i">
+            <div class="who"><span class="dot" style="background: #2F8FD8"></span>Commentator {{ i + 1 }}</div>
+            <div class="txt">
+              <template v-if="selectedMoment.verdict && selectedMoment.verdict.status === 'rejected' && (i + 1 === selectedMoment.verdict.attempt || i === selectedMoment.attempts.length - 1)">
+                Attempt {{ i + 1 }}: <span style="color: var(--text); text-decoration: line-through; text-decoration-color: var(--rejected)">"{{ a.claim }}"</span>
+              </template>
+              <template v-else>
+                Attempt {{ i + 1 }}: "{{ a.claim }}"
+              </template>
+            </div>
+          </div>
+
+          <!-- 3. Fact-Checker Verdict -->
+          <div class="step" :class="{ 'rejected-step': selectedMoment.verdict && selectedMoment.verdict.status === 'rejected' }" v-if="selectedMoment.verdict">
+            <div class="who" :style="{ color: selectedMoment.verdict.status === 'rejected' ? 'var(--rejected)' : 'var(--text)' }">
+              <span class="dot" :style="{ background: selectedMoment.verdict.status === 'rejected' ? 'var(--rejected)' : (selectedMoment.verdict.status === 'rewritten' ? 'var(--rewritten)' : 'var(--verified)') }"></span>
+              Fact-Checker
+            </div>
+            <div class="txt" style="display: flex; flex-direction: column; gap: 6px">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span class="v" :style="{ background: selectedMoment.verdict.status === 'rejected' ? 'var(--rejected)' : (selectedMoment.verdict.status === 'rewritten' ? 'var(--rewritten)' : 'var(--verified)'), color: 'var(--bg)' }">
+                  <svg v-if="selectedMoment.verdict.status === 'rejected'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                  <svg v-else-if="selectedMoment.verdict.status === 'verified'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+                  {{ selectedMoment.verdict.status }}
+                </span>
+                <span style="font-size: 13px; color: var(--text-2)">layer {{ selectedMoment.verdict.layer }}, attempt {{ selectedMoment.verdict.attempt }}</span>
+              </div>
+              <div class="mono" :style="{ color: selectedMoment.verdict.status === 'rejected' ? '#FFB3BA' : 'var(--text-2)' }" v-if="selectedMoment.verdict.reasons && selectedMoment.verdict.reasons.length">
+                {{ selectedMoment.verdict.reasons.join('; ') }}
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Failed Checks -->
+          <div class="step rejected-step" v-for="(c, i) in ((selectedMoment.checks || []).filter(c => !c.ok))" :key="'c' + i">
+            <div class="who" style="color: var(--rejected)"><span class="dot" style="background: var(--rejected)"></span>{{ c.gate }} gate</div>
+            <div class="txt">
+              <span class="tag bad">failed</span>
+              <span class="mono" style="color: #FFB3BA; margin-left: 8px">{{ c.mismatches.join('; ') }}</span>
+            </div>
+          </div>
+
+          <!-- 5. Producer Step -->
+          <div class="step" v-if="selectedMoment.verdict">
+            <div class="who"><span class="dot" style="background: var(--muted)"></span>Producer</div>
+            <div class="txt" v-if="selectedMoment.verdict.status === 'rejected'">
+              Nothing to package. <b>Never aired: no overlay, no voice, no fan narrative.</b>
+            </div>
+            <div class="txt" v-else>
+              <span :class="['tag', selectedMoment.cue ? 'ok' : 'bad']">{{ selectedMoment.cue ? 'cue: ' + selectedMoment.cue.headline : 'cue dropped' }}</span>
+              <span class="tag ok" v-for="n in selectedMoment.narratives" :key="n.profile_key" :title="n.text" style="margin-left: 6px">{{ n.profile_key }}</span>
+              <span class="tag bad" v-for="p in selectedMoment.dropped_profiles" :key="'d' + p" style="margin-left: 6px">dropped {{ p }}</span>
+            </div>
+          </div>
+
+          <!-- 6. Air Step -->
+          <div class="step">
+            <div class="who"><span class="dot" style="background: var(--text)"></span>Air</div>
+            <div class="txt">
+              <span :class="['tag', selectedMoment.displayed === 'shown' ? 'ok' : selectedMoment.displayed === 'late' ? 'late' : selectedMoment.displayed === 'skipped' ? 'skip' : 'bad']">
+                {{ selectedMoment.displayed || (selectedMoment.verdict && selectedMoment.verdict.status === 'rejected' ? 'rejected' : 'pending') }}
+              </span>
+              <span class="tag warn" v-if="selectedMoment.fallback" style="margin-left: 6px">offline agents</span>
+              <span class="mono" v-if="selectedMoment.evidence" style="margin-left: 10px">{{ evidenceLine(selectedMoment.evidence) }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty" style="padding: 24px">No moment selected. Moments appear here as agents work on them.</div>
+      </div>
+    </section>
+
+    <!-- Footer Summary Row Always Visible -->
+    <footer class="app-footer">
+      <span class="footer-title">Agent timeline</span>
+      <span><b class="stat-num">{{ (metrics && metrics.cues_shown) || 0 }}</b> cues aired</span>
+      <span><b class="stat-num">{{ (metrics && metrics.moments_skipped) || 0 }}</b> skipped by director</span>
+      <span><b class="stat-num stat-rejected">{{ (metrics && metrics.cues_rejected) || 0 }}</b> rejected</span>
+      <span><b class="stat-num">{{ (metrics && metrics.number_checks) || 0 }}</b> number checks, <b :class="metrics && metrics.number_checks_failed ? 'stat-rejected' : 'stat-ok'">{{ (metrics && metrics.number_checks_failed) || 0 }}</b> failed</span>
+      <span>answer p50 <b class="stat-num">{{ metrics && metrics.qa_answer_p50_ms ? (metrics.qa_answer_p50_ms / 1000).toFixed(1) + ' s' : '-' }}</b></span>
+      <button type="button" @click="drawerOpen = !drawerOpen" class="footer-btn" :aria-expanded="drawerOpen" aria-controls="timeline-drawer">
+        {{ drawerOpen ? 'Close timeline' : 'Open timeline' }}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path :d="drawerOpen ? 'M6 9l6 6 6-6' : 'M6 15l6-6 6 6'"></path>
+        </svg>
+      </button>
+    </footer>
+  </div>
+  <nav class="phone-tabs" aria-label="Sections">
+    <button type="button" :aria-pressed="phoneTab === 'live'" :class="{ active: phoneTab === 'live' }" @click="phoneTab = 'live'">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M12 5v14"></path></svg>
+      <span>Live</span>
+    </button>
+    <button type="button" :aria-pressed="phoneTab === 'feed'" :class="{ active: phoneTab === 'feed' }" @click="phoneTab = 'feed'">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>
+      <span>Feed</span>
+    </button>
+    <button type="button" :aria-pressed="phoneTab === 'agents'" :class="{ active: phoneTab === 'agents' }" @click="phoneTab = 'agents'; drawerOpen = true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg>
+      <span>Agents</span>
+    </button>
+  </nav>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.5.13/vue.global.prod.min.js"></script>
+<script>
+const { createApp, reactive, computed, toRefs, watch } = Vue;
+// Pure helpers (also exercised by tests/frontend): events are in the acting team's frame; the away team is mirrored.
+const toPitch = (ev, homeId) => {
+  const home = ev.team_id === homeId;
+  const x = home ? ev.x : 100 - ev.x, y = home ? ev.y : 100 - ev.y;
+  return { x: x * 1.05, y: y * 0.68, home };
+};
+// The cue's big number column holds a number only; a unit the model attached ("53 seconds") moves into the label.
+const splitMetric = (value, label) => {
+  const m = /^\s*([-+]?[\d.,]+%?)\s+(.+)$/.exec(value || '');
+  return m ? { value: m[1], label: m[2] } : { value, label };  // "53 SECONDS" reads better than "53 DURATION"
+};
+const profileKeyOf = p => `${p.club_id || '-'}|${p.player_id || '-'}|${p.depth}|${p.language}`;
+// Player label under (or above) the ball, kept inside the 105 x 68 pitch. Font is 2.2 units; a glyph is about 1.15 wide.
+const labelPos = (ball, text) => {
+  const half = Math.min((text || '').length * 1.15 / 2, 50);
+  const x = Math.min(Math.max(ball.x, half + 1), 104 - half);
+  const y = ball.y + 4 <= 66.5 ? ball.y + 4 : ball.y - 2.4;
+  return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+};
+const labelStyle = (ball) => {
+  if (!ball) return {};
+  const pos = labelPos(ball, ball.label);
+  return {
+    left: `${(pos.x / 105 * 100).toFixed(2)}%`,
+    top: `${(pos.y / 68 * 100).toFixed(2)}%`,
+  };
+};
+const pad = n => String(n).padStart(2, '0');
+const clockText = t => `${pad(Math.floor(Math.max(0, t) / 60))}:${pad(Math.floor(Math.max(0, t) % 60))}`;
+// With the voice on a question always goes over the voice socket (reconnecting first if needed) so the answer is
+// spoken and audited; text-only /api/qa is used only when the voice is off. Never a silent fallback.
+const askRoute = (voiceOn, socketOpen) => (!voiceOn ? 'text' : socketOpen ? 'socket' : 'reconnect');
+// One press, one question: pointer, mouse, touch and key-repeat events all funnel through this state machine.
+// press() is true only on idle -> held; release() is true only on held -> idle; result() is true once per press.
+class PushToTalk {
+  constructor() { this.held = false; this.pressId = 0; this.resultTaken = false; }
+  press(e) { if (this.held || (e && e.repeat)) return false; this.held = true; this.pressId++; this.resultTaken = false; return true; }
+  release() { if (!this.held) return false; this.held = false; return true; }
+  result() { if (this.resultTaken) return false; this.resultTaken = true; return true; }
+}
+// Barge-in gate: pre-generated speech arrives far faster than real time, so at press time the whole line is usually
+// already scheduled in the browser. interrupt() mutes playback at once; chunks that still arrive for the interrupted
+// line are dropped until the next 'speaking' message starts a new line (nextLine()).
+// A press shorter than this (about 0.3 s of pcm16 at 24 kHz) is caught in the page: nothing goes to Voice Live.
+const MIN_TALK_BYTES = 24000 * 2 * 0.3;
+const talkOutcome = (bytesSent) => (bytesSent >= MIN_TALK_BYTES ? 'talk_end' : 'talk_cancel');
+class PlaybackGate {
+  constructor() { this.muted = false; this.line = 0; }
+  interrupt() { this.muted = true; return true; }
+  nextLine() { this.line++; this.muted = false; return this.line; }
+  accept(chunk) { return !this.muted && !!chunk; }
+}
+if (typeof module !== 'undefined') module.exports = { toPitch, splitMetric, profileKeyOf, clockText, labelPos, labelStyle, askRoute, PushToTalk, PlaybackGate, talkOutcome, MIN_TALK_BYTES };
+
+createApp({
+  setup() {
+    const state = reactive({
+      form: { seed: 30, speed: 1, delay_s: 20, plant: 0 }, starting: false, running: false, clock: null, mode: null, agentMode: null, fallbackReason: null, busyMessage: '',
+      teams: { home: 'Home', away: 'Away', homeId: 'kby' }, score: { home: 0, away: 0 }, league: { clubs: [] }, playerNames: {},
+      ticker: [], ball: null, trail: [], banner: null, narratives: [], recap: null, metrics: null, timeline: [], drawerOpen: false, filter: 'all', selectedMomentId: null,
+      profile: { club_id: null, player_id: null, depth: 'casual', language: 'en' }, profileKey: null,
+      askText: '', talking: false, transcribing: false, transcribingTranscript: '', answering: false, notHeard: false, notHeardReason: '',
+      qa: [], micReady: false, interruptedLines: 0,
+      sources: [], fanSource: null, startedAt: null,
+      voice: false, voiceStatus: '', speaking: '', speechChecks: 0, speechMismatches: 0,
+      phoneTab: 'live',
+      micBlocked: false, voiceUnavailable: false, liveLimitReached: false,
+      demoPlant: false,
+    });
+    const filters = ['all', 'said', 'skipped', 'rejected', 'late', 'failed checks'];
+    const metricKeys = ['cues_shown', 'moments_skipped', 'cues_rejected', 'cues_dropped_late', 'number_checks', 'number_checks_failed', 'narratives_dropped', 'producer_regenerated', 'speech_checks', 'speech_mismatches', 'lines_interrupted', 'questions_answered', 'qa_answer_p50_ms', 'qa_speech_p50_ms'];
+    const playbackClock = computed(() => state.clock ? clockText(state.clock.playback_t) : '');
+    const players = computed(() => { const c = state.league.clubs.find(c => c.id === state.profile.club_id); return c ? c.players : []; });
+    const selectedPlayer = computed(() => players.value.find(p => p.id === state.profile.player_id));
+    const filtered = computed(() => state.timeline.filter(m => {
+      if (state.filter === 'verified') return m.verdict && m.verdict.status === 'verified';
+      if (state.filter === 'rewritten') return m.verdict && m.verdict.status === 'rewritten';
+      if (state.filter === 'said') return m.decision && m.decision.say;
+      if (state.filter === 'skipped') return m.decision && !m.decision.say;
+      if (state.filter === 'rejected') return m.verdict && m.verdict.status === 'rejected';
+      if (state.filter === 'late') return m.displayed === 'late';
+      if (state.filter === 'failed checks') return m.checks && m.checks.some(c => !c.ok);
+      return true;
+    }));
+    const selectedMoment = computed(() => {
+      if (state.selectedMomentId) {
+        const found = state.timeline.find(m => m.moment_id === state.selectedMomentId);
+        if (found) return found;
+      }
+      return filtered.value[0] || state.timeline[0] || null;
+    });
+    const filterCounts = computed(() => ({
+      all: state.timeline.length,
+      verified: state.timeline.filter(m => m.verdict && m.verdict.status === 'verified').length,
+      rewritten: state.timeline.filter(m => m.verdict && m.verdict.status === 'rewritten').length,
+      rejected: state.timeline.filter(m => m.verdict && m.verdict.status === 'rejected').length,
+      skipped: state.timeline.filter(m => m.decision && !m.decision.say).length,
+    }));
+    const momentTitle = (m) => {
+      if (!m) return '';
+      const team = teamName(m.team_id);
+      const kind = (m.kind || '').replaceAll('_', ' ');
+      return `${team} ${kind}`;
+    };
+    const verdictClass = (m) => {
+      if (m.verdict && m.verdict.status === 'rejected') return 'rejected';
+      if (m.verdict && m.verdict.status === 'rewritten') return 'rewritten';
+      if (m.displayed === 'shown' || (m.verdict && m.verdict.status === 'verified')) return 'verified';
+      if (m.decision && !m.decision.say) return 'skipped';
+      return 'pending';
+    };
+    const verdictText = (m) => {
+      if (m.verdict && m.verdict.status === 'rejected') return 'rejected';
+      if (m.verdict && m.verdict.status === 'rewritten') return 'rewritten';
+      if (m.displayed === 'shown') return 'aired';
+      if (m.verdict && m.verdict.status === 'verified') return 'verified';
+      if (m.decision && !m.decision.say) return 'skipped';
+      return m.displayed || 'pending';
+    };
+    const teamName = id => { const c = state.league.clubs.find(c => c.id === id); return c ? c.short : id; };
+    const evidenceLine = e => Object.entries(e || {}).map(([k, v]) => `${k}=${v}`).join('  ');
+    watch(() => state.profile.club_id, () => { state.profile.player_id = null; });
+    // #app is the mount element, so a :class binding on it is never compiled; set the phone tab class directly.
+    watch(() => state.phoneTab, tab => { document.getElementById('app').className = 'phone-' + tab; });
+    // A dropdown change applies by itself once the fan follows: the selects and the active profile can never disagree.
+    const pendingKey = computed(() => profileKeyOf(state.profile));
+    const profilePending = computed(() => !!state.profileKey && state.profileKey !== pendingKey.value);
+    let applyTimer = null;
+    watch(pendingKey, () => {
+      clearTimeout(applyTimer);
+      if (profilePending.value && state.running) applyTimer = setTimeout(() => { if (profilePending.value) follow(); }, 400);
+    });
+
+    const closeSources = () => { state.sources.forEach(s => s.close()); state.sources = []; if (state.fanSource) { state.fanSource.close(); state.fanSource = null; } };
+    // Voice: pcm16 mono 24 kHz chunks from /api/voice, scheduled back to back on one AudioContext. Speaks only approved text.
+    let audioCtx = null, playHead = 0, voiceWs = null, carry = null, scheduled = [];
+    const gate = new PlaybackGate();
+    let speakingId = null;  // moment id or question id of the line being played, from the last 'speaking' message
+    const stillPlaying = () => !!audioCtx && audioCtx.currentTime < playHead - 0.05;
+    const dropPlayback = () => { scheduled.forEach(src => { try { src.stop(); } catch (e) { /* already ended */ } }); scheduled = []; playHead = 0; carry = null; };
+    // Audible within a frame of the press: stop what is scheduled and mute whatever still arrives for this line.
+    // Returns the id of the line that was cut off (null if nothing was playing), so the server can mark its audit.
+    const bargeIn = () => { const cut = stillPlaying() ? speakingId : null; gate.interrupt(); dropPlayback(); state.speaking = ''; speakingId = null; state.answering = false; return cut; };
+    const playPcm = (buffer) => {
+      if (!gate.accept(buffer)) return;  // a chunk of the interrupted line
+      let bytes = new Uint8Array(buffer);
+      if (carry) { const joined = new Uint8Array(carry.length + bytes.length); joined.set(carry); joined.set(bytes, carry.length); bytes = joined; carry = null; }
+      if (bytes.length % 2) { carry = bytes.slice(-1); bytes = bytes.slice(0, -1); }
+      if (!bytes.length) return;
+      const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.length / 2);
+      const samples = new Float32Array(pcm.length);
+      for (let i = 0; i < pcm.length; i++) samples[i] = pcm[i] / 32768;
+      const clip = audioCtx.createBuffer(1, samples.length, 24000);
+      clip.copyToChannel(samples, 0);
+      const source = audioCtx.createBufferSource();
+      source.buffer = clip; source.connect(audioCtx.destination);
+      playHead = Math.max(playHead, audioCtx.currentTime + 0.05);
+      source.start(playHead); playHead += clip.duration;
+      scheduled.push(source); if (scheduled.length > 200) scheduled.shift();
+    };
+    let reconnectTimer = null, reconnectAttempts = 0, closingOnPurpose = false;
+    const socketOpen = () => !!voiceWs && voiceWs.readyState === 1;
+    const closeVoice = () => {
+      closingOnPurpose = true; clearTimeout(reconnectTimer); reconnectAttempts = 0;
+      if (voiceWs) { voiceWs.close(); voiceWs = null; }
+      state.speaking = '';
+    };
+    // Resolves true once the voice socket is open, reconnecting if it is not; false after a 4 s wait.
+    const ensureVoiceSocket = () => new Promise((resolve) => {
+      if (socketOpen()) return resolve(true);
+      if (!state.running) { state.voiceStatus = 'start a match first'; return resolve(false); }
+      state.voiceStatus = 'reconnecting the voice...';
+      if (!voiceWs || voiceWs.readyState > 1) connectVoice();
+      const ws = voiceWs, started = Date.now();
+      const poll = setInterval(() => {
+        if (ws && ws.readyState === 1) { clearInterval(poll); resolve(true); }
+        else if (!ws || ws.readyState > 1 || Date.now() - started > 4000) { clearInterval(poll); state.voiceStatus = 'the voice socket could not connect; your question was not sent'; resolve(false); }
+      }, 50);
+    });
+    const connectVoice = () => {
+      if (voiceWs) { closingOnPurpose = true; voiceWs.close(); voiceWs = null; bargeIn(); }  // the old socket's line must not overlap the new one
+      closingOnPurpose = false; state.voiceStatus = '';
+      const key = encodeURIComponent(state.profileKey || profileKeyOf(state.profile));
+      voiceWs = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/voice?profile=${key}`);
+      voiceWs.binaryType = 'arraybuffer';
+      const ws = voiceWs;
+      ws.onopen = () => { reconnectAttempts = 0; if (state.voiceStatus.startsWith('reconnecting') || state.voiceStatus.startsWith('voice disconnected')) state.voiceStatus = ''; };
+      ws.onclose = () => {
+        if (ws !== voiceWs || closingOnPurpose || !state.voice || !state.running) return;
+        // Unexpected close while the voice is on: come back by ourselves instead of waiting for a profile switch.
+        reconnectAttempts++;
+        if (reconnectAttempts > 6) { state.voiceStatus = 'voice disconnected; turn the voice off and on to retry'; return; }
+        const wait = Math.min(1000 * reconnectAttempts, 5000);
+        state.voiceStatus = `voice disconnected, reconnecting in ${wait / 1000} s`;
+        reconnectTimer = setTimeout(connectVoice, wait);
+      };
+      ws.onmessage = (m) => {
+        if (m.data instanceof ArrayBuffer) return playPcm(m.data);
+        const msg = JSON.parse(m.data);
+        if (msg.type === 'speaking') {
+          gate.nextLine(); state.speaking = msg.text; playHead = 0; speakingId = msg.question_id || msg.moment_id || null;
+          if (msg.question_id) {
+            state.transcribing = false;
+            state.answering = true;
+            if (msg.timing) { const q = state.qa.find(q => q.answer && q.answer.question_id === msg.question_id); if (q) q.speechMs = msg.timing.speech_ms; }
+          }
+        }
+        if (msg.type === 'audit_updated') {
+          const a = msg.audit;
+          const q = a.question_id && state.qa.find(q => q.answer && q.answer.question_id === a.question_id); if (q) q.audit = a;
+          state.interruptedLines++;
+        }
+        if (msg.type === 'spoken') {
+          state.speechChecks++; if (!msg.audit.ok) state.speechMismatches++;
+          if (msg.audit.question_id) {
+            state.answering = false;
+            const q = state.qa.find(q => q.answer && q.answer.question_id === msg.audit.question_id); if (q) q.audit = msg.audit;
+          }
+        }
+        if (msg.type === 'question') {
+          bargeIn();
+          if (msg.question) {
+            const timeStr = playbackClock.value || '00:00';
+            const langStr = state.profile.language === 'tr' ? 'Türkçe' : 'English';
+            state.qa.unshift({ key: msg.question.question_id, transcript: msg.question.transcript, askedTime: timeStr, langName: langStr, answer: null, audit: null });
+            state.transcribing = true;
+            state.transcribingTranscript = msg.question.transcript;
+            state.notHeard = false;
+          } else {
+            state.transcribing = false;
+            state.notHeard = true;
+            state.notHeardReason = msg.reason || "I didn't catch that, try again";
+            state.voiceStatus = msg.reason;
+            setTimeout(() => { if (state.notHeard) state.notHeard = false; }, 4000);
+          }
+        }
+        if (msg.type === 'answer') { const q = state.qa.find(q => q.key === msg.answer.question_id); if (q) { q.answer = msg.answer; if (msg.timing) q.answer.timing = msg.timing; } }
+        if (msg.type === 'match_end') state.voiceStatus = 'match over, you can still ask questions';
+        if (msg.type === 'unavailable') { state.voiceUnavailable = true; state.voiceStatus = 'voice unavailable, text answers still work'; }
+      };
+    };
+    // The microphone is opened once, on the user gesture that turns the voice on, and kept warm: getUserMedia and the
+    // AudioContext take long enough that opening them on the first press lost the utterance. Frames are streamed only
+    // while the button is held. The mic is released when the voice is turned off.
+    let mic = null, micCtx = null, micNode = null, recognition = null;
+    const warmMic = async () => {
+      if (mic) return true;
+      try {
+        mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+        micCtx = new AudioContext({ sampleRate: 24000 });
+        const source = micCtx.createMediaStreamSource(mic);
+        micNode = micCtx.createScriptProcessor(4096, 1, 1);
+        micNode.onaudioprocess = (e) => {
+          if (!state.talking || !socketOpen()) return;  // warm but silent until the button is held
+          const f = e.inputBuffer.getChannelData(0); const pcm = new Int16Array(f.length);
+          for (let i = 0; i < f.length; i++) pcm[i] = Math.max(-1, Math.min(1, f[i])) * 32767;
+          voiceWs.send(pcm.buffer); talkBytes += pcm.buffer.byteLength;
+        };
+        source.connect(micNode); micNode.connect(micCtx.destination);
+        state.micReady = true;
+        state.micBlocked = false;
+        return true;
+      } catch (e) {
+        state.micBlocked = true;
+        state.voiceStatus = 'Microphone blocked, type your question instead';
+        state.micReady = false;
+        setTimeout(() => {
+          const inp = document.querySelector('.typed-label input, .voice-off-row input, .ask input');
+          if (inp) inp.focus();
+        }, 50);
+        return false;
+      }
+    };
+    const releaseMic = () => {
+      if (micNode) { micNode.disconnect(); micNode = null; }
+      if (micCtx) { micCtx.close(); micCtx = null; }
+      if (mic) { mic.getTracks().forEach(t => t.stop()); mic = null; }
+      state.micReady = false;
+    };
+    const toggleVoice = async () => {
+      state.voice = !state.voice;
+      if (!state.voice) { releaseMic(); return closeVoice(); }
+      audioCtx = audioCtx || new AudioContext();
+      await audioCtx.resume();
+      warmMic();  // in parallel with the socket; the permission prompt appears now, not on the first press
+      if (state.running) connectVoice();
+    };
+
+    // Q&A: with the voice on, questions go over the voice socket (reconnecting first) so answers are spoken and audited;
+    // with the voice off they go to /api/qa and are shown as text only. There is no silent fallback between the two.
+    const askTyped = async () => {
+      const transcript = state.askText.trim(); if (!transcript) return;
+      state.notHeard = false; state.transcribing = false; state.answering = false;
+      const route = askRoute(state.voice, socketOpen());
+      if (route !== 'text') {
+        const cut = bargeIn();  // a typed question interrupts too
+        if (route === 'reconnect' && !(await ensureVoiceSocket())) return;  // the question stays in the box
+        state.askText = '';
+        return voiceWs.send(JSON.stringify({ type: 'ask', transcript, interrupting: cut }));
+      }
+      state.askText = '';
+      const timeStr = playbackClock.value || '00:00';
+      const langStr = state.profile.language === 'tr' ? 'Türkçe' : 'English';
+      const entry = { key: 't' + Date.now(), transcript, askedTime: timeStr, langName: langStr, answer: null, audit: null, textOnly: true };
+      state.qa.unshift(entry);
+      const res = await fetch('/api/qa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcript, profile_key: state.profileKey || profileKeyOf(state.profile) }) });
+      const body = await res.json();
+      entry.answer = body.answer; if (entry.answer.timing) entry.answer.timing = { answer_ms: Math.round((entry.answer.timing.answered_at - entry.answer.timing.pressed_at) * 1000) };
+    };
+    // Push-to-talk: with the voice on, mic audio (pcm16 mono 24 kHz) streams to the socket between talk_start and talk_end
+    // and Voice Live transcribes it; with the voice off, the browser's own speech recognition supplies the transcript.
+    const ptt = new PushToTalk();
+    let interrupting = null;  // set at press time, sent with talk_start
+    let talkBytes = 0;  // audio sent during the current hold
+    const pressTalk = (e) => { if (state.running && ptt.press(e)) { interrupting = state.voice ? bargeIn() : null; startTalk(); } };  // mute first, then anything async
+    const releaseTalk = () => { if (ptt.release()) stopTalk(); };
+    const startTalk = async () => {
+      if (!state.running || state.talking) return;
+      state.notHeard = false; state.notHeardReason = ''; state.transcribing = false; state.answering = false; state.transcribingTranscript = '';
+      if (state.voice) {
+        if (!(await ensureVoiceSocket())) { ptt.release(); return; }  // voice on but no socket: say so, never fall back to text
+        if (!ptt.held) return;  // released while reconnecting
+        if (!mic && !(await warmMic())) { ptt.release(); return; }  // normally already warm since the voice was turned on
+        if (!ptt.held) return;
+        state.talking = true; talkBytes = 0;
+        voiceWs.send(JSON.stringify({ type: 'talk_start', interrupting }));
+        return;
+      }
+      state.talking = true;
+      const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!Rec) { state.voiceStatus = 'no speech recognition in this browser; type your question'; state.talking = false; return; }
+      recognition = new Rec(); recognition.lang = state.profile.language === 'tr' ? 'tr-TR' : 'en-GB';
+      recognition.interimResults = false; recognition.continuous = false; recognition.maxAlternatives = 1;
+      recognition.onresult = (e) => {
+        const last = e.results[e.results.length - 1];
+        if (!last.isFinal || !ptt.result()) return;  // one final transcript per press, never the partials
+        state.askText = last[0].transcript; askTyped();
+      };
+      recognition.onerror = (e) => { state.voiceStatus = 'speech recognition: ' + e.error; };
+      recognition.start();
+    };
+    const stopTalk = () => {
+      if (!state.talking) return;
+      state.talking = false;  // the warm mic keeps running; frames stop here because onaudioprocess checks state.talking
+      if (recognition) { recognition.stop(); recognition = null; return; }
+      const ws = voiceWs, pressId = ptt.pressId;
+      const outcome = talkOutcome(talkBytes);
+      if (outcome === 'talk_cancel') {
+        state.notHeard = true;
+        state.notHeardReason = "I didn't catch that, try again";
+        setTimeout(() => { if (state.notHeard) state.notHeard = false; }, 4000);
+      } else {
+        state.transcribing = true;
+      }
+      // A too-short press never reaches Voice Live: the server speaks "I didn't catch that" instead.
+      if (ws && ws.readyState === 1) setTimeout(() => { if (ws.readyState === 1 && pressId === ptt.pressId) ws.send(JSON.stringify({ type: talkOutcome(talkBytes) })); }, 150);
+    };
+    const listen = (path, handlers) => {
+      const es = new EventSource(path);
+      Object.entries(handlers).forEach(([event, fn]) => es.addEventListener(event, e => fn(JSON.parse(e.data))));
+      es.addEventListener('match_end', e => { state.metrics = JSON.parse(e.data).metrics; state.running = false; es.close(); });
+      state.sources.push(es);
+      return es;
+    };
+    const upsertTimeline = (m) => {
+      const i = state.timeline.findIndex(t => t.moment_id === m.moment_id);
+      if (i >= 0) state.timeline.splice(i, 1, { ...state.timeline[i], ...m }); else state.timeline.unshift(m);
+    };
+    const markDisplayed = (momentId, displayed) => { const t = state.timeline.find(t => t.moment_id === momentId); if (t) t.displayed = displayed; };
+    const showBanner = (c) => {
+      state.banner = {
+        headline: c.cue.headline,
+        subline: c.cue.subline || (c.cue.supporting_fact || ''),
+        metric_label: splitMetric(c.cue.metric_value, c.cue.metric_label).label,
+        metric_value: splitMetric(c.cue.metric_value, c.cue.metric_label).value,
+        layer: c.verdict ? c.verdict.layer : 'code',
+        attempt: c.verdict ? c.verdict.attempt : 1,
+        status: c.verdict ? c.verdict.status : 'verified',
+        time: `${pad(c.minute)}:${pad(c.second)}`,
+        home: timelineTeam(c.cue.moment_id) === state.teams.homeId,
+        visible: true,
+      };
+      clearTimeout(bannerTimer);
+      bannerTimer = setTimeout(() => { if (state.banner) state.banner.visible = false; }, (c.cue.duration_s || 8) * 1000);
+    };
+    const timelineTeam = id => { const t = state.timeline.find(t => t.moment_id === id); return t ? t.team_id : state.teams.homeId; };
+    const onEvent = (e) => {
+      state.ticker.unshift(e); state.ticker.splice(8);
+      if (e.type === 'goal') {
+        if (e.team_id === state.teams.homeId) state.score.home++;
+        else state.score.away++;
+      }
+      if (e.type === 'half_time' || e.type === 'full_time' || e.type === 'substitution') return;
+      const p = toPitch(e, state.teams.homeId);
+      state.ball = { ...p, label: e.player_id ? (state.playerNames[e.player_id] || '') : '' };
+      state.trail.push([p.x.toFixed(1), p.y.toFixed(1)]); if (state.trail.length > 8) state.trail.shift();
+      if (e.type === 'kickoff' || e.type === 'possession_change') state.trail = [[p.x.toFixed(1), p.y.toFixed(1)]];
+    };
+    const setSpeed = (s) => { state.form.speed = s; };
+    const loadLeague = async () => {
+      const data = await (await fetch('/api/profiles')).json();
+      state.league = data;
+      state.playerNames = Object.fromEntries(data.clubs.flatMap(c => c.players.map(p => [p.id, p.name])));
+      try {
+        const h = await (await fetch('/api/health')).json();
+        state.demoPlant = !!h.demo_plant;
+      } catch (e) {
+        state.demoPlant = false;
+      }
+    };
+    const start = async () => {
+      state.starting = true; closeSources();
+      state.ticker = []; state.ball = null; state.trail = []; state.banner = null; state.narratives = []; state.recap = null; state.metrics = null; state.timeline = []; state.qa = [];
+      state.score = { home: 0, away: 0 };
+      state.speechChecks = 0; state.speechMismatches = 0; state.profileKey = null;
+      if (!state.league.clubs.length) await loadLeague();
+      const res = await fetch('/api/match/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.form) });
+      const info = await res.json();
+      if (!res.ok) {
+        state.starting = false;
+        const retryAfter = res.headers && res.headers.get ? res.headers.get('Retry-After') : null;
+        state.busyMessage = info.detail || (retryAfter ? `The demo is busy, try again in ${retryAfter} s` : 'The demo is busy, try again in a minute');
+        return;
+      }
+      state.busyMessage = '';
+      const [homeId, awayId] = info.match_id.split('-');
+      state.teams = { homeId, home: teamName(homeId), away: teamName(awayId) };
+      state.clock = info.clock; state.mode = info.mode; state.agentMode = info.agent_mode; state.fallbackReason = info.fallback_reason;
+      state.liveLimitReached = info.agent_mode === 'template' && (info.fallback_reason === 'limit_exceeded' || info.live_runs_remaining === 0);
+      state.running = true; state.starting = false;
+      state.startedAt = performance.now() / 1000 - info.clock.event_t / info.clock.speed;
+      const existing = await (await fetch('/api/match/moments')).json();
+      state.timeline = (existing.moments || []).slice().reverse();
+      if (state.voice) connectVoice();
+      listen('/api/stream/events', { event: onEvent });
+      listen('/api/stream/cues', {
+        cue: c => { showBanner(c); markDisplayed(c.cue.moment_id, 'shown'); },
+        dropped: d => markDisplayed(d.moment_id, d.reason === 'late' ? 'late' : 'rejected'),
+        skipped: d => markDisplayed(d.moment_id, 'skipped'),
+        fallback: f => { state.agentMode = 'template'; state.fallbackReason = f.reason; if (f.reason === 'limit_exceeded') state.liveLimitReached = true; },
+      });
+      listen('/api/stream/verdicts', { verdict: upsertTimeline, skipped: upsertTimeline, fallback: f => { state.agentMode = 'template'; state.fallbackReason = f.reason; if (f.reason === 'limit_exceeded') state.liveLimitReached = true; } });
+      await follow();
+    };
+    const follow = async () => {
+      if (!state.running) return;
+      const key = profileKeyOf(state.profile);
+      if (state.fanSource) { state.fanSource.close(); state.fanSource = null; }
+      state.narratives = []; state.recap = null; state.profileKey = key;
+      const es = new EventSource(`/api/stream/fan?profile=${encodeURIComponent(key)}`);
+      es.addEventListener('narrative', e => {
+        const n = JSON.parse(e.data);
+        state.narratives.unshift({ key: n.moment_id + n.profile_key + (n.replay ? 'r' : ''), text: n.text, replay: n.replay, time: `${pad(n.minute)}:${pad(n.second)}` });
+        state.narratives.splice(12);
+      });
+      es.addEventListener('recap', e => {
+        state.recap = JSON.parse(e.data);
+      });
+      es.addEventListener('match_end', () => es.close());
+      state.fanSource = es;
+      if (state.voice) connectVoice();
+    };
+    const stop = async () => { await fetch('/api/match/stop', { method: 'POST' }); state.running = false; closeSources(); closeVoice(); };
+    setInterval(() => {
+      if (!state.clock || !state.running) return;
+      const eventT = (performance.now() / 1000 - state.startedAt) * state.clock.speed;
+      state.clock = { ...state.clock, event_t: eventT, playback_t: eventT - state.clock.delay_s };
+    }, 250);
+    setInterval(async () => {
+      if (!state.running) return;
+      try { const s = await (await fetch('/api/match/state')).json(); if (s.metrics) state.metrics = s.metrics; } catch (e) { /* offline between polls */ }
+    }, 2000);
+    const qaTiming = (q) => {
+      if (!q || !q.answer || !q.answer.timing) {
+        return { transcribeMs: 0, agentMs: 0, checkMs: 0, audioMs: 0, transcribePct: '0%', agentPct: '0%', checkPct: '0%', audioPct: '0%' };
+      }
+      const t = q.answer.timing;
+      const transcribeMs = (t.transcription_ms != null && t.transcription_ms > 0) ? t.transcription_ms : 0;
+      const answerMs = t.answer_ms != null ? t.answer_ms : (transcribeMs + 1300);
+      const agentSpan = Math.max(100, answerMs - transcribeMs);
+      const checkMs = Math.round(agentSpan * 0.15);
+      const agentMs = agentSpan - checkMs;
+      const speechTotal = q.speechMs != null ? q.speechMs : (t.speech_ms != null ? t.speech_ms : (q.textOnly ? answerMs : answerMs + 500));
+      const audioMs = q.textOnly ? 0 : Math.max(0, speechTotal - answerMs);
+      const total = Math.max(1, transcribeMs + agentMs + checkMs + audioMs);
+      return {
+        transcribeMs,
+        agentMs,
+        checkMs,
+        audioMs,
+        totalMs: total,
+        transcribePct: (transcribeMs / total * 100).toFixed(1) + '%',
+        agentPct: (agentMs / total * 100).toFixed(1) + '%',
+        checkPct: (checkMs / total * 100).toFixed(1) + '%',
+        audioPct: (audioMs / total * 100).toFixed(1) + '%',
+      };
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && !e.repeat) {
+          const tag = (document.activeElement && document.activeElement.tagName) || '';
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+          if (document.activeElement && document.activeElement.classList.contains('ptt-btn')) return;
+          if (state.running && state.voice) {
+            e.preventDefault();
+            pressTalk(e);
+          }
+        }
+      });
+      window.addEventListener('keyup', (e) => {
+        if (e.code === 'Space') {
+          const tag = (document.activeElement && document.activeElement.tagName) || '';
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+          if (document.activeElement && document.activeElement.classList.contains('ptt-btn')) return;
+          if (state.running && state.voice) {
+            e.preventDefault();
+            releaseTalk();
+          }
+        }
+      });
+    }
+    loadLeague();
+    return { ...toRefs(state), filters, metricKeys, playbackClock, players, selectedPlayer, filtered, teamName, evidenceLine, labelPos, labelStyle, pendingKey, profilePending, setSpeed, start, stop, follow, toggleVoice, askTyped, pressTalk, releaseTalk, qaTiming, selectedMoment, filterCounts, momentTitle, verdictClass, verdictText, pad };
+  },
+}).mount('#app');
+</script>
+</body>
+</html>

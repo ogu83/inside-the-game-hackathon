@@ -1,0 +1,21 @@
+# Task State
+
+<!-- Claude maintains this file during the session.
+     Update it after every significant step so the state survives compaction.
+     The compaction_save.ps1 hook timestamps each compaction automatically. -->
+
+## Current task
+[One sentence describing what is being worked on right now.]
+
+## Done
+- [ ] [Completed step 1]
+- [ ] [Completed step 2]
+
+## Next step
+[The single next action — specific enough to act on without reading the full conversation.]
+
+## Blockers / open decisions
+- [Any decision that is unresolved and blocking progress]
+
+## Notes
+[Anything Claude should remember that does not fit the above categories.]

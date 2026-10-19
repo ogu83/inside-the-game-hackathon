@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent timeline drawer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Barlow:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B1220}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#CFD8E6;background:#182339;border:1px solid transparent;border-radius:999px;padding:5px 12px}
+.step{display:grid;grid-template-columns:150px 1fr;gap:14px;padding:10px 0;border-top:1px solid #1C2740}
+.who{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:1px;text-transform:uppercase;color:#9AA7BB;display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%}
+.txt{font-size:14px;line-height:1.45;color:#CFD8E6}
+.mono{font-family:Consolas,'Cascadia Mono',monospace;font-size:12.5px;color:#9AA7BB}
+.v{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px}
+</style>
+</helmet>
+<div style="width: 1440px; height: 660px; box-sizing: border-box; background: #0B1220; color: #EEF2F7; font-family: Barlow, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <div style="height: 120px; background: linear-gradient(#0B1220, #0B1220cc), repeating-linear-gradient(90deg, #1F6E3D 0 60px, #237A44 60px 120px); opacity: 0.55"></div>
+
+  <section aria-label="Agent timeline" style="flex: 1; min-height: 0; margin-top: -40px; background: #0E1626; border-top: 1px solid #26324A; border-radius: 18px 18px 0 0; box-shadow: 0 -12px 30px rgba(0,0,0,0.45); display: flex; flex-direction: column">
+    <div style="width: 44px; height: 4px; border-radius: 2px; background: #26324A; margin: 8px auto 0"></div>
+    <div style="padding: 10px 28px 12px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #26324A">
+      <h2 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 26px">Agent timeline</h2>
+      <span style="font-size: 13px; color: #9AA7BB">every moment, every agent, every check</span>
+      <div style="margin-left: 24px; display: flex; gap: 8px">
+        <span class="chip" style="border-color: #EEF2F7; color: #EEF2F7">All 9</span>
+        <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#3DD68C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Verified 6</span>
+        <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F2B33D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg>Rewritten 1</span>
+        <span class="chip" style="border-color: #FF5D6C"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FF5D6C" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>Rejected 1</span>
+        <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AA7BB" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"></path></svg>Skipped 1</span>
+      </div>
+      <button type="button" aria-label="Close timeline" style="margin-left: auto; width: 40px; height: 40px; border-radius: 10px; border: 1px solid #26324A; background: #121B2E; display: grid; place-items: center">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EEF2F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+      </button>
+    </div>
+
+    <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr); overflow: hidden">
+      <nav aria-label="Moments" style="border-right: 1px solid #26324A; padding: 12px; display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; align-items: center; gap: 10px; background: #121B2E; border-radius: 10px; padding: 10px 12px"><b style="font-family: 'Barlow Condensed', sans-serif; color: #E0B04F">01:30</b><span style="font-size: 14px; flex: 1">Ironvale 22-pass move</span><span class="v" style="background: #3DD68C; color: #0B1220">aired</span></div>
+        <div style="display: flex; align-items: center; gap: 10px; background: #1A1420; border: 1px solid #FF5D6C; border-radius: 10px; padding: 10px 12px"><b style="font-family: 'Barlow Condensed', sans-serif; color: #E0B04F">01:12</b><span style="font-size: 14px; flex: 1">Ironvale pressure spell</span><span class="v" style="background: #FF5D6C; color: #0B1220">rejected</span></div>
+        <div style="display: flex; align-items: center; gap: 10px; background: #121B2E; border-radius: 10px; padding: 10px 12px"><b style="font-family: 'Barlow Condensed', sans-serif; color: #E0B04F">00:55</b><span style="font-size: 14px; flex: 1">Kestrel Bay 12-pass move</span><span class="v" style="background: #F2B33D; color: #0B1220">rewritten</span></div>
+        <div style="display: flex; align-items: center; gap: 10px; background: #121B2E; border-radius: 10px; padding: 10px 12px; color: #9AA7BB"><b style="font-family: 'Barlow Condensed', sans-serif; color: #E0B04F">00:41</b><span style="font-size: 14px; flex: 1">Throw-in sequence</span><span class="v" style="background: #26324A; color: #CFD8E6">skipped</span></div>
+        <div style="display: flex; align-items: center; gap: 10px; background: #121B2E; border-radius: 10px; padding: 10px 12px"><b style="font-family: 'Barlow Condensed', sans-serif; color: #E0B04F">00:18</b><span style="font-size: 14px; flex: 1">Kick-off</span><span class="v" style="background: #3DD68C; color: #0B1220">aired</span></div>
+      </nav>
+
+      <div style="padding: 6px 28px 0; overflow: hidden">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0 10px">
+          <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 22px">01:12 Ironvale pressure spell</span>
+          <span class="mono">moment m-0114 · planted-error run</span>
+          <span style="margin-left: auto; font-size: 13px; color: #9AA7BB">trace <span class="mono" style="color: #7AB4FF">7f3c…a91e</span> in Application Insights</span>
+        </div>
+
+        <div class="step">
+          <div class="who"><span class="dot" style="background: #7AB4FF"></span>Analyst</div>
+          <div class="txt">Say it. Pressure is building; cites <span class="mono">away_passes_last_10min = 41</span>, <span class="mono">away_shots_last_10min = 0</span>.</div>
+        </div>
+        <div class="step">
+          <div class="who"><span class="dot" style="background: #2F8FD8"></span>Commentator</div>
+          <div class="txt">Attempt 1: <span style="color: #EEF2F7; text-decoration: line-through; text-decoration-color: #FF5D6C">"Ironvale have had six shots in the last ten minutes."</span></div>
+        </div>
+        <div class="step" style="background: rgba(255,93,108,0.07); border-radius: 10px; border-top-color: transparent; padding: 12px; margin: 4px -12px">
+          <div class="who" style="color: #FF5D6C"><span class="dot" style="background: #FF5D6C"></span>Fact-Checker</div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <span class="v" style="background: #FF5D6C; color: #0B1220"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0B1220" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>Rejected</span>
+              <span style="font-size: 13px; color: #CFD8E6">layer 1, code number check · no model involved</span>
+            </div>
+            <div class="mono" style="color: #FFB3BA">6 shots does not match the cited shots value (away_shots_last_10min = 0)</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="who"><span class="dot" style="background: #2F8FD8"></span>Commentator</div>
+          <div class="txt">Attempt 2 failed the same check. Two attempts is the limit.</div>
+        </div>
+        <div class="step">
+          <div class="who"><span class="dot" style="background: #9AA7BB"></span>Producer</div>
+          <div class="txt">Nothing to package. <b style="color: #EEF2F7">Never aired</b>: no overlay, no voice, no fan narrative.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":660}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
