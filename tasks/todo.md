@@ -203,6 +203,7 @@ Checkpoint S: one command, seeded match plays, verified cues appear on time and 
 
   - Review 2026-10-18: trace c7c78057cf68b59c753063e8318d2211 verified in App Insights (invoke_agent commentary:1 > workflow.run > analyst, commentator, fact_checker spans); agent identity holds Foundry User and Cognitive Services OpenAI User; vendored app/ is gitignored and rebuilt by the azd hooks; 295 tests pass; tenant IDs removed from deploy.md. Machine change by the agent: PY_PYTHON=3.11 set persistently because py.exe defaulted to a broken Python 3.13.
 - [ ] T16: Make repo public, submit on Innovation Studio by 2026-10-26
+  - Status 2026-10-19: leak scan done (IDs, local paths and personal notes removed); repo recreated with one clean commit and made public (old history unreachable, checked anonymously); GHCR package gives the new repo write access, image build green. Left for the last day: Innovation Studio project page (video, repo and app URLs) and the submission.
   - Pre-publish pass, in this order:
     1. Remove text that came from entrants-only hackathon pages: "the field is crowded" / competition framing in SPEC.md and IDEA.md; competition-scan line and Innovation Studio project ID in task_state.md
     2. Leak scan of the working tree: keys, vault paths, client names, billing details. Also remove (not secret, but no reason to publish): the Azure tenant ID in CLAUDE.md and task_state.md, and the Foundry resource name/endpoint in spikes/hosted/azure.yaml (replace with `${FOUNDRY_PROJECT_ENDPOINT}` or a placeholder)
