@@ -16,3 +16,4 @@ runs/
 CLAUDE.local.md
 hosted/src/commentary/app/
 *.log
+*.session
