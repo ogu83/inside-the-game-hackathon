@@ -19,13 +19,13 @@
 
 ## Hard submission requirements (rules 4.3, 4.4, 4.8, 4.9)
 
-- [ ] Project newly built after 2026-09-29; fits the challenge and at least one category
-- [ ] Short pitch: what it is, which Microsoft/Azure tech, what problem it solves
-- [ ] Demo video under 2 minutes, shows the project running, public URL (YouTube), no third-party trademarks or copyrighted music
-- [ ] Public GitHub repo
-- [ ] Working project available for judges free until judging ends (public URL or test build; include credentials if private)
-- [ ] All materials in English
-- [ ] Synthetic, football-realistic data only; no match footage
+- [x] Project newly built after 2026-09-29; fits the challenge and at least one category
+- [x] Short pitch: what it is, which Microsoft/Azure tech, what problem it solves
+- [x] Demo video under 2 minutes, shows the project running, public URL (YouTube), no third-party trademarks or copyrighted music
+- [x] Public GitHub repo
+- [x] Working project available for judges free until judging ends (public URL or test build; include credentials if private)
+- [x] All materials in English
+- [x] Synthetic, football-realistic data only; no match footage
 
 ## Agreements accepted (2026-10-15)
 
