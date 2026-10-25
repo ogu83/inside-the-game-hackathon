@@ -29,13 +29,6 @@
 | **Fan question, press to answer (median)** | **4.66 s** | 11.76 s | [docs/performance.md](docs/performance.md) |
 | **Spoken lines matching approved text** | **0 mismatches** in the measured run | | [docs/performance.md](docs/performance.md) |
 
----|---|---|---|
-| **Planted Errors Reaching Air** | **0 of 4** (0%) | **4 of 4** (100%) | [docs/eval-results.md](docs/eval-results.md) |
-| **Groundedness Score (Planted)** | **4.75 / 5.0** (100% pass) | **3.83 / 5.0** (75% pass) | [docs/eval-results.md](docs/eval-results.md) |
-| **Cues Ready on Time (<20.0s)** | **100%** (0 of 4 late, seed 30) | **25% - 75%** late in unconstrained baseline | [docs/performance.md](docs/performance.md) |
-| **Q&A Answer Latency (p50)** | **4.66 s** (2.8 s trace median) | **11.76 s** baseline live run | [docs/performance.md](docs/performance.md) |
-| **Verbatim Speech Audit Match** | **100% exact** (0 mismatches) | | [docs/deploy.md](docs/deploy.md) |
-
 ---
 
 ## Why It Matters
